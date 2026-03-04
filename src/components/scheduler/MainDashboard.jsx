@@ -1,9 +1,10 @@
-import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+﻿import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { AlertTriangle, ShieldCheck, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
+import { useThemeMode } from '../../hooks/useThemeMode';
 import { calculateWeeklyTotals } from '../../utils/analytics';
 import {
   exportScheduleToExcel,
@@ -24,6 +25,7 @@ import WeeklyGrid from './WeeklyGrid';
 export default function MainDashboard() {
   const [activeEmployee, setActiveEmployee] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
+  const { isDark, toggleTheme } = useThemeMode();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const {
@@ -96,7 +98,7 @@ export default function MainDashboard() {
     const employee = activeData.employee;
     const slot = overData.slot;
 
-    // Κάθε drop δημιουργεί άμεσα ανάθεση βάρδιας στη βάση.
+    // ΞΞ¬ΞΈΞµ drop Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³ΞµΞ― Ξ¬ΞΌΞµΟƒΞ± Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚ ΟƒΟ„Ξ· Ξ²Ξ¬ΟƒΞ·.
     await addShift({
       employeeId: employee.id,
       date: slot.date,
@@ -124,10 +126,10 @@ export default function MainDashboard() {
       });
 
       await navigator.clipboard.writeText(text);
-      setWarningMessage('Το πρόγραμμα αντιγράφηκε στο clipboard για WhatsApp.');
+      setWarningMessage('Ξ¤ΞΏ Ο€ΟΟΞ³ΟΞ±ΞΌΞΌΞ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ¬Ο†Ξ·ΞΊΞµ ΟƒΟ„ΞΏ clipboard Ξ³ΞΉΞ± WhatsApp.');
       setTimeout(() => clearMessages(), 2500);
     } catch {
-      setWarningMessage('Αποτυχία αντιγραφής. Επιβεβαίωσε άδεια clipboard στον browser.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ±Ο†Ξ®Ο‚. Ξ•Ο€ΞΉΞ²ΞµΞ²Ξ±Ξ―Ο‰ΟƒΞµ Ξ¬Ξ΄ΞµΞΉΞ± clipboard ΟƒΟ„ΞΏΞ½ browser.');
     }
   }
 
@@ -148,7 +150,7 @@ export default function MainDashboard() {
     try {
       exportScheduleToPdf(getExportPayload());
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής PDF.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ PDF.');
     }
   }
 
@@ -156,7 +158,7 @@ export default function MainDashboard() {
     try {
       exportScheduleToExcel(getExportPayload());
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής Excel.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Excel.');
     }
   }
 
@@ -164,22 +166,24 @@ export default function MainDashboard() {
     try {
       await exportScheduleToWord(getExportPayload());
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής Word.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Word.');
     }
   }
 
   if (isLoading || isAuthLoading) {
-    return <p className="p-8 text-center font-medium text-slate-100">Φόρτωση προγράμματος...</p>;
+    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ο€ΟΞΏΞ³ΟΞ¬ΞΌΞΌΞ±Ο„ΞΏΟ‚...</p>;
   }
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 md:p-6">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 text-slate-900 md:p-6 dark:text-slate-100">
         <WeekToolbar
           weekDays={weekDays}
           isAdmin={isAdmin}
+          isDark={isDark}
           onOpenAdminLogin={openLoginModal}
           onLogoutAdmin={logoutAdmin}
+          onToggleTheme={toggleTheme}
           onPrevWeek={goToPreviousWeek}
           onNextWeek={goToNextWeek}
           onCurrentWeek={goToCurrentWeek}
@@ -191,28 +195,30 @@ export default function MainDashboard() {
         />
 
         {!isFirebaseConfigured ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/60 p-3 text-sm text-amber-100">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/70 p-3 text-sm text-amber-900 dark:text-amber-200">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
-            Δεν βρέθηκαν Firebase env vars. Η εφαρμογή τρέχει σε local demo mode με localStorage.
+            Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ Firebase env vars. Ξ— ΞµΟ†Ξ±ΟΞΌΞΏΞ³Ξ® Ο„ΟΞ­Ο‡ΞµΞΉ ΟƒΞµ local demo mode ΞΌΞµ localStorage.
           </div>
         ) : null}
 
         {!isAdmin ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-3 text-sm text-slate-100">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-3 text-sm text-slate-800 dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-            Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
+            Read-only mode: ΞΟΞ½ΞΏ ΞΏ ΟƒΟ…Ξ½Ξ΄ΞµΞ΄ΞµΞΌΞ­Ξ½ΞΏΟ‚ Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®Ο‚ Ξ²Ξ»Ξ­Ο€ΞµΞΉ Ξ‘Ξ¦Ξ ΞΊΞ±ΞΉ ΞΊΞ¬Ξ½ΞµΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚.
           </div>
         ) : null}
 
         {warningMessage ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-red-300/70 p-3 text-sm text-red-100">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-red-300/70 p-3 text-sm text-red-700 dark:text-red-200">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             {warningMessage}
           </div>
         ) : null}
 
         {errorMessage ? (
-          <div className="glass-soft rounded-xl border border-red-300/70 p-3 text-sm text-red-100">{errorMessage}</div>
+          <div className="glass-soft rounded-xl border border-red-300/70 p-3 text-sm text-red-700 dark:text-red-200">
+            {errorMessage}
+          </div>
         ) : null}
 
         <div className="grid gap-4 xl:grid-cols-[320px,1fr]">
@@ -276,3 +282,4 @@ export default function MainDashboard() {
     </DndContext>
   );
 }
+

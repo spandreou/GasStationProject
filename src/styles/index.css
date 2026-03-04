@@ -4,13 +4,27 @@
 
 :root {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
+html,
 body {
   margin: 0;
   min-height: 100vh;
   background: transparent;
+  color: #0f172a;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.dark body {
+  color: #e2e8f0;
 }
 
 * {
@@ -22,16 +36,61 @@ body {
 }
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.55);
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  box-shadow:
+    0 25px 50px -30px rgba(15, 23, 42, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .glass-soft {
-  background: rgba(255, 255, 255, 0.48);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.dark .glass-panel {
+  background: rgba(2, 6, 23, 0.42);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  box-shadow:
+    0 25px 50px -30px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(236, 72, 153, 0.2),
+    inset 0 1px 0 rgba(56, 189, 248, 0.2);
+}
+
+.dark .glass-soft {
+  background: rgba(15, 23, 42, 0.38);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.input-glass {
+  background: rgba(255, 255, 255, 0.65);
+  color: #0f172a;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.input-glass::placeholder {
+  color: #334155;
+  opacity: 1;
+}
+
+.dark .input-glass {
+  background: rgba(15, 23, 42, 0.65);
+  color: #f8fafc;
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.dark .input-glass::placeholder {
+  color: #e2e8f0;
+  opacity: 1;
+}
+
+.dark .input-glass option {
+  background: #0f172a;
+  color: #f8fafc;
 }

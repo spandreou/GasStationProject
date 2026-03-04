@@ -27,7 +27,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+        className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/35 px-3 py-2 text-sm font-semibold text-slate-900 backdrop-blur-md hover:bg-white/55"
       >
         <FileDown size={16} />
         Εξαγωγή
@@ -35,11 +35,11 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 min-w-[170px] rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+        <div className="absolute right-0 z-20 mt-2 min-w-[170px] rounded-lg border border-white/40 bg-white/80 p-1 shadow-lg backdrop-blur-md">
           <button
             type="button"
             onClick={() => handleAction(onExportPdf)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70"
           >
             <FileText size={15} />
             Εξαγωγή PDF
@@ -47,7 +47,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
           <button
             type="button"
             onClick={() => handleAction(onExportExcel)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70"
           >
             <FileSpreadsheet size={15} />
             Εξαγωγή Excel
@@ -55,7 +55,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
           <button
             type="button"
             onClick={() => handleAction(onExportWord)}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70"
           >
             <FileText size={15} />
             Εξαγωγή Word
@@ -91,11 +91,11 @@ export default function WeekToolbar({
   }
 
   return (
-    <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+    <header className="glass-panel rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Πίνακας Βαρδιών Πρατηρίου</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-700">
             Εβδομάδα {formatDateGreek(weekDays[0])} - {formatDateGreek(weekDays[6])}
           </p>
         </div>
@@ -105,7 +105,7 @@ export default function WeekToolbar({
             <button
               type="button"
               onClick={onOpenAdminLogin}
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50/90 px-3 py-2 text-sm font-semibold text-amber-900 backdrop-blur-sm hover:bg-amber-100"
             >
               <LockKeyhole size={16} />
               Admin Login
@@ -114,7 +114,7 @@ export default function WeekToolbar({
             <button
               type="button"
               onClick={onLogoutAdmin}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60"
             >
               <LogOut size={16} />
               Αποσύνδεση
@@ -124,7 +124,7 @@ export default function WeekToolbar({
           <button
             type="button"
             onClick={onPrevWeek}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60"
           >
             <ChevronLeft size={16} />
             Προηγούμενη
@@ -133,7 +133,7 @@ export default function WeekToolbar({
           <button
             type="button"
             onClick={onCurrentWeek}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60"
           >
             <RefreshCw size={16} />
             Τρέχουσα
@@ -142,7 +142,7 @@ export default function WeekToolbar({
           <button
             type="button"
             onClick={onNextWeek}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60"
           >
             Επόμενη
             <ChevronRight size={16} />
@@ -152,7 +152,7 @@ export default function WeekToolbar({
             type="button"
             onClick={handleClearWeek}
             disabled={!isAdmin}
-            className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg bg-red-600/90 px-3 py-2 text-sm font-semibold text-white backdrop-blur-md hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={16} />
             Καθαρισμός Εβδομάδας
@@ -161,7 +161,7 @@ export default function WeekToolbar({
           <button
             type="button"
             onClick={onCopyWhatsapp}
-            className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-700"
+            className="inline-flex items-center gap-1 rounded-lg bg-green-600/90 px-3 py-2 text-sm font-semibold text-white backdrop-blur-md hover:bg-green-700"
           >
             <Copy size={16} />
             Copy for WhatsApp

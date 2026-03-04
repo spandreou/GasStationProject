@@ -42,7 +42,7 @@ export default function EmployeeSidebar({
   }
 
   return (
-    <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+    <aside className="glass-panel space-y-4 rounded-2xl p-4">
       <div>
         <h2 className="text-lg font-bold text-slate-900">Υπάλληλοι</h2>
         <p className="text-sm text-slate-500">Σύρε υπάλληλο πάνω σε βάρδια.</p>
@@ -59,7 +59,7 @@ export default function EmployeeSidebar({
               type="button"
               onClick={() => onOpenProfile(employee)}
               disabled={!isAdmin}
-              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-white/35 bg-white/55 p-2 text-slate-700 backdrop-blur-sm hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
               title="Προφίλ / Επεξεργασία"
             >
               <Pencil size={15} />
@@ -69,7 +69,7 @@ export default function EmployeeSidebar({
               type="button"
               onClick={() => handleDelete(employee)}
               disabled={!isAdmin}
-              className="rounded-lg border border-slate-200 bg-white p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 disabled:cursor-not-allowed disabled:opacity-40"
               title="Διαγραφή"
             >
               <Trash2 size={15} />
@@ -78,7 +78,7 @@ export default function EmployeeSidebar({
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-2 rounded-xl bg-slate-50 p-3">
+      <form onSubmit={handleSubmit} className="glass-soft space-y-2 rounded-xl p-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">Νέος υπάλληλος</p>
           {!isAdmin ? (

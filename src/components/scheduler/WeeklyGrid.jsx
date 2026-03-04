@@ -20,7 +20,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+    <section className="glass-panel rounded-2xl p-4">
       <h2 className="mb-3 text-lg font-bold text-slate-900">Εβδομαδιαίο Πλάνο</h2>
 
       <div className="grid min-w-[980px] grid-cols-7 gap-3 overflow-x-auto pb-2">
@@ -34,8 +34,8 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
           );
 
           return (
-            <div key={day} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
-              <header className="rounded-lg bg-slate-900 px-2 py-1 text-center text-xs font-semibold text-white">
+            <div key={day} className="glass-soft space-y-3 rounded-xl p-2">
+              <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-xs font-semibold text-white backdrop-blur-sm">
                 {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
               </header>
 
@@ -58,7 +58,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
                 );
               })}
 
-              <div className="rounded-xl border border-slate-200 bg-white p-2">
+              <div className="glass-soft rounded-xl p-2">
                 <p className="mb-2 text-xs font-semibold text-slate-600">Ενδιάμεσες βάρδιες</p>
                 <div className="space-y-2">
                   {customShifts.map((shift) => (

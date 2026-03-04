@@ -39,7 +39,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+    <section className="glass-panel rounded-2xl p-4">
       <h2 className="text-lg font-bold text-slate-900">Χειροκίνητη Βάρδια</h2>
       <p className="mb-3 text-sm text-slate-500">Ορισμός ενδιάμεσης βάρδιας (π.χ. 10:00 - 18:00).</p>
 
@@ -49,7 +49,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             key={preset.id}
             type="button"
             onClick={() => applyPreset(preset)}
-            className="rounded-lg border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-brand-200/70 bg-brand-50/85 px-2 py-1 text-xs font-semibold text-brand-800 backdrop-blur-sm hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!canManage}
           >
             Preset: {preset.startTime}-{preset.endTime}

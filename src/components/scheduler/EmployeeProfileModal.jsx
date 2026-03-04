@@ -45,8 +45,8 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="glass-panel w-full max-w-lg rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">
             {isAdmin ? 'Επεξεργασία Προφίλ Υπαλλήλου' : 'Προφίλ Υπαλλήλου'}

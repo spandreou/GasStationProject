@@ -19,8 +19,8 @@ export default function ShiftCard({ employee, disabled = false, showRole = true 
       ref={setNodeRef}
       style={style}
       type="button"
-      className={`w-full rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition ${
-        disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-brand-300 hover:shadow'
+      className={`w-full rounded-xl border border-white/35 bg-white/55 p-3 text-left shadow-sm backdrop-blur-sm transition ${
+        disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-brand-300 hover:bg-white/80 hover:shadow'
       }`}
       disabled={disabled}
       {...listeners}

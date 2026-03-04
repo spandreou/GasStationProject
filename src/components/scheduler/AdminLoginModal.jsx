@@ -49,8 +49,8 @@ export default function AdminLoginModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="glass-panel w-full max-w-sm rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="inline-flex items-center gap-2 text-lg font-bold text-slate-900">
             <LockKeyhole size={18} />

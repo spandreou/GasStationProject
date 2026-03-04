@@ -39,8 +39,8 @@ const HYPERSPEED_OPTIONS = {
 
 export default function App() {
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <div className="pointer-events-none fixed inset-0 -z-10 opacity-70">
+    <div className="relative isolate min-h-screen overflow-hidden">
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-75">
         <Hyperspeed effectOptions={HYPERSPEED_OPTIONS} />
       </div>
       <div className="relative z-10">

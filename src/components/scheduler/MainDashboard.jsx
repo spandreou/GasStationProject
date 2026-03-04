@@ -169,7 +169,7 @@ export default function MainDashboard() {
   }
 
   if (isLoading || isAuthLoading) {
-    return <p className="p-8 text-center text-slate-700">Φόρτωση προγράμματος...</p>;
+    return <p className="p-8 text-center font-medium text-slate-100">Φόρτωση προγράμματος...</p>;
   }
 
   return (
@@ -191,28 +191,28 @@ export default function MainDashboard() {
         />
 
         {!isFirebaseConfigured ? (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/60 p-3 text-sm text-amber-100">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
             Δεν βρέθηκαν Firebase env vars. Η εφαρμογή τρέχει σε local demo mode με localStorage.
           </div>
         ) : null}
 
         {!isAdmin ? (
-          <div className="flex items-start gap-2 rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-3 text-sm text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
             Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
           </div>
         ) : null}
 
         {warningMessage ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-red-300/70 p-3 text-sm text-red-100">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             {warningMessage}
           </div>
         ) : null}
 
         {errorMessage ? (
-          <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</div>
+          <div className="glass-soft rounded-xl border border-red-300/70 p-3 text-sm text-red-100">{errorMessage}</div>
         ) : null}
 
         <div className="grid gap-4 xl:grid-cols-[320px,1fr]">

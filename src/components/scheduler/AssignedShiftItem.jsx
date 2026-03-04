@@ -5,7 +5,9 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
   return (
     <article
       className={`rounded-lg border p-2 text-xs shadow-sm ${
-        hasConflict ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'
+        hasConflict
+          ? 'border-red-400 bg-red-100/80 backdrop-blur-sm'
+          : 'border-white/35 bg-white/55 backdrop-blur-sm'
       }`}
     >
       <div className="flex items-center justify-between gap-2">

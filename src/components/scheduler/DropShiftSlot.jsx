@@ -20,7 +20,9 @@ export default function DropShiftSlot({
     <section
       ref={setNodeRef}
       className={`min-h-[110px] rounded-xl border-2 border-dashed p-2 transition ${
-        isOver && canManage ? 'border-brand-400 bg-brand-50' : 'border-slate-200 bg-slate-50'
+        isOver && canManage
+          ? 'border-brand-400 bg-brand-50/80 backdrop-blur-sm'
+          : 'border-white/35 bg-white/40 backdrop-blur-sm'
       }`}
     >
       <header className="mb-2 flex items-center justify-between">

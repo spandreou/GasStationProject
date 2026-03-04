@@ -1,0 +1,32 @@
+import { Trash2 } from 'lucide-react';
+import { getShiftDurationHours } from '../../utils/analytics';
+
+export default function AssignedShiftItem({ shift, employee, hasConflict, onDelete, canManage = true }) {
+  return (
+    <article
+      className={`rounded-lg border p-2 text-xs shadow-sm ${
+        hasConflict ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold text-slate-800">{employee?.fullName || 'Άγνωστος'}</p>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => onDelete(shift.id)}
+            className="rounded p-1 text-slate-400 hover:bg-red-100 hover:text-red-600"
+            title="Διαγραφή βάρδιας"
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      <p className="text-slate-600">
+        {shift.startTime} - {shift.endTime} ({getShiftDurationHours(shift)} ώρες)
+      </p>
+
+      {hasConflict ? <p className="mt-1 font-medium text-red-600">Επικάλυψη με άλλη βάρδια</p> : null}
+    </article>
+  );
+}

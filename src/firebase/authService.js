@@ -1,6 +1,7 @@
 import {
   browserLocalPersistence,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
@@ -47,4 +48,20 @@ export async function signOutAdmin() {
   }
 
   await signOut(auth);
+}
+
+export async function sendAdminPasswordResetEmail(email) {
+  if (!isFirebaseConfigured || !auth) {
+    throw new Error('Το Firebase Auth δεν είναι ρυθμισμένο.');
+  }
+
+  if (!email?.trim()) {
+    throw new Error('Συμπλήρωσε email για επαναφορά κωδικού.');
+  }
+
+  if (ADMIN_EMAIL && email.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    throw new Error('Η επαναφορά επιτρέπεται μόνο για το email διαχειριστή.');
+  }
+
+  await sendPasswordResetEmail(auth, email.trim());
 }

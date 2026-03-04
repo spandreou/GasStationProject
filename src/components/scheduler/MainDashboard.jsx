@@ -5,6 +5,11 @@ import { WEEKDAY_LABELS } from '../../data/constants';
 import { isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import { calculateWeeklyTotals } from '../../utils/analytics';
+import {
+  exportScheduleToExcel,
+  exportScheduleToPdf,
+  exportScheduleToWord,
+} from '../../utils/exportUtils';
 import { getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AdminLoginModal from './AdminLoginModal';
@@ -48,6 +53,7 @@ export default function MainDashboard() {
     openLoginModal,
     closeLoginModal,
     loginAsAdmin,
+    requestPasswordReset,
     logoutAdmin,
     undoLastAction,
     dismissUndo,
@@ -129,6 +135,39 @@ export default function MainDashboard() {
     await editEmployee(profilePayload);
   }
 
+  function getExportPayload() {
+    return {
+      weekDays,
+      weekdayLabels: WEEKDAY_LABELS,
+      shifts: weekShifts,
+      employees,
+    };
+  }
+
+  function handleExportPdf() {
+    try {
+      exportScheduleToPdf(getExportPayload());
+    } catch {
+      setWarningMessage('Αποτυχία εξαγωγής PDF.');
+    }
+  }
+
+  function handleExportExcel() {
+    try {
+      exportScheduleToExcel(getExportPayload());
+    } catch {
+      setWarningMessage('Αποτυχία εξαγωγής Excel.');
+    }
+  }
+
+  async function handleExportWord() {
+    try {
+      await exportScheduleToWord(getExportPayload());
+    } catch {
+      setWarningMessage('Αποτυχία εξαγωγής Word.');
+    }
+  }
+
   if (isLoading || isAuthLoading) {
     return <p className="p-8 text-center text-slate-700">Φόρτωση προγράμματος...</p>;
   }
@@ -146,6 +185,9 @@ export default function MainDashboard() {
           onCurrentWeek={goToCurrentWeek}
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
+          onExportPdf={handleExportPdf}
+          onExportExcel={handleExportExcel}
+          onExportWord={handleExportWord}
         />
 
         {!isFirebaseConfigured ? (
@@ -218,6 +260,7 @@ export default function MainDashboard() {
         open={isLoginModalOpen}
         onClose={closeLoginModal}
         onLogin={loginAsAdmin}
+        onRequestPasswordReset={requestPasswordReset}
         isFirebaseConfigured={isFirebaseConfigured}
       />
 

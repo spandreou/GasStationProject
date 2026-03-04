@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { signInAdmin, signOutAdmin, subscribeAdminAuth } from '../firebase/authService';
+import {
+  sendAdminPasswordResetEmail,
+  signInAdmin,
+  signOutAdmin,
+  subscribeAdminAuth,
+} from '../firebase/authService';
 import {
   createEmployee,
   createShift,
@@ -116,6 +121,17 @@ export const useSchedulerStore = create((set, get) => ({
   logoutAdmin: async () => {
     await signOutAdmin();
     set({ warningMessage: 'Έγινε αποσύνδεση διαχειριστή.' });
+  },
+
+  requestPasswordReset: async (email) => {
+    try {
+      await sendAdminPasswordResetEmail(email);
+      set({ warningMessage: 'Στάλθηκε email επαναφοράς κωδικού.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error.message || 'Αποτυχία αποστολής email επαναφοράς.' });
+      return false;
+    }
   },
 
   setWeekStart: (weekStart) => set({ weekStart }),

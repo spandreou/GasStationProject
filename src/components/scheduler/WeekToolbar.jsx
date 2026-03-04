@@ -26,7 +26,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative z-[100] overflow-visible">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -38,7 +38,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 min-w-[170px] rounded-lg border border-white/40 bg-white/80 p-1 shadow-lg backdrop-blur-md dark:border-cyan-300/35 dark:bg-slate-900/85">
+        <div className="absolute right-0 z-[100] mt-2 min-w-[180px] rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/90">
           <button
             type="button"
             onClick={() => handleAction(onExportPdf)}
@@ -94,7 +94,7 @@ export default function WeekToolbar({
   }
 
   return (
-    <header className="glass-panel rounded-2xl p-4">
+    <header className="glass-panel relative z-[60] overflow-visible rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Πίνακας Βαρδιών Πρατηρίου</h1>
@@ -103,7 +103,7 @@ export default function WeekToolbar({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="relative z-[70] flex flex-wrap gap-2 overflow-visible">
           <button
             type="button"
             onClick={onToggleTheme}

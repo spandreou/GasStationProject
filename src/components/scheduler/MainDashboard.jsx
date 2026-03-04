@@ -204,7 +204,7 @@ export default function MainDashboard() {
         {!isAdmin ? (
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-3 text-sm text-slate-800 dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-            Read-only mode: ΞΟΞ½ΞΏ ΞΏ ΟƒΟ…Ξ½Ξ΄ΞµΞ΄ΞµΞΌΞ­Ξ½ΞΏΟ‚ Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®Ο‚ Ξ²Ξ»Ξ­Ο€ΞµΞΉ Ξ‘Ξ¦Ξ ΞΊΞ±ΞΉ ΞΊΞ¬Ξ½ΞµΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚.
+            Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
           </div>
         ) : null}
 

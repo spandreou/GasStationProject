@@ -1,4 +1,4 @@
-﻿import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { AlertTriangle, ShieldCheck, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
@@ -18,19 +18,23 @@ import AnalyticsPanel from './AnalyticsPanel';
 import EmployeeProfileModal from './EmployeeProfileModal';
 import EmployeeSidebar from './EmployeeSidebar';
 import ManualShiftForm from './ManualShiftForm';
+import TemplateAssignModal from './TemplateAssignModal';
 import UndoSnackbar from './UndoSnackbar';
 import WeekToolbar from './WeekToolbar';
 import WeeklyGrid from './WeeklyGrid';
 
 export default function MainDashboard() {
-  const [activeEmployee, setActiveEmployee] = useState(null);
+  const [activeDragItem, setActiveDragItem] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
+  const [templateAssignState, setTemplateAssignState] = useState({ open: false, template: null, date: '' });
+
   const { isDark, toggleTheme } = useThemeMode();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const {
     employees,
     shifts,
+    shiftTemplates,
     weekStart,
     isLoading,
     isAuthLoading,
@@ -59,6 +63,8 @@ export default function MainDashboard() {
     logoutAdmin,
     undoLastAction,
     dismissUndo,
+    addShiftTemplate,
+    deleteShiftTemplate,
   } = useSchedulerStore();
 
   useEffect(() => {
@@ -87,33 +93,92 @@ export default function MainDashboard() {
 
   async function handleDragEnd(event) {
     const { active, over } = event;
-    setActiveEmployee(null);
+    setActiveDragItem(null);
 
     if (!isAdmin || !active || !over) return;
 
     const activeData = active.data.current;
     const overData = over.data.current;
-    if (activeData?.type !== 'employee' || overData?.type !== 'slot') return;
 
-    const employee = activeData.employee;
-    const slot = overData.slot;
+    if (activeData?.type === 'employee' && overData?.type === 'slot') {
+      const employee = activeData.employee;
+      const slot = overData.slot;
 
-    // ΞΞ¬ΞΈΞµ drop Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³ΞµΞ― Ξ¬ΞΌΞµΟƒΞ± Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ· Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚ ΟƒΟ„Ξ· Ξ²Ξ¬ΟƒΞ·.
-    await addShift({
-      employeeId: employee.id,
-      date: slot.date,
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-      label: slot.label,
-    });
+      await addShift({
+        employeeId: employee.id,
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        label: slot.label,
+      });
+      return;
+    }
+
+    if (activeData?.type === 'shift-template' && overData?.type === 'day') {
+      const template = activeData.template;
+      const date = overData.day?.date;
+      if (!template || !date) return;
+
+      if (!employees.length) {
+        setWarningMessage('Δεν υπάρχουν υπάλληλοι για ανάθεση της custom βάρδιας.');
+        return;
+      }
+
+      const templateEmployeeId =
+        template.employeeId && employees.some((employee) => employee.id === template.employeeId) ? template.employeeId : '';
+
+      if (templateEmployeeId) {
+        await addShift({
+          employeeId: templateEmployeeId,
+          date,
+          startTime: template.startTime,
+          endTime: template.endTime,
+          label: template.label,
+          trackUndo: true,
+        });
+        return;
+      }
+
+      setTemplateAssignState({ open: true, template, date });
+    }
   }
 
   function handleDragStart(event) {
     if (!isAdmin) return;
     const activeData = event.active.data.current;
+
     if (activeData?.type === 'employee') {
-      setActiveEmployee(activeData.employee);
+      setActiveDragItem({ type: 'employee', label: activeData.employee.fullName });
+      return;
     }
+
+    if (activeData?.type === 'shift-template') {
+      const template = activeData.template;
+      setActiveDragItem({
+        type: 'shift-template',
+        label: `${template.label} (${template.startTime}-${template.endTime})`,
+      });
+    }
+  }
+
+  async function handleAssignTemplate(employeeId) {
+    const { template, date } = templateAssignState;
+    if (!template || !date || !employeeId) return;
+
+    await addShift({
+      employeeId,
+      date,
+      startTime: template.startTime,
+      endTime: template.endTime,
+      label: template.label,
+      trackUndo: true,
+    });
+
+    setTemplateAssignState({ open: false, template: null, date: '' });
+  }
+
+  function closeTemplateAssign() {
+    setTemplateAssignState({ open: false, template: null, date: '' });
   }
 
   async function handleCopyWhatsapp() {
@@ -126,10 +191,10 @@ export default function MainDashboard() {
       });
 
       await navigator.clipboard.writeText(text);
-      setWarningMessage('Ξ¤ΞΏ Ο€ΟΟΞ³ΟΞ±ΞΌΞΌΞ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ¬Ο†Ξ·ΞΊΞµ ΟƒΟ„ΞΏ clipboard Ξ³ΞΉΞ± WhatsApp.');
+      setWarningMessage('Το πρόγραμμα αντιγράφηκε στο clipboard για WhatsApp.');
       setTimeout(() => clearMessages(), 2500);
     } catch {
-      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ±Ο†Ξ®Ο‚. Ξ•Ο€ΞΉΞ²ΞµΞ²Ξ±Ξ―Ο‰ΟƒΞµ Ξ¬Ξ΄ΞµΞΉΞ± clipboard ΟƒΟ„ΞΏΞ½ browser.');
+      setWarningMessage('Αποτυχία αντιγραφής. Επιβεβαίωσε άδεια clipboard στον browser.');
     }
   }
 
@@ -150,7 +215,7 @@ export default function MainDashboard() {
     try {
       exportScheduleToPdf(getExportPayload());
     } catch {
-      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ PDF.');
+      setWarningMessage('Αποτυχία εξαγωγής PDF.');
     }
   }
 
@@ -158,7 +223,7 @@ export default function MainDashboard() {
     try {
       exportScheduleToExcel(getExportPayload());
     } catch {
-      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Excel.');
+      setWarningMessage('Αποτυχία εξαγωγής Excel.');
     }
   }
 
@@ -166,12 +231,12 @@ export default function MainDashboard() {
     try {
       await exportScheduleToWord(getExportPayload());
     } catch {
-      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Word.');
+      setWarningMessage('Αποτυχία εξαγωγής Word.');
     }
   }
 
   if (isLoading || isAuthLoading) {
-    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ο€ΟΞΏΞ³ΟΞ¬ΞΌΞΌΞ±Ο„ΞΏΟ‚...</p>;
+    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
 
   return (
@@ -197,7 +262,7 @@ export default function MainDashboard() {
         {!isFirebaseConfigured ? (
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/70 p-3 text-sm text-amber-900 dark:text-amber-200">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
-            Ξ”ΞµΞ½ Ξ²ΟΞ­ΞΈΞ·ΞΊΞ±Ξ½ Firebase env vars. Ξ— ΞµΟ†Ξ±ΟΞΌΞΏΞ³Ξ® Ο„ΟΞ­Ο‡ΞµΞΉ ΟƒΞµ local demo mode ΞΌΞµ localStorage.
+            Δεν βρέθηκαν Firebase env vars. Η εφαρμογή τρέχει σε local demo mode με localStorage.
           </div>
         ) : null}
 
@@ -221,22 +286,22 @@ export default function MainDashboard() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 xl:grid-cols-[320px,1fr]">
+        <div className="grid gap-4 xl:grid-cols-[360px,1fr]">
           <div className="space-y-4">
             <EmployeeSidebar
               employees={employees}
+              shiftTemplates={shiftTemplates}
               isAdmin={isAdmin}
               onAddEmployee={addEmployee}
               onDeleteEmployee={deleteEmployee}
               onOpenAdminLogin={openLoginModal}
               onOpenProfile={setProfileEmployee}
+              onAddShiftTemplate={addShiftTemplate}
+              onDeleteShiftTemplate={deleteShiftTemplate}
             />
-            <ManualShiftForm
-              employees={employees}
-              weekDays={weekDays}
-              onCreateShift={addShift}
-              canManage={isAdmin}
-            />
+
+            <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
+
             <AnalyticsPanel
               employees={employees}
               totalsByEmployee={analytics.totalsByEmployee}
@@ -255,9 +320,9 @@ export default function MainDashboard() {
       </main>
 
       <DragOverlay>
-        {activeEmployee ? (
-          <div className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-lg">
-            {activeEmployee.fullName}
+        {activeDragItem ? (
+          <div className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-lg dark:border dark:border-cyan-300/35">
+            {activeDragItem.label}
           </div>
         ) : null}
       </DragOverlay>
@@ -278,8 +343,16 @@ export default function MainDashboard() {
         onSave={handleSaveProfile}
       />
 
+      <TemplateAssignModal
+        open={templateAssignState.open}
+        template={templateAssignState.template}
+        date={templateAssignState.date}
+        employees={employees}
+        onClose={closeTemplateAssign}
+        onConfirm={handleAssignTemplate}
+      />
+
       <UndoSnackbar undoState={undoState} onUndo={undoLastAction} onDismiss={dismissUndo} isAdmin={isAdmin} />
     </DndContext>
   );
 }
-

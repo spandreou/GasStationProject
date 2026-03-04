@@ -17,9 +17,11 @@ import { db, isFirebaseConfigured } from './config';
 
 const EMPLOYEES_COLLECTION = 'employees';
 const SHIFTS_COLLECTION = 'shifts';
+const SHIFT_TEMPLATES_COLLECTION = 'shiftTemplates';
 
 const LOCAL_EMPLOYEES_KEY = 'gas-station-employees';
 const LOCAL_SHIFTS_KEY = 'gas-station-shifts';
+const LOCAL_SHIFT_TEMPLATES_KEY = 'gas-station-shift-templates';
 
 function useLocalFallback() {
   const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -34,6 +36,10 @@ function ensureLocalSeed() {
 
   if (!localStorage.getItem(LOCAL_SHIFTS_KEY)) {
     localStorage.setItem(LOCAL_SHIFTS_KEY, JSON.stringify(buildSampleShifts()));
+  }
+
+  if (!localStorage.getItem(LOCAL_SHIFT_TEMPLATES_KEY)) {
+    localStorage.setItem(LOCAL_SHIFT_TEMPLATES_KEY, JSON.stringify([]));
   }
 }
 
@@ -92,6 +98,29 @@ export function subscribeShifts(onData, onError) {
   );
 }
 
+export function subscribeShiftTemplates(onData, onError) {
+  if (useLocalFallback()) {
+    try {
+      onData(readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY));
+    } catch (error) {
+      onError?.(error);
+    }
+    return createLocalUnsubscribe();
+  }
+
+  const templatesQuery = query(collection(db, SHIFT_TEMPLATES_COLLECTION));
+  return onSnapshot(
+    templatesQuery,
+    (snapshot) => {
+      const templates = snapshot.docs
+        .map((item) => ({ id: item.id, ...item.data() }))
+        .sort((a, b) => (a.label || '').localeCompare(b.label || '', 'el'));
+      onData(templates);
+    },
+    onError,
+  );
+}
+
 export async function createShift(payload) {
   if (useLocalFallback()) {
     const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
@@ -101,6 +130,23 @@ export async function createShift(payload) {
   }
 
   const docRef = await addDoc(collection(db, SHIFTS_COLLECTION), {
+    ...payload,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { id: docRef.id, ...payload };
+}
+
+export async function createShiftTemplate(payload) {
+  if (useLocalFallback()) {
+    const templates = readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY);
+    const createdTemplate = { ...payload, id: crypto.randomUUID() };
+    writeLocalItems(LOCAL_SHIFT_TEMPLATES_KEY, [...templates, createdTemplate]);
+    return createdTemplate;
+  }
+
+  const docRef = await addDoc(collection(db, SHIFT_TEMPLATES_COLLECTION), {
     ...payload,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -196,6 +242,16 @@ export async function removeShiftsByDates(dates) {
   const removed = matched.map((item) => ({ id: item.id, ...item.data() }));
   await Promise.all(matched.map((item) => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id))));
   return removed;
+}
+
+export async function removeShiftTemplate(templateId) {
+  if (useLocalFallback()) {
+    const templates = readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY).filter((template) => template.id !== templateId);
+    writeLocalItems(LOCAL_SHIFT_TEMPLATES_KEY, templates);
+    return;
+  }
+
+  await deleteDoc(doc(db, SHIFT_TEMPLATES_COLLECTION, templateId));
 }
 
 export async function createEmployee(payload) {

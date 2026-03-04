@@ -2,6 +2,7 @@ import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
 import { findOverlapConflicts } from '../../utils/overlap';
 import { formatDateGreek } from '../../utils/time';
 import AssignedShiftItem from './AssignedShiftItem';
+import DayDropZone from './DayDropZone';
 import DropShiftSlot from './DropShiftSlot';
 
 function getSlotId(day, preset) {
@@ -38,6 +39,8 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
               <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-xs font-semibold text-white backdrop-blur-sm dark:bg-slate-950/85 dark:text-cyan-100">
                 {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
               </header>
+
+              <DayDropZone date={day} canManage={canManage} />
 
               {SHIFT_PRESETS.map((preset) => {
                 const slotShifts = dayShifts.filter(

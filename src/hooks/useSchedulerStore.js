@@ -8,13 +8,16 @@ import {
 import {
   createEmployee,
   createShift,
+  createShiftTemplate,
   removeEmployee,
   removeShift,
+  removeShiftTemplate,
   removeShiftsByDates,
   removeShiftsByEmployee,
   restoreShift,
   subscribeEmployees,
   subscribeShifts,
+  subscribeShiftTemplates,
   updateEmployee,
   updateShift,
 } from '../firebase/schedulerService';
@@ -26,7 +29,7 @@ function getCurrentWeekStart() {
 }
 
 function parseShiftInput(startTime, endTime) {
-  // Κοινή επικύρωση για presets και χειροκίνητες βάρδιες.
+  // Κοινή επικύρωση για presets, χειροκίνητες και custom template βάρδιες.
   if (!isValidTimeLabel(startTime) || !isValidTimeLabel(endTime)) {
     throw new Error('Η ώρα πρέπει να είναι σε μορφή ΩΩ:ΛΛ.');
   }
@@ -52,9 +55,12 @@ function buildUndoState(actionType, message, payload) {
   };
 }
 
+const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
+
 export const useSchedulerStore = create((set, get) => ({
   employees: [],
   shifts: [],
+  shiftTemplates: [],
   isLoading: true,
   isAuthLoading: true,
   errorMessage: '',
@@ -63,9 +69,10 @@ export const useSchedulerStore = create((set, get) => ({
   isAdmin: false,
   adminUser: null,
   isLoginModalOpen: false,
-  undoState: { visible: false, actionType: '', message: '', payload: null, createdAt: 0 },
+  undoState: emptyUndoState,
   _unsubscribeEmployees: null,
   _unsubscribeShifts: null,
+  _unsubscribeTemplates: null,
   _unsubscribeAuth: null,
 
   initializeData: () => {
@@ -77,6 +84,11 @@ export const useSchedulerStore = create((set, get) => ({
     const unsubscribeShifts = subscribeShifts(
       (shifts) => set({ shifts, isLoading: false }),
       () => set({ errorMessage: 'Αποτυχία φόρτωσης βαρδιών.', isLoading: false }),
+    );
+
+    const unsubscribeTemplates = subscribeShiftTemplates(
+      (shiftTemplates) => set({ shiftTemplates }),
+      () => set({ errorMessage: 'Αποτυχία φόρτωσης custom βαρδιών.' }),
     );
 
     const unsubscribeAuth = subscribeAdminAuth(
@@ -93,14 +105,16 @@ export const useSchedulerStore = create((set, get) => ({
     set({
       _unsubscribeEmployees: unsubscribeEmployees,
       _unsubscribeShifts: unsubscribeShifts,
+      _unsubscribeTemplates: unsubscribeTemplates,
       _unsubscribeAuth: unsubscribeAuth,
     });
   },
 
   cleanupData: () => {
-    const { _unsubscribeEmployees, _unsubscribeShifts, _unsubscribeAuth } = get();
+    const { _unsubscribeEmployees, _unsubscribeShifts, _unsubscribeTemplates, _unsubscribeAuth } = get();
     _unsubscribeEmployees?.();
     _unsubscribeShifts?.();
+    _unsubscribeTemplates?.();
     _unsubscribeAuth?.();
   },
 
@@ -155,7 +169,7 @@ export const useSchedulerStore = create((set, get) => ({
   setWarningMessage: (warningMessage) => set({ warningMessage }),
   clearMessages: () => set({ warningMessage: '', errorMessage: '' }),
 
-  dismissUndo: () => set({ undoState: { visible: false, actionType: '', message: '', payload: null, createdAt: 0 } }),
+  dismissUndo: () => set({ undoState: emptyUndoState }),
 
   undoLastAction: async () => {
     if (!requireAdmin(get, set)) return;
@@ -179,13 +193,20 @@ export const useSchedulerStore = create((set, get) => ({
           await Promise.all(shiftsToRestore.map((shift) => restoreShift(shift)));
           break;
         }
+        case 'add_shift': {
+          const { shiftId } = undoState.payload || {};
+          if (shiftId) {
+            await removeShift(shiftId);
+          }
+          break;
+        }
         default:
           break;
       }
 
       set({
         warningMessage: 'Η ενέργεια αναιρέθηκε επιτυχώς.',
-        undoState: { visible: false, actionType: '', message: '', payload: null, createdAt: 0 },
+        undoState: emptyUndoState,
       });
     } catch {
       set({ warningMessage: 'Αποτυχία αναίρεσης ενέργειας.' });
@@ -235,14 +256,43 @@ export const useSchedulerStore = create((set, get) => ({
     await removeEmployee(employeeId);
   },
 
-  addShift: async ({ employeeId, date, startTime, endTime, label, notes = '' }) => {
+  addShiftTemplate: async ({ label, startTime, endTime, employeeId = '' }) => {
     if (!requireAdmin(get, set)) return;
+    if (!label?.trim()) {
+      set({ warningMessage: 'Το όνομα custom βάρδιας είναι υποχρεωτικό.' });
+      return;
+    }
+
+    try {
+      parseShiftInput(startTime, endTime);
+      await createShiftTemplate({
+        label: label.trim(),
+        startTime,
+        endTime,
+        employeeId: employeeId || '',
+      });
+    } catch (error) {
+      set({ warningMessage: error.message || 'Αποτυχία δημιουργίας custom βάρδιας.' });
+    }
+  },
+
+  deleteShiftTemplate: async (templateId) => {
+    if (!requireAdmin(get, set)) return;
+    await removeShiftTemplate(templateId);
+  },
+
+  addShift: async ({ employeeId, date, startTime, endTime, label, notes = '', trackUndo = false }) => {
+    if (!requireAdmin(get, set)) return;
+    if (!employeeId || !date) {
+      set({ warningMessage: 'Επίλεξε υπάλληλο και ημερομηνία για τη βάρδια.' });
+      return;
+    }
 
     try {
       parseShiftInput(startTime, endTime);
       const conflict = hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime });
 
-      await createShift({
+      const createdShift = await createShift({
         employeeId,
         date,
         startTime,
@@ -251,10 +301,15 @@ export const useSchedulerStore = create((set, get) => ({
         notes,
       });
 
+      if (trackUndo && createdShift?.id) {
+        set({
+          undoState: buildUndoState('add_shift', 'Η βάρδια ανατέθηκε.', { shiftId: createdShift.id }),
+        });
+      }
+
       if (conflict) {
         set({
-          warningMessage:
-            'Προειδοποίηση: Ο υπάλληλος έχει ήδη άλλη βάρδια που επικαλύπτεται την ίδια ημέρα.',
+          warningMessage: 'Προειδοποίηση: Υπάρχει χρονική επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
         });
       }
     } catch (error) {

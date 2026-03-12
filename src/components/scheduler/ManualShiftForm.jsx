@@ -61,7 +61,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Υπάλληλος
           <select
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.employeeId}
             onChange={(event) => setForm((prev) => ({ ...prev, employeeId: event.target.value }))}
             required
@@ -78,7 +78,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Ημερομηνία
           <select
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.date}
             onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
             required
@@ -96,7 +96,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           Ώρα Έναρξης
           <input
             type="time"
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.startTime}
             onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
             required
@@ -108,7 +108,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           Ώρα Λήξης
           <input
             type="time"
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.endTime}
             onChange={(event) => setForm((prev) => ({ ...prev, endTime: event.target.value }))}
             required
@@ -119,7 +119,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 md:col-span-2 dark:text-slate-100">
           Σημειώσεις
           <input
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
+            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             placeholder="Προαιρετικό"
             value={form.notes}
             onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}

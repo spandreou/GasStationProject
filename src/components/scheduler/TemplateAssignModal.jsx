@@ -1,6 +1,6 @@
 import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { formatDateGreek } from '../../utils/time';
+import { formatDateGreek, formatShiftTime } from '../../utils/time';
 
 export default function TemplateAssignModal({
   open,
@@ -47,9 +47,7 @@ export default function TemplateAssignModal({
 
         <div className="glass-soft mb-3 rounded-lg p-3 text-sm text-slate-800 dark:text-slate-100">
           <p className="font-semibold">{template.label}</p>
-          <p>
-            {template.startTime} - {template.endTime}
-          </p>
+          <p>{formatShiftTime(template.startTime, template.endTime)}</p>
           {!allowDateSelection ? (
             <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">Ημέρα: {formatDateGreek(date)}</p>
           ) : null}
@@ -64,7 +62,7 @@ export default function TemplateAssignModal({
             <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
               Επιλογή ημέρας
               <select
-                className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+                className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
                 value={selectedDate}
                 onChange={(event) => setSelectedDate(event.target.value)}
                 required
@@ -80,7 +78,7 @@ export default function TemplateAssignModal({
           <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
             Επιλογή υπαλλήλου
             <select
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               value={employeeId}
               onChange={(event) => setEmployeeId(event.target.value)}
               disabled={!hasEmployees}

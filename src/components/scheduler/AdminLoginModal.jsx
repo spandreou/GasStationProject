@@ -81,7 +81,7 @@ export default function AdminLoginModal({
                 value={credentials.email}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, email: event.target.value }))}
                 placeholder="admin@email.com"
-                className="w-full border-none bg-transparent p-0 text-sm text-slate-900 outline-none placeholder:text-slate-700 dark:text-white dark:placeholder:text-slate-300"
+                className="w-full border-none bg-transparent p-0 text-sm text-slate-950 font-semibold outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
                 autoFocus
                 required
                 disabled={!isFirebaseConfigured}
@@ -98,7 +98,7 @@ export default function AdminLoginModal({
                 value={credentials.password}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, password: event.target.value }))}
                 placeholder="Κωδικός"
-                className="w-full border-none bg-transparent p-0 text-sm text-slate-900 outline-none placeholder:text-slate-700 dark:text-white dark:placeholder:text-slate-300"
+                className="w-full border-none bg-transparent p-0 text-sm text-slate-950 font-semibold outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
                 required
                 disabled={!isFirebaseConfigured}
               />

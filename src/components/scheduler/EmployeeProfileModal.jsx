@@ -66,7 +66,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
             <input
               value={form.fullName}
               onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
               required
             />
@@ -77,7 +77,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
             <input
               value={form.role}
               onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
             />
           </label>
@@ -98,7 +98,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
             <input
               value={form.phone}
               onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
             />
           </label>
@@ -109,7 +109,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
               type="email"
               value={form.email}
               onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
             />
           </label>
@@ -120,7 +120,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
               type="date"
               value={form.hireDate}
               onChange={(event) => setForm((prev) => ({ ...prev, hireDate: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
             />
           </label>
@@ -131,7 +131,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
               <input
                 value={form.afm}
                 onChange={(event) => setForm((prev) => ({ ...prev, afm: event.target.value }))}
-                className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+                className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               />
             ) : (
               <div className="mt-1 rounded-lg border border-slate-300/80 bg-white/40 px-3 py-2 text-sm text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-300">

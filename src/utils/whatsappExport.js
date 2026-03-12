@@ -1,4 +1,4 @@
-import { formatDateGreek } from './time';
+import { formatDateGreek, formatShiftTime } from './time';
 
 export function buildWhatsappSummary({ shifts, employees, weekDays, weekdayLabels }) {
   const employeeNameById = new Map(employees.map((employee) => [employee.id, employee.fullName]));
@@ -23,7 +23,7 @@ export function buildWhatsappSummary({ shifts, employees, weekDays, weekdayLabel
 
     dayShifts.forEach((shift) => {
       const employeeName = employeeNameById.get(shift.employeeId) || 'Άγνωστος υπάλληλος';
-      lines.push(`• ${shift.startTime}-${shift.endTime} | ${employeeName}`);
+      lines.push(`• ${formatShiftTime(shift.startTime, shift.endTime)} | ${employeeName}`);
     });
 
     lines.push('');

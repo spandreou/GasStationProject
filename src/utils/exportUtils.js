@@ -3,14 +3,14 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { ROBOTO_REGULAR_BASE64 } from '../assets/fonts/robotoRegularBase64';
-import { formatDateGreek } from './time';
+import { formatDateGreek, formatShiftTime } from './time';
 
 function buildEmployeeDayMap(shifts) {
   const map = new Map();
 
   shifts.forEach((shift) => {
     const key = `${shift.employeeId}__${shift.date}`;
-    const value = `${shift.startTime}-${shift.endTime}`;
+    const value = formatShiftTime(shift.startTime, shift.endTime);
 
     if (!map.has(key)) {
       map.set(key, []);

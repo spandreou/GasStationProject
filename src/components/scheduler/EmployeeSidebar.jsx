@@ -212,7 +212,7 @@ export default function EmployeeSidebar({
               type="time"
               value={templateForm.startTime}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, startTime: event.target.value }))}
-              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
+              className="input-glass appearance-none rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
               disabled={!isAdmin}
               required
             />
@@ -220,7 +220,7 @@ export default function EmployeeSidebar({
               type="time"
               value={templateForm.endTime}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, endTime: event.target.value }))}
-              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
+              className="input-glass appearance-none rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
               disabled={!isAdmin}
               required
             />

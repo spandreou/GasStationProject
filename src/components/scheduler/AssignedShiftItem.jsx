@@ -4,7 +4,7 @@ import { getShiftDurationHours } from '../../utils/analytics';
 export default function AssignedShiftItem({ shift, employee, hasConflict, onDelete, canManage = true }) {
   return (
     <article
-      className={`rounded-lg border p-2 text-[11px] sm:text-xs shadow-sm backdrop-blur-sm ${
+      className={`rounded-lg border p-1.5 text-[10px] sm:p-2 sm:text-xs shadow-sm backdrop-blur-sm ${
         hasConflict
           ? 'border-red-400 bg-red-100/80 dark:border-red-300/60 dark:bg-red-500/20'
           : 'border-white/35 bg-white/55 dark:border-cyan-300/30 dark:bg-slate-900/45'

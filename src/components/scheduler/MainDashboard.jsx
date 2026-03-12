@@ -1,5 +1,5 @@
 import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
-import { AlertTriangle, ShieldCheck, Users, WifiOff } from 'lucide-react';
+import { AlertTriangle, Plus, ShieldCheck, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { isFirebaseConfigured } from '../../firebase/config';
@@ -33,6 +33,8 @@ export default function MainDashboard() {
     allowDateSelection: false,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+  const [isManualSheetOpen, setIsManualSheetOpen] = useState(false);
 
   const { isDark, toggleTheme } = useThemeMode();
   const sensors = useSensors(
@@ -269,7 +271,7 @@ export default function MainDashboard() {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 text-slate-900 md:p-6 dark:text-slate-100">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-4 text-slate-900 sm:gap-4 md:p-6 dark:text-slate-100">
         <WeekToolbar
           weekDays={weekDays}
           isAdmin={isAdmin}
@@ -295,7 +297,7 @@ export default function MainDashboard() {
         ) : null}
 
         {!isAdmin ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-3 text-sm text-slate-800 dark:text-slate-100">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-xs text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
             Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
           </div>
@@ -314,8 +316,8 @@ export default function MainDashboard() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 xl:grid-cols-[360px,1fr]">
-          <div className="order-2 space-y-4 md:order-1">
+        <div className="grid gap-5 sm:gap-4 xl:grid-cols-[360px,1fr]">
+          <div className="order-2 space-y-5 sm:space-y-4 md:order-1">
             <div className="hidden md:block">
               <EmployeeSidebar
                 employees={employees}
@@ -330,7 +332,9 @@ export default function MainDashboard() {
               />
             </div>
 
-            <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
+            <div className="hidden md:block">
+              <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
+            </div>
 
             <AnalyticsPanel
               employees={employees}
@@ -353,12 +357,74 @@ export default function MainDashboard() {
 
       <button
         type="button"
-        onClick={() => setIsSidebarOpen(true)}
-        className="fixed bottom-5 right-5 z-[65] inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
-        aria-label="Άνοιγμα λίστας υπαλλήλων"
+        onClick={() => setIsQuickActionsOpen(true)}
+        className="fixed bottom-5 left-1/2 z-[65] inline-flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
+        aria-label="Quick actions"
       >
-        <Users size={20} />
+        <Plus size={24} />
       </button>
+
+      {isQuickActionsOpen ? (
+        <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Κλείσιμο"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setIsQuickActionsOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-4 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
+            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Γρήγορες Ενέργειες</h3>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQuickActionsOpen(false);
+                  setIsSidebarOpen(true);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
+              >
+                Νέος Υπάλληλος
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsQuickActionsOpen(false);
+                  setIsManualSheetOpen(true);
+                }}
+                className="w-full rounded-xl border border-brand-300/70 bg-brand-500/90 px-4 py-3 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600"
+              >
+                Νέα Custom Βάρδια
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isManualSheetOpen ? (
+        <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Κλείσιμο"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setIsManualSheetOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
+            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
+            <div className="max-h-[78vh] overflow-y-auto pb-4">
+              <ManualShiftForm
+                employees={employees}
+                weekDays={weekDays}
+                onCreateShift={async (payload) => {
+                  await addShift(payload);
+                  setIsManualSheetOpen(false);
+                }}
+                canManage={isAdmin}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isSidebarOpen ? (
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
@@ -368,7 +434,7 @@ export default function MainDashboard() {
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsSidebarOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
+          <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
             <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
             <div className="max-h-[78vh] overflow-y-auto pb-4">
               <EmployeeSidebar

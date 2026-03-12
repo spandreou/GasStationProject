@@ -39,9 +39,9 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
   }
 
   return (
-    <section className="glass-panel rounded-2xl p-4">
-      <h2 className="text-lg font-bold text-slate-900 dark:text-white">Χειροκίνητη Βάρδια</h2>
-      <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">Ορισμός ενδιάμεσης βάρδιας (π.χ. 10:00 - 18:00).</p>
+    <section className="glass-panel rounded-2xl p-3 sm:p-4">
+      <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Χειροκίνητη Βάρδια</h2>
+      <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">Ορισμός ενδιάμεσης βάρδιας (π.χ. 10:00 - 18:00).</p>
 
       <div className="mb-3 flex flex-wrap gap-2">
         {SHIFT_PRESETS.map((preset) => (
@@ -49,7 +49,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             key={preset.id}
             type="button"
             onClick={() => applyPreset(preset)}
-            className="rounded-lg border border-brand-200/70 bg-brand-50/85 px-2 py-1 text-xs font-semibold text-brand-800 backdrop-blur-sm hover:bg-brand-100 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100 dark:hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-brand-200/70 bg-brand-50/85 px-2 py-1 text-[11px] font-semibold text-brand-800 sm:text-xs backdrop-blur-sm hover:bg-brand-100 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100 dark:hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!canManage}
           >
             Preset: {preset.startTime}-{preset.endTime}
@@ -61,7 +61,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Υπάλληλος
           <select
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.employeeId}
             onChange={(event) => setForm((prev) => ({ ...prev, employeeId: event.target.value }))}
             required
@@ -78,7 +78,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Ημερομηνία
           <select
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.date}
             onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
             required
@@ -96,7 +96,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           Ώρα Έναρξης
           <input
             type="time"
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.startTime}
             onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
             required
@@ -108,7 +108,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           Ώρα Λήξης
           <input
             type="time"
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.endTime}
             onChange={(event) => setForm((prev) => ({ ...prev, endTime: event.target.value }))}
             required
@@ -119,7 +119,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
         <label className="text-sm font-medium text-slate-900 md:col-span-2 dark:text-slate-100">
           Σημειώσεις
           <input
-            className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             placeholder="Προαιρετικό"
             value={form.notes}
             onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
@@ -129,7 +129,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
 
         <button
           type="submit"
-          className="md:col-span-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="md:col-span-2 rounded-lg bg-slate-900 px-3 py-2 min-h-12 text-sm font-semibold text-white hover:bg-slate-700 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!hasEmployees || !canManage}
         >
           Αποθήκευση Βάρδιας

@@ -46,7 +46,7 @@ export default function DropShiftSlot({
 
         {!shifts.length ? (
           <p className="text-[10px] text-slate-500 sm:text-[11px] dark:text-slate-400">
-            {canManage ? 'Ξ£ΟΟΞµ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏ ΞµΞ΄Ο' : 'Read-only Ο€ΟΞΏΞ²ΞΏΞ»Ξ®'}
+            {canManage ? 'Σύρε υπάλληλο εδώ' : 'Read-only προβολή'}
           </p>
         ) : null}
       </div>

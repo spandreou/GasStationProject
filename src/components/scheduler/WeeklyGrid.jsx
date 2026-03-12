@@ -22,7 +22,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
 
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
-      <h2 className="mb-3 text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ξ•Ξ²Ξ΄ΞΏΞΌΞ±Ξ΄ΞΉΞ±Ξ―ΞΏ Ξ Ξ»Ξ¬Ξ½ΞΏ</h2>
+      <h2 className="mb-3 text-base font-bold text-slate-900 sm:text-lg dark:text-white">Εβδομαδιαίο Πλάνο</h2>
 
       <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory md:grid md:min-w-[980px] md:grid-cols-7 md:snap-none">
         {weekDays.map((day, index) => {
@@ -62,7 +62,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
               })}
 
               <div className="glass-soft rounded-xl p-2">
-                <p className="mb-2 text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">Ξ•Ξ½Ξ΄ΞΉΞ¬ΞΌΞµΟƒΞµΟ‚ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚</p>
+                <p className="mb-2 text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">Ενδιάμεσες βάρδιες</p>
                 <div className="space-y-2">
                   {customShifts.map((shift) => (
                     <AssignedShiftItem
@@ -75,7 +75,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
                     />
                   ))}
                   {!customShifts.length ? (
-                    <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Ξ§Ο‰ΟΞ―Ο‚ ΞµΞ½Ξ΄ΞΉΞ¬ΞΌΞµΟƒΞµΟ‚ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚</p>
+                    <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Χωρίς ενδιάμεσες βάρδιες</p>
                   ) : null}
                 </div>
               </div>

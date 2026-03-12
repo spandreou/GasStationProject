@@ -1,5 +1,5 @@
-import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
-import { AlertTriangle, ShieldCheck, WifiOff } from 'lucide-react';
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { AlertTriangle, ShieldCheck, Users, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { isFirebaseConfigured } from '../../firebase/config';
@@ -27,9 +27,13 @@ export default function MainDashboard() {
   const [activeDragItem, setActiveDragItem] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
   const [templateAssignState, setTemplateAssignState] = useState({ open: false, template: null, date: '' });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { isDark, toggleTheme } = useThemeMode();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+  );
 
   const {
     employees,
@@ -287,18 +291,20 @@ export default function MainDashboard() {
         ) : null}
 
         <div className="grid gap-4 xl:grid-cols-[360px,1fr]">
-          <div className="space-y-4">
-            <EmployeeSidebar
-              employees={employees}
-              shiftTemplates={shiftTemplates}
-              isAdmin={isAdmin}
-              onAddEmployee={addEmployee}
-              onDeleteEmployee={deleteEmployee}
-              onOpenAdminLogin={openLoginModal}
-              onOpenProfile={setProfileEmployee}
-              onAddShiftTemplate={addShiftTemplate}
-              onDeleteShiftTemplate={deleteShiftTemplate}
-            />
+          <div className="order-2 space-y-4 md:order-1">
+            <div className="hidden md:block">
+              <EmployeeSidebar
+                employees={employees}
+                shiftTemplates={shiftTemplates}
+                isAdmin={isAdmin}
+                onAddEmployee={addEmployee}
+                onDeleteEmployee={deleteEmployee}
+                onOpenAdminLogin={openLoginModal}
+                onOpenProfile={setProfileEmployee}
+                onAddShiftTemplate={addShiftTemplate}
+                onDeleteShiftTemplate={deleteShiftTemplate}
+              />
+            </div>
 
             <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
 
@@ -309,15 +315,54 @@ export default function MainDashboard() {
             />
           </div>
 
-          <WeeklyGrid
-            weekDays={weekDays}
-            shifts={weekShifts}
-            employees={employees}
-            onDeleteShift={deleteShift}
-            canManage={isAdmin}
-          />
+          <div className="order-1 md:order-2">
+            <WeeklyGrid
+              weekDays={weekDays}
+              shifts={weekShifts}
+              employees={employees}
+              onDeleteShift={deleteShift}
+              canManage={isAdmin}
+            />
+          </div>
         </div>
       </main>
+
+      <button
+        type="button"
+        onClick={() => setIsSidebarOpen(true)}
+        className="fixed bottom-5 right-5 z-[65] inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
+        aria-label="Άνοιγμα λίστας υπαλλήλων"
+      >
+        <Users size={20} />
+      </button>
+
+      {isSidebarOpen ? (
+        <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Κλείσιμο"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
+            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
+            <div className="max-h-[78vh] overflow-y-auto pb-4">
+              <EmployeeSidebar
+                employees={employees}
+                shiftTemplates={shiftTemplates}
+                isAdmin={isAdmin}
+                onAddEmployee={addEmployee}
+                onDeleteEmployee={deleteEmployee}
+                onOpenAdminLogin={openLoginModal}
+                onOpenProfile={setProfileEmployee}
+                onAddShiftTemplate={addShiftTemplate}
+                onDeleteShiftTemplate={deleteShiftTemplate}
+                compact
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <DragOverlay>
         {activeDragItem ? (

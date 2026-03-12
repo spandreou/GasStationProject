@@ -1,4 +1,4 @@
-import { useDroppable } from '@dnd-kit/core';
+﻿import { useDroppable } from '@dnd-kit/core';
 import AssignedShiftItem from './AssignedShiftItem';
 
 export default function DropShiftSlot({
@@ -19,15 +19,15 @@ export default function DropShiftSlot({
   return (
     <section
       ref={setNodeRef}
-      className={`min-h-[110px] rounded-xl border-2 border-dashed p-2 transition ${
+      className={`min-h-[90px] rounded-xl border-2 border-dashed p-2 transition sm:min-h-[110px] ${
         isOver && canManage
           ? 'border-brand-400 bg-brand-50/80 backdrop-blur-sm dark:border-cyan-300 dark:bg-cyan-500/15'
           : 'border-white/35 bg-white/40 backdrop-blur-sm dark:border-cyan-300/30 dark:bg-slate-900/35'
       }`}
     >
       <header className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{slot.label}</p>
-        <p className="text-[11px] text-slate-600 dark:text-slate-300">
+        <p className="text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">{slot.label}</p>
+        <p className="text-[10px] text-slate-600 sm:text-[11px] dark:text-slate-300">
           {slot.startTime} - {slot.endTime}
         </p>
       </header>
@@ -45,11 +45,12 @@ export default function DropShiftSlot({
         ))}
 
         {!shifts.length ? (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {canManage ? 'Σύρε υπάλληλο εδώ' : 'Read-only προβολή'}
+          <p className="text-[10px] text-slate-500 sm:text-[11px] dark:text-slate-400">
+            {canManage ? 'Ξ£ΟΟΞµ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏ ΞµΞ΄Ο' : 'Read-only Ο€ΟΞΏΞ²ΞΏΞ»Ξ®'}
           </p>
         ) : null}
       </div>
     </section>
   );
 }
+

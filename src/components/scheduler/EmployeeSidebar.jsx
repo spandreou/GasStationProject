@@ -1,4 +1,4 @@
-import { Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+﻿import { Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import ShiftCard from './ShiftCard';
 import ShiftTemplateCard from './ShiftTemplateCard';
@@ -30,6 +30,8 @@ export default function EmployeeSidebar({
   onOpenProfile,
   onAddShiftTemplate,
   onDeleteShiftTemplate,
+  compact = false,
+  className = '',
 }) {
   const [employeeForm, setEmployeeForm] = useState(defaultEmployeeForm);
   const [templateForm, setTemplateForm] = useState(defaultTemplateForm);
@@ -61,26 +63,26 @@ export default function EmployeeSidebar({
 
   async function handleDeleteEmployee(employee) {
     const confirmed = window.confirm(
-      `Θέλεις να διαγράψεις τον/την ${employee.fullName}; Θα διαγραφούν και οι βάρδιές του/της.`,
+      `ΞΞ­Ξ»ΞµΞΉΟ‚ Ξ½Ξ± Ξ΄ΞΉΞ±Ξ³ΟΞ¬ΟΞµΞΉΟ‚ Ο„ΞΏΞ½/Ο„Ξ·Ξ½ ${employee.fullName}; ΞΞ± Ξ΄ΞΉΞ±Ξ³ΟΞ±Ο†ΞΏΟΞ½ ΞΊΞ±ΞΉ ΞΏΞΉ Ξ²Ξ¬ΟΞ΄ΞΉΞ­Ο‚ Ο„ΞΏΟ…/Ο„Ξ·Ο‚.`,
     );
     if (!confirmed) return;
     await onDeleteEmployee(employee.id);
   }
 
   async function handleDeleteTemplate(template) {
-    const confirmed = window.confirm(`Θέλεις να διαγράψεις το template "${template.label}";`);
+    const confirmed = window.confirm(`ΞΞ­Ξ»ΞµΞΉΟ‚ Ξ½Ξ± Ξ΄ΞΉΞ±Ξ³ΟΞ¬ΟΞµΞΉΟ‚ Ο„ΞΏ template "${template.label}";`);
     if (!confirmed) return;
     await onDeleteShiftTemplate(template.id);
   }
 
   return (
-    <aside className="glass-panel space-y-4 rounded-2xl p-4">
+    <aside className={`glass-panel space-y-4 rounded-2xl ${compact ? 'p-3' : 'p-4'} ${className}`}>
       <div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Υπάλληλοι</h2>
-        <p className="text-sm text-slate-700 dark:text-slate-300">Σύρε υπάλληλο πάνω σε preset βάρδια.</p>
+        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ξ¥Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΞΉ</h2>
+        <p className="text-xs text-slate-700 sm:text-sm dark:text-slate-300">Ξ£ΟΟΞµ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏ Ο€Ξ¬Ξ½Ο‰ ΟƒΞµ preset Ξ²Ξ¬ΟΞ΄ΞΉΞ±.</p>
       </div>
 
-      <div className="max-h-[260px] space-y-2 overflow-auto pr-1 scrollbar-thin">
+      <div className="max-h-[220px] space-y-2 overflow-auto pr-1 scrollbar-thin sm:max-h-[260px]">
         {sortedEmployees.map((employee) => (
           <div key={employee.id} className="flex items-center gap-2">
             <div className="flex-1">
@@ -92,7 +94,7 @@ export default function EmployeeSidebar({
               onClick={() => onOpenProfile(employee)}
               disabled={!isAdmin}
               className="rounded-lg border border-white/35 bg-white/55 p-2 text-slate-700 backdrop-blur-sm hover:bg-white/80 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Προφίλ / Επεξεργασία"
+              title="Ξ ΟΞΏΟ†Ξ―Ξ» / Ξ•Ο€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ±"
             >
               <Pencil size={15} />
             </button>
@@ -102,7 +104,7 @@ export default function EmployeeSidebar({
               onClick={() => handleDeleteEmployee(employee)}
               disabled={!isAdmin}
               className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Διαγραφή"
+              title="Ξ”ΞΉΞ±Ξ³ΟΞ±Ο†Ξ®"
             >
               <Trash2 size={15} />
             </button>
@@ -112,12 +114,12 @@ export default function EmployeeSidebar({
 
       <form onSubmit={handleEmployeeSubmit} className="glass-soft space-y-2 rounded-xl p-3">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Νέος υπάλληλος</p>
+          <p className="text-xs font-semibold text-slate-800 sm:text-sm dark:text-slate-100">ΞΞ­ΞΏΟ‚ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚</p>
           {!isAdmin ? (
             <button
               type="button"
               onClick={onOpenAdminLogin}
-              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 sm:text-xs dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
             >
               <Lock size={12} />
               Admin Login
@@ -128,8 +130,8 @@ export default function EmployeeSidebar({
         <input
           value={employeeForm.fullName}
           onChange={(event) => setEmployeeForm((prev) => ({ ...prev, fullName: event.target.value }))}
-          placeholder="Ονοματεπώνυμο"
-          className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
+          placeholder="ΞΞ½ΞΏΞΌΞ±Ο„ΞµΟ€ΟΞ½Ο…ΞΌΞΏ"
+          className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
           required
           disabled={!isAdmin}
         />
@@ -137,13 +139,13 @@ export default function EmployeeSidebar({
         <input
           value={employeeForm.role}
           onChange={(event) => setEmployeeForm((prev) => ({ ...prev, role: event.target.value }))}
-          placeholder="Ρόλος (π.χ. Ταμείο)"
-          className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
+          placeholder="Ξ΅ΟΞ»ΞΏΟ‚ (Ο€.Ο‡. Ξ¤Ξ±ΞΌΞµΞ―ΞΏ)"
+          className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
           disabled={!isAdmin}
         />
 
-        <label className="flex items-center justify-between text-xs font-medium text-slate-800 dark:text-slate-200">
-          Χρώμα κάρτας
+        <label className="flex items-center justify-between text-[11px] font-medium text-slate-800 sm:text-xs dark:text-slate-200">
+          Ξ§ΟΟΞΌΞ± ΞΊΞ¬ΟΟ„Ξ±Ο‚
           <input
             type="color"
             value={employeeForm.color}
@@ -155,21 +157,21 @@ export default function EmployeeSidebar({
 
         <button
           type="submit"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-3 py-2 text-[13px] font-semibold text-white hover:bg-brand-600 sm:text-sm dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!isAdmin}
         >
           <Plus size={16} />
-          Προσθήκη
+          Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ·
         </button>
       </form>
 
       <section className="glass-soft space-y-3 rounded-xl p-3">
         <div className="flex items-center gap-2">
           <Sparkles size={15} className="text-cyan-700 dark:text-pink-300" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Custom Βάρδιες (Draggable)</h3>
+          <h3 className="text-xs font-bold text-slate-900 sm:text-sm dark:text-white">Custom Ξ’Ξ¬ΟΞ΄ΞΉΞµΟ‚ (Draggable)</h3>
         </div>
 
-        <div className="max-h-[180px] space-y-2 overflow-auto pr-1 scrollbar-thin">
+        <div className="max-h-[160px] space-y-2 overflow-auto pr-1 scrollbar-thin sm:max-h-[180px]">
           {sortedTemplates.map((template) => (
             <div key={template.id} className="flex items-center gap-2">
               <div className="flex-1">
@@ -181,7 +183,7 @@ export default function EmployeeSidebar({
                 onClick={() => handleDeleteTemplate(template)}
                 disabled={!isAdmin}
                 className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                title="Διαγραφή template"
+                title="Ξ”ΞΉΞ±Ξ³ΟΞ±Ο†Ξ® template"
               >
                 <Trash2 size={15} />
               </button>
@@ -189,18 +191,18 @@ export default function EmployeeSidebar({
           ))}
 
           {!sortedTemplates.length ? (
-            <p className="text-xs text-slate-600 dark:text-slate-300">Δεν υπάρχουν custom templates ακόμα.</p>
+            <p className="text-[11px] text-slate-600 sm:text-xs dark:text-slate-300">Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ custom templates Ξ±ΞΊΟΞΌΞ±.</p>
           ) : null}
         </div>
 
         <form onSubmit={handleTemplateSubmit} className="space-y-2 rounded-lg border border-cyan-300/45 bg-cyan-50/55 p-2.5 dark:border-pink-300/35 dark:bg-slate-900/45">
-          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Νέο custom template</p>
+          <p className="text-[11px] font-semibold text-slate-800 sm:text-xs dark:text-slate-100">ΞΞ­ΞΏ custom template</p>
 
           <input
             value={templateForm.label}
             onChange={(event) => setTemplateForm((prev) => ({ ...prev, label: event.target.value }))}
-            placeholder="Όνομα βάρδιας (π.χ. Πλύσιμο)"
-            className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
+            placeholder="ΞΞ½ΞΏΞΌΞ± Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚ (Ο€.Ο‡. Ξ Ξ»ΟΟƒΞΉΞΌΞΏ)"
+            className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
             disabled={!isAdmin}
             required
           />
@@ -210,7 +212,7 @@ export default function EmployeeSidebar({
               type="time"
               value={templateForm.startTime}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, startTime: event.target.value }))}
-              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
               disabled={!isAdmin}
               required
             />
@@ -218,21 +220,21 @@ export default function EmployeeSidebar({
               type="time"
               value={templateForm.endTime}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, endTime: event.target.value }))}
-              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
               disabled={!isAdmin}
               required
             />
           </div>
 
-          <label className="block text-xs font-medium text-slate-800 dark:text-slate-100">
-            Προεπιλεγμένος υπάλληλος (προαιρετικό)
+          <label className="block text-[11px] font-medium text-slate-800 sm:text-xs dark:text-slate-100">
+            Ξ ΟΞΏΞµΟ€ΞΉΞ»ΞµΞ³ΞΌΞ­Ξ½ΞΏΟ‚ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚ (Ο€ΟΞΏΞ±ΞΉΟΞµΟ„ΞΉΞΊΟ)
             <select
               value={templateForm.employeeId}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, employeeId: event.target.value }))}
-              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+              className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white"
               disabled={!isAdmin}
             >
-              <option value="">Χωρίς προεπιλογή</option>
+              <option value="">Ξ§Ο‰ΟΞ―Ο‚ Ο€ΟΞΏΞµΟ€ΞΉΞ»ΞΏΞ³Ξ®</option>
               {sortedEmployees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.fullName}
@@ -243,14 +245,15 @@ export default function EmployeeSidebar({
 
           <button
             type="submit"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-700 dark:border dark:border-pink-300/45 dark:bg-pink-500/85 dark:hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-[13px] font-semibold text-white hover:bg-cyan-700 sm:text-sm dark:border dark:border-pink-300/45 dark:bg-pink-500/85 dark:hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!isAdmin}
           >
             <Plus size={16} />
-            Προσθήκη Template
+            Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ· Template
           </button>
         </form>
       </section>
     </aside>
   );
 }
+

@@ -1,4 +1,4 @@
-import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
+﻿import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
 import { findOverlapConflicts } from '../../utils/overlap';
 import { formatDateGreek } from '../../utils/time';
 import AssignedShiftItem from './AssignedShiftItem';
@@ -21,10 +21,10 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
   }
 
   return (
-    <section className="glass-panel rounded-2xl p-4">
-      <h2 className="mb-3 text-lg font-bold text-slate-900 dark:text-white">Εβδομαδιαίο Πλάνο</h2>
+    <section className="glass-panel rounded-2xl p-3 sm:p-4">
+      <h2 className="mb-3 text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ξ•Ξ²Ξ΄ΞΏΞΌΞ±Ξ΄ΞΉΞ±Ξ―ΞΏ Ξ Ξ»Ξ¬Ξ½ΞΏ</h2>
 
-      <div className="grid min-w-[980px] grid-cols-7 gap-3 overflow-x-auto pb-2">
+      <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory md:grid md:min-w-[980px] md:grid-cols-7 md:snap-none">
         {weekDays.map((day, index) => {
           const dayShifts = shifts.filter((shift) => shift.date === day);
           const customShifts = dayShifts.filter(
@@ -35,8 +35,8 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
           );
 
           return (
-            <div key={day} className="glass-soft space-y-3 rounded-xl p-2">
-              <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-xs font-semibold text-white backdrop-blur-sm dark:bg-slate-950/85 dark:text-cyan-100">
+            <div key={day} className="glass-soft w-full shrink-0 space-y-3 rounded-xl p-2 snap-start md:w-auto md:snap-none">
+              <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-sm sm:text-xs dark:bg-slate-950/85 dark:text-cyan-100">
                 {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
               </header>
 
@@ -62,7 +62,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
               })}
 
               <div className="glass-soft rounded-xl p-2">
-                <p className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-200">Ενδιάμεσες βάρδιες</p>
+                <p className="mb-2 text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">Ξ•Ξ½Ξ΄ΞΉΞ¬ΞΌΞµΟƒΞµΟ‚ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚</p>
                 <div className="space-y-2">
                   {customShifts.map((shift) => (
                     <AssignedShiftItem
@@ -75,7 +75,7 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
                     />
                   ))}
                   {!customShifts.length ? (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Χωρίς ενδιάμεσες βάρδιες</p>
+                    <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Ξ§Ο‰ΟΞ―Ο‚ ΞµΞ½Ξ΄ΞΉΞ¬ΞΌΞµΟƒΞµΟ‚ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚</p>
                   ) : null}
                 </div>
               </div>
@@ -86,3 +86,4 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
     </section>
   );
 }
+

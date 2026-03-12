@@ -31,6 +31,12 @@ body {
   box-sizing: border-box;
 }
 
+button,
+[role='button'] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .scrollbar-thin {
   scrollbar-width: thin;
 }

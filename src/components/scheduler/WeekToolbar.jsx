@@ -1,4 +1,4 @@
-import {
+﻿import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -9,6 +9,7 @@ import {
   Info,
   LockKeyhole,
   LogOut,
+  Menu,
   MoonStar,
   RefreshCw,
   SunMedium,
@@ -33,7 +34,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
         className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/35 px-3 py-2 text-sm font-semibold text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
       >
         <FileDown size={16} />
-        Εξαγωγή
+        Ξ•ΞΎΞ±Ξ³Ο‰Ξ³Ξ®
         <ChevronDown size={14} />
       </button>
 
@@ -45,7 +46,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileText size={15} />
-            Εξαγωγή PDF
+            Ξ•ΞΎΞ±Ξ³Ο‰Ξ³Ξ® PDF
           </button>
           <button
             type="button"
@@ -53,7 +54,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileSpreadsheet size={15} />
-            Εξαγωγή Excel
+            Ξ•ΞΎΞ±Ξ³Ο‰Ξ³Ξ® Excel
           </button>
           <button
             type="button"
@@ -61,7 +62,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileText size={15} />
-            Εξαγωγή Word
+            Ξ•ΞΎΞ±Ξ³Ο‰Ξ³Ξ® Word
           </button>
         </div>
       ) : null}
@@ -85,30 +86,159 @@ export default function WeekToolbar({
   onExportExcel,
   onExportWord,
 }) {
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
   async function handleClearWeek() {
     const confirmed = window.confirm(
-      `Να διαγραφούν όλες οι βάρδιες από ${formatDateGreek(weekDays[0])} έως ${formatDateGreek(weekDays[6])};`,
+      `ΞΞ± Ξ΄ΞΉΞ±Ξ³ΟΞ±Ο†ΞΏΟΞ½ ΟΞ»ΞµΟ‚ ΞΏΞΉ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚ Ξ±Ο€Ο ${formatDateGreek(weekDays[0])} Ξ­Ο‰Ο‚ ${formatDateGreek(weekDays[6])};`,
     );
     if (!confirmed) return;
     await onClearWeek();
   }
 
+  function handleMoreAction(action) {
+    setIsMoreOpen(false);
+    action();
+  }
+
   return (
-    <header className="glass-panel relative z-[60] overflow-visible rounded-2xl p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <header className="glass-panel relative z-[60] overflow-visible rounded-2xl p-3 sm:p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Πίνακας Βαρδιών Πρατηρίου</h1>
-          <p className="text-sm text-slate-700 dark:text-slate-300">
-            Εβδομάδα {formatDateGreek(weekDays[0])} - {formatDateGreek(weekDays[6])}
+          <h1 className="text-lg font-bold text-slate-900 sm:text-xl dark:text-white">Ξ Ξ―Ξ½Ξ±ΞΊΞ±Ο‚ Ξ’Ξ±ΟΞ΄ΞΉΟΞ½ Ξ ΟΞ±Ο„Ξ·ΟΞ―ΞΏΟ…</h1>
+          <p className="text-xs text-slate-700 sm:text-sm dark:text-slate-300">
+            Ξ•Ξ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± {formatDateGreek(weekDays[0])} - {formatDateGreek(weekDays[6])}
           </p>
         </div>
 
-        <div className="relative z-[70] flex flex-wrap gap-2 overflow-visible">
+        <div className="relative z-[70] flex items-center gap-2 overflow-visible md:hidden">
+          <button
+            type="button"
+            onClick={onPrevWeek}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/35 bg-white/40 text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+            aria-label="Προηγούμενη εβδομάδα"
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onCurrentWeek}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/35 bg-white/40 text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+            aria-label="Τρέχουσα εβδομάδα"
+          >
+            <RefreshCw size={16} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onNextWeek}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/35 bg-white/40 text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+            aria-label="Επόμενη εβδομάδα"
+          >
+            <ChevronRight size={16} />
+          </button>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen((prev) => !prev)}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm font-semibold text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+              aria-expanded={isMoreOpen}
+            >
+              <Menu size={16} />
+              Περισσότερα
+            </button>
+
+            {isMoreOpen ? (
+              <div className="absolute right-0 z-[100] mt-2 min-w-[210px] rounded-lg border border-white/45 bg-white/90 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/95">
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(onToggleTheme)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                >
+                  {isDark ? <SunMedium size={15} /> : <MoonStar size={15} />}
+                  {isDark ? 'Light mode' : 'Dark mode'}
+                </button>
+
+                {!isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => handleMoreAction(onOpenAdminLogin)}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-amber-900 hover:bg-amber-50 dark:text-amber-100 dark:hover:bg-amber-500/20"
+                  >
+                    <LockKeyhole size={15} />
+                    Admin Login
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleMoreAction(onLogoutAdmin)}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                  >
+                    <LogOut size={15} />
+                    Αποσύνδεση
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(onCopyWhatsapp)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-emerald-800 hover:bg-emerald-50 dark:text-emerald-100 dark:hover:bg-emerald-500/20"
+                >
+                  <Copy size={15} />
+                  Copy WhatsApp
+                </button>
+
+                <div className="my-1 h-px bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(onExportPdf)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                >
+                  <FileText size={15} />
+                  Εξαγωγή PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(onExportExcel)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                >
+                  <FileSpreadsheet size={15} />
+                  Εξαγωγή Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(onExportWord)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+                >
+                  <FileText size={15} />
+                  Εξαγωγή Word
+                </button>
+
+                <div className="my-1 h-px bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <button
+                  type="button"
+                  onClick={() => handleMoreAction(handleClearWeek)}
+                  disabled={!isAdmin}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-200 dark:hover:bg-red-500/25"
+                >
+                  <Trash2 size={15} />
+                  Καθαρισμός Εβδομάδας
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="relative z-[70] hidden flex-wrap gap-2 overflow-visible md:flex">
           <button
             type="button"
             onClick={onToggleTheme}
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm font-semibold text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/45 dark:bg-slate-900/55 dark:text-cyan-100 dark:hover:border-pink-300/45 dark:hover:bg-slate-900/75"
-            title={isDark ? 'Εναλλαγή σε Light mode' : 'Εναλλαγή σε Dark mode'}
+            title={isDark ? 'Ξ•Ξ½Ξ±Ξ»Ξ»Ξ±Ξ³Ξ® ΟƒΞµ Light mode' : 'Ξ•Ξ½Ξ±Ξ»Ξ»Ξ±Ξ³Ξ® ΟƒΞµ Dark mode'}
           >
             {isDark ? <SunMedium size={16} /> : <MoonStar size={16} />}
             {isDark ? 'Light' : 'Dark'}
@@ -130,7 +260,7 @@ export default function WeekToolbar({
               className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
             >
               <LogOut size={16} />
-              Αποσύνδεση
+              Ξ‘Ο€ΞΏΟƒΟΞ½Ξ΄ΞµΟƒΞ·
             </button>
           )}
 
@@ -140,7 +270,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
           >
             <ChevronLeft size={16} />
-            Προηγούμενη
+            Ξ ΟΞΏΞ·Ξ³ΞΏΟΞΌΞµΞ½Ξ·
           </button>
 
           <button
@@ -149,7 +279,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
           >
             <RefreshCw size={16} />
-            Τρέχουσα
+            Ξ¤ΟΞ­Ο‡ΞΏΟ…ΟƒΞ±
           </button>
 
           <button
@@ -157,7 +287,7 @@ export default function WeekToolbar({
             onClick={onNextWeek}
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
           >
-            Επόμενη
+            Ξ•Ο€ΟΞΌΞµΞ½Ξ·
             <ChevronRight size={16} />
           </button>
 
@@ -168,7 +298,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg bg-red-600/90 px-3 py-2 text-sm font-semibold text-white backdrop-blur-md hover:bg-red-700 dark:bg-red-500/80 dark:hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 size={16} />
-            Καθαρισμός Εβδομάδας
+            ΞΞ±ΞΈΞ±ΟΞΉΟƒΞΌΟΟ‚ Ξ•Ξ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±Ο‚
           </button>
 
           <button
@@ -187,9 +317,11 @@ export default function WeekToolbar({
       <div className="mt-3 rounded-xl border border-white/40 bg-white/30 px-3 py-2 text-xs text-slate-700 backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-cyan-100">
         <p className="inline-flex items-center gap-1.5">
           <Info size={14} />
-          Επόμενη αναβάθμιση: πλήρως βελτιστοποιημένο Responsive Mobile UI.
+          Ξ•Ο€ΟΞΌΞµΞ½Ξ· Ξ±Ξ½Ξ±Ξ²Ξ¬ΞΈΞΌΞΉΟƒΞ·: Ο€Ξ»Ξ®ΟΟ‰Ο‚ Ξ²ΞµΞ»Ο„ΞΉΟƒΟ„ΞΏΟ€ΞΏΞΉΞ·ΞΌΞ­Ξ½ΞΏ Responsive Mobile UI.
         </p>
       </div>
     </header>
   );
 }
+
+

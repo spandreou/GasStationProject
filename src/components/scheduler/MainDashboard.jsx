@@ -26,7 +26,12 @@ import WeeklyGrid from './WeeklyGrid';
 export default function MainDashboard() {
   const [activeDragItem, setActiveDragItem] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
-  const [templateAssignState, setTemplateAssignState] = useState({ open: false, template: null, date: '' });
+  const [templateAssignState, setTemplateAssignState] = useState({
+    open: false,
+    template: null,
+    date: '',
+    allowDateSelection: false,
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { isDark, toggleTheme } = useThemeMode();
@@ -118,6 +123,24 @@ export default function MainDashboard() {
       return;
     }
 
+    if (activeData?.type === 'shift-template' && overData?.type === 'custom-column') {
+      const template = activeData.template;
+      if (!template) return;
+
+      if (!employees.length) {
+        setWarningMessage('Δεν υπάρχουν υπάλληλοι για ανάθεση της custom βάρδιας.');
+        return;
+      }
+
+      setTemplateAssignState({
+        open: true,
+        template,
+        date: weekDays[0] || '',
+        allowDateSelection: true,
+      });
+      return;
+    }
+
     if (activeData?.type === 'shift-template' && overData?.type === 'day') {
       const template = activeData.template;
       const date = overData.day?.date;
@@ -143,7 +166,7 @@ export default function MainDashboard() {
         return;
       }
 
-      setTemplateAssignState({ open: true, template, date });
+      setTemplateAssignState({ open: true, template, date, allowDateSelection: false });
     }
   }
 
@@ -165,24 +188,25 @@ export default function MainDashboard() {
     }
   }
 
-  async function handleAssignTemplate(employeeId) {
+  async function handleAssignTemplate(employeeId, selectedDate) {
     const { template, date } = templateAssignState;
-    if (!template || !date || !employeeId) return;
+    const finalDate = selectedDate || date;
+    if (!template || !finalDate || !employeeId) return;
 
     await addShift({
       employeeId,
-      date,
+      date: finalDate,
       startTime: template.startTime,
       endTime: template.endTime,
       label: template.label,
       trackUndo: true,
     });
 
-    setTemplateAssignState({ open: false, template: null, date: '' });
+    setTemplateAssignState({ open: false, template: null, date: '', allowDateSelection: false });
   }
 
   function closeTemplateAssign() {
-    setTemplateAssignState({ open: false, template: null, date: '' });
+    setTemplateAssignState({ open: false, template: null, date: '', allowDateSelection: false });
   }
 
   async function handleCopyWhatsapp() {
@@ -392,6 +416,8 @@ export default function MainDashboard() {
         open={templateAssignState.open}
         template={templateAssignState.template}
         date={templateAssignState.date}
+        weekDays={weekDays}
+        allowDateSelection={templateAssignState.allowDateSelection}
         employees={employees}
         onClose={closeTemplateAssign}
         onConfirm={handleAssignTemplate}

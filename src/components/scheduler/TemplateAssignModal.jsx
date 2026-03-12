@@ -2,13 +2,24 @@ import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDateGreek } from '../../utils/time';
 
-export default function TemplateAssignModal({ open, template, date, employees, onClose, onConfirm }) {
+export default function TemplateAssignModal({
+  open,
+  template,
+  date,
+  weekDays,
+  allowDateSelection = false,
+  employees,
+  onClose,
+  onConfirm,
+}) {
   const [employeeId, setEmployeeId] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setEmployeeId(employees[0]?.id || '');
-  }, [open, employees]);
+    setSelectedDate(date || weekDays?.[0] || '');
+  }, [open, employees, date, weekDays]);
 
   if (!open || !template) return null;
 
@@ -17,7 +28,7 @@ export default function TemplateAssignModal({ open, template, date, employees, o
   async function handleSubmit(event) {
     event.preventDefault();
     if (!employeeId) return;
-    await onConfirm(employeeId);
+    await onConfirm(employeeId, selectedDate || date);
   }
 
   return (
@@ -39,7 +50,9 @@ export default function TemplateAssignModal({ open, template, date, employees, o
           <p>
             {template.startTime} - {template.endTime}
           </p>
-          <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">Ημέρα: {formatDateGreek(date)}</p>
+          {!allowDateSelection ? (
+            <p className="mt-1 text-xs text-slate-700 dark:text-slate-300">Ημέρα: {formatDateGreek(date)}</p>
+          ) : null}
         </div>
 
         {!hasEmployees ? (
@@ -47,6 +60,23 @@ export default function TemplateAssignModal({ open, template, date, employees, o
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-3">
+          {allowDateSelection ? (
+            <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+              Επιλογή ημέρας
+              <select
+                className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none ring-brand-300/50 transition focus:ring-2 dark:border-cyan-300/45 dark:text-white"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                required
+              >
+                {(weekDays || []).map((day) => (
+                  <option key={day} value={day}>
+                    {formatDateGreek(day)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
             Επιλογή υπαλλήλου
             <select

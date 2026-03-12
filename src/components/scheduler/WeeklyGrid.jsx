@@ -1,9 +1,31 @@
-﻿import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
+﻿import { useDroppable } from '@dnd-kit/core';
+import { Trash2 } from 'lucide-react';
+import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
+import { getShiftDurationHours } from '../../utils/analytics';
 import { findOverlapConflicts } from '../../utils/overlap';
 import { formatDateGreek } from '../../utils/time';
-import AssignedShiftItem from './AssignedShiftItem';
-import DayDropZone from './DayDropZone';
 import DropShiftSlot from './DropShiftSlot';
+
+function CustomShiftSlot({ date, canManage, children }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-drop-${date}`,
+    data: { type: 'day', day: { date } },
+    disabled: !canManage,
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      className={`rounded-xl border p-2 backdrop-blur-sm transition ${
+        isOver && canManage
+          ? 'border-cyan-400/80 bg-cyan-50/70 dark:border-pink-300/70 dark:bg-pink-500/15'
+          : 'border-white/40 bg-white/30 dark:border-cyan-300/30 dark:bg-slate-900/35'
+      }`}
+    >
+      {children}
+    </section>
+  );
+}
 
 function getSlotId(day, preset) {
   return `slot-${day}-${preset.startTime}-${preset.endTime}`;
@@ -40,8 +62,6 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
                 {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
               </header>
 
-              <DayDropZone date={day} canManage={canManage} />
-
               {SHIFT_PRESETS.map((preset) => {
                 const slotShifts = dayShifts.filter(
                   (shift) => shift.startTime === preset.startTime && shift.endTime === preset.endTime,
@@ -61,24 +81,53 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
                 );
               })}
 
-              <div className="glass-soft rounded-xl p-2">
-                <p className="mb-2 text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">Ενδιάμεσες βάρδιες</p>
-                <div className="space-y-2">
-                  {customShifts.map((shift) => (
-                    <AssignedShiftItem
-                      key={shift.id}
-                      shift={shift}
-                      employee={getEmployeeById(shift.employeeId)}
-                      hasConflict={hasConflict(shift)}
-                      onDelete={onDeleteShift}
-                      canManage={canManage}
-                    />
-                  ))}
-                  {!customShifts.length ? (
-                    <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Χωρίς ενδιάμεσες βάρδιες</p>
+              <CustomShiftSlot date={day} canManage={canManage}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">Custom Βάρδιες</p>
+                  {canManage ? (
+                    <span className="text-[10px] text-slate-500 sm:text-[11px] dark:text-slate-400">Drag & drop</span>
                   ) : null}
                 </div>
-              </div>
+                <div className="space-y-2">
+                  {customShifts.map((shift) => {
+                    const employee = getEmployeeById(shift.employeeId);
+                    const hasShiftConflict = hasConflict(shift);
+
+                    return (
+                      <article
+                        key={shift.id}
+                        className={`rounded-lg border p-2 text-[11px] sm:text-xs shadow-sm backdrop-blur-sm ${
+                          hasShiftConflict
+                            ? 'border-red-400 bg-red-100/80 dark:border-red-300/60 dark:bg-red-500/20'
+                            : 'border-white/35 bg-white/55 dark:border-cyan-300/30 dark:bg-slate-900/45'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {employee?.fullName || 'Άγνωστος'}
+                          </p>
+                          {canManage ? (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteShift(shift.id)}
+                              className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
+                              title="Διαγραφή βάρδιας"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="text-slate-700 dark:text-slate-200">
+                          {shift.startTime} - {shift.endTime} ({getShiftDurationHours(shift)} ώρες)
+                        </p>
+                      </article>
+                    );
+                  })}
+                  {!customShifts.length ? (
+                    <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Σύρε custom βάρδια εδώ</p>
+                  ) : null}
+                </div>
+              </CustomShiftSlot>
             </div>
           );
         })}

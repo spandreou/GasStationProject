@@ -94,13 +94,13 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
           <ChevronLeft size={18} />
         </button>
 
-        <div className="flex flex-1 gap-2 overflow-x-auto scrollbar-thin">
+        <div className="flex flex-1 gap-2 overflow-x-auto scrollbar-thin snap-x snap-mandatory scroll-smooth">
           {navItems.map((item, index) => (
             <button
               key={item.key}
               type="button"
               onClick={() => scrollToIndex(index)}
-              className={`flex min-w-[96px] flex-col items-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+              className={`flex w-[110px] shrink-0 snap-center flex-col items-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                 activeIndex === index
                   ? 'border-brand-400 bg-brand-500 text-white shadow-sm'
                   : 'border-slate-200 bg-white/70 text-slate-700'

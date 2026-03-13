@@ -1,4 +1,4 @@
-import {
+﻿import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,7 +27,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
   }
 
   return (
-    <div className="relative z-[100] overflow-visible">
+    <div className="relative z-[9999] overflow-visible">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -39,7 +39,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-[100] mt-2 min-w-[180px] rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/90">
+        <div className="absolute right-0 z-[9999] mt-2 min-w-[180px] rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/90">
           <button
             type="button"
             onClick={() => handleAction(onExportPdf)}
@@ -244,13 +244,13 @@ export default function WeekToolbar({
         <div className="fixed inset-0 z-[80] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="????????"
+            aria-label="Κλείσιμο"
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsMoreOpen(false)}
           />
           <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-slate-100/90 p-4 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
-            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">?????</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Περισσότερες επιλογές</h3>
             <div className="space-y-2">
               <button
                 type="button"
@@ -277,7 +277,7 @@ export default function WeekToolbar({
                   className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
                 >
                   <LogOut size={15} />
-                  ??????????
+                  Αποσύνδεση
                 </button>
               )}
 
@@ -298,7 +298,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileText size={15} />
-                ??????? PDF
+                Εξαγωγή PDF
               </button>
               <button
                 type="button"
@@ -306,7 +306,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileSpreadsheet size={15} />
-                ??????? Excel
+                Εξαγωγή Excel
               </button>
               <button
                 type="button"
@@ -314,7 +314,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileText size={15} />
-                ??????? Word
+                Εξαγωγή Word
               </button>
 
               <div className="my-1 h-px bg-slate-200/70 dark:bg-slate-700/70" />
@@ -326,7 +326,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-red-200 bg-red-50/90 px-4 py-3 text-left text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
               >
                 <Trash2 size={15} />
-                ?????????? ?????????
+                Καθαρισμός Εβδομάδας
               </button>
             </div>
           </div>

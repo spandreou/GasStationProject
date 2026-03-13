@@ -297,9 +297,9 @@ export default function MainDashboard() {
         ) : null}
 
         {!isAdmin ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-xs text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
+          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-[10px] text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-            Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
+            <p className="line-clamp-2 sm:line-clamp-none">Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.</p>
           </div>
         ) : null}
 
@@ -358,7 +358,7 @@ export default function MainDashboard() {
       <button
         type="button"
         onClick={() => setIsQuickActionsOpen(true)}
-        className="fixed bottom-5 left-1/2 z-[65] inline-flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
+        className="fixed bottom-6 right-6 z-[65] inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
         aria-label="Quick actions"
       >
         <Plus size={24} />

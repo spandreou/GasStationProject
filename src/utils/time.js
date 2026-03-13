@@ -3,9 +3,9 @@ const TIME_12H_PATTERN = /^(\d{1,2}):([0-5]\d)\s*([AP]M)$/i;
 
 export function normalizeTimeLabel(value) {
   if (!value) return '';
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/[\u200e\u200f]/g, '');
 
-  const match24 = trimmed.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  const match24 = trimmed.match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
   if (match24) {
     const hours = match24[1].padStart(2, '0');
     return `${hours}:${match24[2]}`;

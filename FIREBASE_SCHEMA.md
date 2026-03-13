@@ -10,7 +10,7 @@
 - `afm` (string): ΑΦΜ υπαλλήλου (ευαίσθητο πεδίο).
 - `phone` (string): Τηλέφωνο επικοινωνίας.
 - `email` (string): Email επικοινωνίας.
-- `hireDate` (string): Ημερομηνία πρόσληψης (`YYYY-MM-DD`).
+- `hireDate` (string): Ημερομηνία πρόσληψης (`DD-MM-YYYY`).
 - `isActive` (boolean): Αν είναι ενεργός στο πρόγραμμα.
 - `createdAt` (timestamp): Χρόνος δημιουργίας.
 - `updatedAt` (timestamp): Χρόνος τελευταίας αλλαγής.

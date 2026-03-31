@@ -1,6 +1,4 @@
-import { getIsoDate, getMonday } from '../utils/time';
-
-export const sampleEmployees = [
+﻿export const sampleEmployees = [
   {
     id: 'emp-1',
     fullName: 'Γιάννης Παπαδόπουλος',
@@ -48,39 +46,5 @@ export const sampleEmployees = [
 ];
 
 export function buildSampleShifts() {
-  const monday = getMonday();
-  const mondayIso = getIsoDate(monday);
-  const tuesday = new Date(monday);
-  tuesday.setDate(tuesday.getDate() + 1);
-  const tuesdayIso = getIsoDate(tuesday);
-
-  return [
-    {
-      id: 'shift-1',
-      employeeId: 'emp-1',
-      date: mondayIso,
-      startTime: '06:00',
-      endTime: '14:00',
-      label: 'Πρωινή',
-      notes: '',
-    },
-    {
-      id: 'shift-2',
-      employeeId: 'emp-2',
-      date: mondayIso,
-      startTime: '14:00',
-      endTime: '22:00',
-      label: 'Απογευματινή',
-      notes: '',
-    },
-    {
-      id: 'shift-3',
-      employeeId: 'emp-3',
-      date: tuesdayIso,
-      startTime: '06:00',
-      endTime: '14:00',
-      label: 'Πρωινή',
-      notes: '',
-    },
-  ];
+  return [];
 }

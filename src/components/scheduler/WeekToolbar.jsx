@@ -6,6 +6,7 @@
   FileDown,
   FileSpreadsheet,
   FileText,
+  FolderCheck,
   Info,
   LockKeyhole,
   LogOut,
@@ -46,7 +47,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileText size={15} />
-            Εξαγωγή PDF
+            Εξαγωγή σε PDF
           </button>
           <button
             type="button"
@@ -54,7 +55,7 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileSpreadsheet size={15} />
-            Εξαγωγή Excel
+            Εξαγωγή σε Excel
           </button>
           <button
             type="button"
@@ -82,9 +83,11 @@ export default function WeekToolbar({
   onCurrentWeek,
   onCopyWhatsapp,
   onClearWeek,
+  onFinalizeWeek,
   onExportPdf,
   onExportExcel,
   onExportWord,
+  isWeekLocked = false,
 }) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
 
@@ -94,6 +97,14 @@ export default function WeekToolbar({
     );
     if (!confirmed) return;
     await onClearWeek();
+  }
+
+  async function handleFinalizeWeek() {
+    const confirmed = window.confirm(
+      'Είστε σίγουρος; Οι βάρδιες θα αρχειοθετηθούν και η εβδομάδα θα κλειδώσει',
+    );
+    if (!confirmed) return;
+    await onFinalizeWeek();
   }
 
   function handleMoreAction(action) {
@@ -222,6 +233,16 @@ export default function WeekToolbar({
 
           <button
             type="button"
+            onClick={handleFinalizeWeek}
+            disabled={!isAdmin || isWeekLocked}
+            className="inline-flex items-center gap-1 rounded-lg bg-indigo-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-indigo-700 dark:bg-indigo-500/80 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FolderCheck size={16} />
+            {isWeekLocked ? 'Οριστικοποιημένη' : 'Finalize Week'}
+          </button>
+
+          <button
+            type="button"
             onClick={onCopyWhatsapp}
             className="inline-flex items-center gap-1 rounded-lg bg-green-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-green-700 dark:bg-emerald-500/80 dark:hover:bg-emerald-500"
           >
@@ -298,7 +319,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileText size={15} />
-                Εξαγωγή PDF
+                Εξαγωγή σε PDF
               </button>
               <button
                 type="button"
@@ -306,7 +327,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileSpreadsheet size={15} />
-                Εξαγωγή Excel
+                Εξαγωγή σε Excel
               </button>
               <button
                 type="button"
@@ -328,6 +349,16 @@ export default function WeekToolbar({
                 <Trash2 size={15} />
                 Καθαρισμός Εβδομάδας
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleMoreAction(handleFinalizeWeek)}
+                disabled={!isAdmin || isWeekLocked}
+                className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/90 px-4 py-3 text-left text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-300/40 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
+              >
+                <FolderCheck size={15} />
+                {isWeekLocked ? 'Οριστικοποιημένη Εβδομάδα' : 'Finalize Week'}
+              </button>
             </div>
           </div>
         </div>
@@ -336,5 +367,3 @@ export default function WeekToolbar({
     </header>
   );
 }
-
-

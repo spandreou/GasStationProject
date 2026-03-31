@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { SHIFT_PRESETS } from '../../data/constants';
+import { SHIFT_TYPES, getShiftTypeLabel } from '../../utils/analytics';
 
 const initialManualState = {
   employeeId: '',
   date: '',
   startTime: '10:00',
   endTime: '18:00',
+  type: SHIFT_TYPES.WORK,
   notes: '',
 };
 
@@ -30,7 +32,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
 
   async function handleSubmit(event) {
     event.preventDefault();
-    await onCreateShift({ ...form, label: 'Χειροκίνητη' });
+    await onCreateShift({ ...form, label: getShiftTypeLabel(form.type) });
     setForm((prev) => ({ ...prev, notes: '' }));
   }
 
@@ -41,7 +43,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
       <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Χειροκίνητη Βάρδια</h2>
-      <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">Ορισμός ενδιάμεσης βάρδιας (π.χ. 10:00 - 18:00).</p>
+      <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">Ορισμός βάρδιας και τύπου (εργασία ή απουσία).</p>
 
       <div className="mb-3 flex flex-wrap gap-2">
         {SHIFT_PRESETS.map((preset) => (
@@ -89,6 +91,22 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
                 {day}
               </option>
             ))}
+          </select>
+        </label>
+
+        <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
+          Τύπος Βάρδιας
+          <select
+            className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            value={form.type}
+            onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
+            required
+            disabled={!canManage}
+          >
+            <option value={SHIFT_TYPES.WORK}>Εργασία</option>
+            <option value={SHIFT_TYPES.REST}>Ρεπό</option>
+            <option value={SHIFT_TYPES.LEAVE}>Άδεια</option>
+            <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
           </select>
         </label>
 

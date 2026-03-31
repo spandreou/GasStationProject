@@ -1,4 +1,5 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
+import { isFirebaseConfigured } from '../firebase/config';
 import {
   sendAdminPasswordResetEmail,
   signInAdmin,
@@ -9,6 +10,11 @@ import {
   createEmployee,
   createShift,
   createShiftTemplate,
+  fetchShiftsOnce,
+  fetchAttendanceHistoryByMonth,
+  finalizeWeekAttendance,
+  isWeekFinalized,
+  isUsingLocalFallback,
   removeEmployee,
   removeShift,
   removeShiftTemplate,
@@ -20,16 +26,22 @@ import {
   subscribeShiftTemplates,
   updateEmployee,
   updateShift,
+  updateShiftTemplate,
 } from '../firebase/schedulerService';
 import { hasTimeOverlap } from '../utils/overlap';
+import { getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
 import { getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 
 function getCurrentWeekStart() {
   return getIsoDate(getMonday(new Date()));
 }
 
+function getCurrentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function parseShiftInput(startTime, endTime) {
-  // Κοινή επικύρωση για presets, χειροκίνητες και custom template βάρδιες.
   if (!isValidTimeLabel(startTime) || !isValidTimeLabel(endTime)) {
     throw new Error('Η ώρα πρέπει να είναι σε μορφή ΩΩ:ΛΛ.');
   }
@@ -55,16 +67,29 @@ function buildUndoState(actionType, message, payload) {
   };
 }
 
+function isDateInWeek(date, weekDays) {
+  return new Set(weekDays).has(date);
+}
+
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
 
 export const useSchedulerStore = create((set, get) => ({
   employees: [],
   shifts: [],
   shiftTemplates: [],
+  attendanceHistory: [],
+  historyFilters: {
+    employeeId: '',
+    yearMonth: getCurrentYearMonth(),
+  },
+  isHistoryLoading: false,
+  isWeekLocked: false,
   isLoading: true,
   isAuthLoading: true,
+  isSaving: false,
   errorMessage: '',
   warningMessage: '',
+  firebaseMode: 'production',
   weekStart: getCurrentWeekStart(),
   isAdmin: false,
   adminUser: null,
@@ -76,6 +101,15 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeAuth: null,
 
   initializeData: () => {
+    if (!isFirebaseConfigured) {
+      set({
+        errorMessage: 'Το Firebase δεν είναι ρυθμισμένο. Συμπλήρωσε τα env vars για Firestore/Auth.',
+        isLoading: false,
+        isAuthLoading: false,
+      });
+      return;
+    }
+
     const unsubscribeEmployees = subscribeEmployees(
       (employees) => set({ employees, isLoading: false }),
       () => set({ errorMessage: 'Αποτυχία φόρτωσης υπαλλήλων.', isLoading: false }),
@@ -92,13 +126,21 @@ export const useSchedulerStore = create((set, get) => ({
     );
 
     const unsubscribeAuth = subscribeAdminAuth(
-      (user) =>
+      async (user) => {
         set({
           adminUser: user,
           isAdmin: Boolean(user),
           isAuthLoading: false,
           isLoginModalOpen: false,
-        }),
+        });
+
+        if (user) {
+          await get().refreshWeekLockStatus();
+          await get().loadAttendanceHistory();
+        } else {
+          set({ attendanceHistory: [] });
+        }
+      },
       () => set({ warningMessage: 'Αποτυχία ελέγχου σύνδεσης διαχειριστή.', isAuthLoading: false }),
     );
 
@@ -128,7 +170,7 @@ export const useSchedulerStore = create((set, get) => ({
       return true;
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία σύνδεσης διαχειριστή.' });
-      return false;
+      throw error;
     }
   },
 
@@ -148,22 +190,56 @@ export const useSchedulerStore = create((set, get) => ({
     }
   },
 
-  setWeekStart: (weekStart) => set({ weekStart }),
+  setWeekStart: async (weekStart) => {
+    set({ weekStart });
+    await get().refreshWeekLockStatus();
+  },
 
-  goToPreviousWeek: () => {
+  goToPreviousWeek: async () => {
     const current = new Date(`${get().weekStart}T00:00:00`);
     current.setDate(current.getDate() - 7);
     set({ weekStart: getIsoDate(current) });
+    await get().refreshWeekLockStatus();
   },
 
-  goToNextWeek: () => {
+  goToNextWeek: async () => {
     const current = new Date(`${get().weekStart}T00:00:00`);
     current.setDate(current.getDate() + 7);
     set({ weekStart: getIsoDate(current) });
+    await get().refreshWeekLockStatus();
   },
 
-  goToCurrentWeek: () => {
+  goToCurrentWeek: async () => {
     set({ weekStart: getCurrentWeekStart() });
+    await get().refreshWeekLockStatus();
+  },
+
+  refreshWeekLockStatus: async () => {
+    const locked = await isWeekFinalized(get().weekStart);
+    set({ isWeekLocked: locked });
+  },
+
+  setHistoryFilters: async (partial) => {
+    const nextFilters = { ...get().historyFilters, ...partial };
+    set({ historyFilters: nextFilters });
+    await get().loadAttendanceHistory();
+  },
+
+  loadAttendanceHistory: async () => {
+    if (!get().isAdmin) return;
+
+    const { employeeId, yearMonth } = get().historyFilters;
+    set({ isHistoryLoading: true });
+
+    try {
+      const attendanceHistory = await fetchAttendanceHistoryByMonth({
+        yearMonth,
+        employeeId,
+      });
+      set({ attendanceHistory, isHistoryLoading: false });
+    } catch {
+      set({ warningMessage: 'Αποτυχία φόρτωσης ιστορικού.', isHistoryLoading: false });
+    }
   },
 
   setWarningMessage: (warningMessage) => set({ warningMessage }),
@@ -256,10 +332,14 @@ export const useSchedulerStore = create((set, get) => ({
     await removeEmployee(employeeId);
   },
 
-  addShiftTemplate: async ({ label, startTime, endTime, employeeId = '' }) => {
+  addShiftTemplate: async ({ label, date, startTime, endTime }) => {
     if (!requireAdmin(get, set)) return;
     if (!label?.trim()) {
       set({ warningMessage: 'Το όνομα custom βάρδιας είναι υποχρεωτικό.' });
+      return;
+    }
+    if (!date) {
+      set({ warningMessage: 'Επίλεξε ημερομηνία για την κάρτα βάρδιας.' });
       return;
     }
 
@@ -267,39 +347,125 @@ export const useSchedulerStore = create((set, get) => ({
       parseShiftInput(startTime, endTime);
       await createShiftTemplate({
         label: label.trim(),
+        date,
         startTime,
         endTime,
-        employeeId: employeeId || '',
+        isPlaced: false,
+        type: SHIFT_TYPES.WORK,
       });
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία δημιουργίας custom βάρδιας.' });
     }
   },
 
-  deleteShiftTemplate: async (templateId) => {
+  placeShiftTemplate: async ({ templateId, date }) => {
     if (!requireAdmin(get, set)) return;
-    await removeShiftTemplate(templateId);
+    if (!templateId || !date) return;
+
+    const template = get().shiftTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    set({ isSaving: true });
+    try {
+      await updateShiftTemplate(templateId, { isPlaced: true, date });
+      set({
+        shiftTemplates: get().shiftTemplates.map((item) =>
+          item.id === templateId ? { ...item, isPlaced: true, date } : item,
+        ),
+      });
+    } finally {
+      set({ isSaving: false });
+    }
   },
 
-  addShift: async ({ employeeId, date, startTime, endTime, label, notes = '', trackUndo = false }) => {
+  assignShiftFromTemplate: async ({ templateId, employeeId }) => {
     if (!requireAdmin(get, set)) return;
+    if (!templateId || !employeeId) return;
+
+    const template = get().shiftTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    set({ isSaving: true });
+    try {
+      const createdShift = await get().addShift({
+        employeeId,
+        date: template.date,
+        startTime: template.startTime,
+        endTime: template.endTime,
+        label: template.label,
+        trackUndo: true,
+        type: template.type || SHIFT_TYPES.WORK,
+      });
+
+      if (!createdShift?.id) return;
+      await removeShiftTemplate(templateId);
+      set({
+        shiftTemplates: get().shiftTemplates.filter((item) => item.id !== templateId),
+      });
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  deleteShiftTemplate: async (templateId) => {
+    if (!requireAdmin(get, set)) return;
+    set({ isSaving: true });
+    try {
+      await removeShiftTemplate(templateId);
+      set({
+        shiftTemplates: get().shiftTemplates.filter((item) => item.id !== templateId),
+      });
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  addShift: async ({
+    employeeId,
+    date,
+    startTime,
+    endTime,
+    label,
+    type = SHIFT_TYPES.WORK,
+    notes = '',
+    trackUndo = false,
+  }) => {
+    if (!requireAdmin(get, set)) return null;
     if (!employeeId || !date) {
       set({ warningMessage: 'Επίλεξε υπάλληλο και ημερομηνία για τη βάρδια.' });
-      return;
+      return null;
+    }
+
+    const weekDays = getWeekDays(get().weekStart);
+    if (get().isWeekLocked && isDateInWeek(date, weekDays)) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return null;
     }
 
     try {
       parseShiftInput(startTime, endTime);
-      const conflict = hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime });
+      const isWork = type === SHIFT_TYPES.WORK;
+      const conflict = isWork ? hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime }) : false;
 
+      set({ isSaving: true });
       const createdShift = await createShift({
         employeeId,
         date,
         startTime,
         endTime,
+        type,
         label: label || 'Χειροκίνητη',
         notes,
       });
+
+      // In Firestore mode, onSnapshot is the single source of truth for shifts.
+      // Avoid forcing a second fetch that can overwrite state with a stale server view.
+      if (isUsingLocalFallback()) {
+        const freshShifts = await fetchShiftsOnce();
+        if (Array.isArray(freshShifts)) {
+          set({ shifts: freshShifts });
+        }
+      }
 
       if (trackUndo && createdShift?.id) {
         set({
@@ -312,8 +478,13 @@ export const useSchedulerStore = create((set, get) => ({
           warningMessage: 'Προειδοποίηση: Υπάρχει χρονική επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
         });
       }
+
+      return createdShift;
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία δημιουργίας βάρδιας.' });
+      return null;
+    } finally {
+      set({ isSaving: false });
     }
   },
 
@@ -323,7 +494,24 @@ export const useSchedulerStore = create((set, get) => ({
     const currentShift = get().shifts.find((shift) => shift.id === shiftId);
     if (!currentShift) return;
 
-    await updateShift(shiftId, { date, startTime, endTime, label });
+    const weekDays = getWeekDays(get().weekStart);
+    if (get().isWeekLocked && (isDateInWeek(currentShift.date, weekDays) || isDateInWeek(date, weekDays))) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return;
+    }
+
+    set({ isSaving: true });
+    try {
+      await updateShift(shiftId, { date, startTime, endTime, label });
+      if (isUsingLocalFallback()) {
+        const freshShifts = await fetchShiftsOnce();
+        if (Array.isArray(freshShifts)) {
+          set({ shifts: freshShifts });
+        }
+      }
+    } finally {
+      set({ isSaving: false });
+    }
 
     set({
       undoState: buildUndoState('move_shift', 'Η βάρδια μετακινήθηκε.', {
@@ -340,22 +528,143 @@ export const useSchedulerStore = create((set, get) => ({
 
   deleteShift: async (shiftId) => {
     if (!requireAdmin(get, set)) return;
-    const removedShift = await removeShift(shiftId);
+    const existingShift = get().shifts.find((item) => item.id === shiftId);
+    if (!existingShift) return;
+
+    const weekDays = getWeekDays(get().weekStart);
+    if (get().isWeekLocked && isDateInWeek(existingShift.date, weekDays)) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return;
+    }
+
+    set({ isSaving: true });
+    let removedShift = null;
+    try {
+      removedShift = await removeShift(shiftId);
+    } finally {
+      set({ isSaving: false });
+    }
     if (!removedShift) return;
+
+    if (isUsingLocalFallback()) {
+      const freshShifts = await fetchShiftsOnce();
+      if (Array.isArray(freshShifts)) {
+        set({ shifts: freshShifts });
+      }
+    }
 
     set({
       undoState: buildUndoState('delete_shift', 'Η βάρδια διαγράφηκε.', { shift: removedShift }),
     });
   },
 
+  finalizeCurrentWeek: async () => {
+    if (!requireAdmin(get, set)) return;
+
+    const weekStart = get().weekStart;
+    if (!weekStart) return;
+
+    if (get().isWeekLocked) {
+      set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί.' });
+      return;
+    }
+
+    const weekDays = getWeekDays(weekStart);
+    const weekSet = new Set(weekDays);
+    const weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+
+    const entries = weekShifts.map((shift) => ({
+      employeeId: shift.employeeId,
+      date: shift.date,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      totalHours: (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK ? getShiftDurationHours(shift) : 0,
+      type: shift.type || SHIFT_TYPES.WORK,
+      label: shift.label || '',
+      notes: shift.notes || '',
+    }));
+
+    const response = await finalizeWeekAttendance({
+      weekStart,
+      weekDays,
+      entries,
+      adminEmail: get().adminUser?.email || '',
+    });
+
+    if (response.alreadyFinalized) {
+      set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί.' });
+      await get().refreshWeekLockStatus();
+      return;
+    }
+
+    set({
+      warningMessage: `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές.`,
+      isWeekLocked: true,
+    });
+    await get().loadAttendanceHistory();
+  },
+
   clearWeekShifts: async () => {
     if (!requireAdmin(get, set)) return;
+    if (get().isWeekLocked) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return;
+    }
+
     const weekDays = getWeekDays(get().weekStart);
-    const removedShifts = await removeShiftsByDates(weekDays);
+    const weekSet = new Set(weekDays);
+    set({ isSaving: true });
+    let removedShifts = [];
+    try {
+      removedShifts = await removeShiftsByDates(weekDays);
+    } finally {
+      set({ isSaving: false });
+    }
 
     set({
       warningMessage: 'Οι βάρδιες της εβδομάδας διαγράφηκαν.',
       undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
     });
+
+    if (isUsingLocalFallback()) {
+      const freshShifts = await fetchShiftsOnce();
+      if (Array.isArray(freshShifts)) {
+        set({ shifts: freshShifts });
+      }
+    }
+  },
+
+  clearDayShifts: async (date) => {
+    if (!requireAdmin(get, set)) return;
+    if (!date) return;
+
+    const weekDays = getWeekDays(get().weekStart);
+    if (get().isWeekLocked && isDateInWeek(date, weekDays)) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return;
+    }
+
+    set({ isSaving: true });
+    try {
+      await removeShiftsByDates([date]);
+      const templatesToRemove = get().shiftTemplates.filter((template) => template.isPlaced && template.date === date);
+      await Promise.all(templatesToRemove.map((template) => removeShiftTemplate(template.id)));
+
+      if (isUsingLocalFallback()) {
+        const freshShifts = await fetchShiftsOnce();
+        if (Array.isArray(freshShifts)) {
+          set({ shifts: freshShifts });
+        }
+      }
+
+      set({
+        warningMessage: `Καθαρίστηκαν οι βάρδιες για ${date}.`,
+        shiftTemplates: get().shiftTemplates.filter((template) => !(template.isPlaced && template.date === date)),
+      });
+    } finally {
+      set({ isSaving: false });
+    }
   },
 }));
+
+

@@ -1,4 +1,4 @@
-import { useDroppable } from '@dnd-kit/core';
+﻿import { useDroppable } from '@dnd-kit/core';
 
 export default function DayDropZone({ date, canManage }) {
   const { setNodeRef, isOver } = useDroppable({

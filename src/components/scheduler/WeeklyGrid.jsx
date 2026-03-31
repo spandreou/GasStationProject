@@ -1,55 +1,174 @@
 ﻿import { useDroppable } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Trash2, UserRound, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { SHIFT_PRESETS, WEEKDAY_LABELS } from '../../data/constants';
-import { getShiftDurationHours } from '../../utils/analytics';
+import { WEEKDAY_LABELS } from '../../data/constants';
+import { SHIFT_TYPES } from '../../utils/analytics';
 import { findOverlapConflicts } from '../../utils/overlap';
-import { formatDateGreek } from '../../utils/time';
-import DropShiftSlot from './DropShiftSlot';
+import { formatDateGreek, normalizeTimeLabel } from '../../utils/time';
+import AssignedShiftItem from './AssignedShiftItem';
 
-function getSlotId(day, preset) {
-  return `slot-${day}-${preset.startTime}-${preset.endTime}`;
+function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `template-assignment-${template.id}`,
+    data: { type: 'template-assignment', template },
+    disabled: !canManage,
+  });
+
+  return (
+    <article
+      ref={setNodeRef}
+      className={`rounded-xl border p-3 text-xs shadow-sm backdrop-blur-sm transition ${
+        isOver && canManage
+          ? 'border-brand-400 bg-brand-50/90 dark:border-cyan-300 dark:bg-cyan-500/15'
+          : 'border-cyan-300/45 bg-cyan-50/70 dark:border-cyan-300/30 dark:bg-slate-900/45'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-slate-900 dark:text-white">{template.label}</p>
+          <p className="text-slate-700 dark:text-slate-300">
+            {normalizeTimeLabel(template.startTime)} - {normalizeTimeLabel(template.endTime)}
+          </p>
+        </div>
+
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => onDeleteTemplate(template.id)}
+            className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
+            title="Διαγραφή κάρτας"
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-slate-300/70 px-2 py-1.5 text-[11px] text-slate-700 dark:border-cyan-300/35 dark:text-slate-300">
+        <UserRound size={13} />
+        {canManage ? 'Σύρε υπάλληλο εδώ για ανάθεση' : 'Αναμονή ανάθεσης'}
+      </div>
+    </article>
+  );
 }
 
-export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift, canManage }) {
-  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+function DayBox({
+  day,
+  index,
+  dayShifts,
+  dayTemplates,
+  canManage,
+  getEmployeeById,
+  hasConflict,
+  onDeleteShift,
+  onDeleteShiftTemplate,
+  onClearDay,
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-box-${day}`,
+    data: { type: 'day-box', day: { date: day } },
+    disabled: !canManage,
+  });
+
+  return (
+    <section
+      ref={setNodeRef}
+      onDragOver={(event) => event.preventDefault()}
+      className={`relative overflow-hidden rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition sm:p-4 ${
+        isOver && canManage
+          ? 'border-brand-400 bg-brand-50/70 dark:border-cyan-300 dark:bg-cyan-500/10'
+          : 'border-white/45 bg-white/45 dark:border-cyan-300/30 dark:bg-slate-900/40'
+      }`}
+    >
+      <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-200/45 blur-2xl dark:bg-pink-400/20" />
+
+      <header className="relative mb-3 flex items-center justify-between gap-2 rounded-xl bg-slate-900/85 px-3 py-2 text-xs font-semibold text-white dark:bg-slate-950/85 dark:text-cyan-100">
+        <span>
+          {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
+        </span>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => onClearDay(day)}
+            className="rounded p-1 text-white/85 hover:bg-red-500/20 hover:text-red-200"
+            title="Καθαρισμός ημέρας"
+            aria-label="Καθαρισμός ημέρας"
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : null}
+      </header>
+
+      <div className="space-y-2">
+        {dayTemplates.map((template) => (
+          <TemplateAssignmentCard
+            key={template.id}
+            template={template}
+            canManage={canManage}
+            onDeleteTemplate={onDeleteShiftTemplate}
+          />
+        ))}
+
+        {dayShifts.map((shift) => (
+          <AssignedShiftItem
+            key={shift.id}
+            shift={shift}
+            employee={getEmployeeById(shift.employeeId)}
+            hasConflict={hasConflict(shift)}
+            onDelete={onDeleteShift}
+            canManage={canManage}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function WeeklyGrid({
+  weekDays,
+  shifts,
+  shiftTemplates,
+  employees,
+  onDeleteShift,
+  onDeleteShiftTemplate,
+  onClearDayShifts,
+  canManage,
+  isSaving = false,
+}) {
+  const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const scrollRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  const navItems = useMemo(
+    () =>
+      weekDays.map((day, index) => ({
+        key: day,
+        label: WEEKDAY_LABELS[index],
+        date: formatDateGreek(day),
+      })),
+    [weekDays],
+  );
+
+  const placedTemplatesByDay = useMemo(() => {
+    const map = new Map(weekDays.map((day) => [day, []]));
+    shiftTemplates.forEach((template) => {
+      if (!template.isPlaced) return;
+      if (!map.has(template.date)) return;
+      map.get(template.date).push(template);
+    });
+    for (const values of map.values()) {
+      values.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    }
+    return map;
+  }, [shiftTemplates, weekDays]);
 
   function getEmployeeById(employeeId) {
     return employeeById.get(employeeId);
   }
 
   function hasConflict(shift) {
+    if ((shift.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) return false;
     return findOverlapConflicts(shifts, shift).length > 0;
   }
-
-  const isCustomShift = (shift) =>
-    !SHIFT_PRESETS.some((preset) => preset.startTime === shift.startTime && preset.endTime === shift.endTime);
-
-  const customShifts = shifts.filter((shift) => isCustomShift(shift));
-  const customShiftsByDay = weekDays.map((day) => ({
-    day,
-    shifts: customShifts.filter((shift) => shift.date === day),
-  }));
-
-  const { setNodeRef: setCustomColumnRef, isOver: isOverCustomColumn } = useDroppable({
-    id: 'custom-column',
-    data: { type: 'custom-column' },
-    disabled: !canManage,
-  });
-
-  const navItems = useMemo(
-    () => [
-      ...weekDays.map((day, index) => ({
-        key: day,
-        label: WEEKDAY_LABELS[index],
-        date: formatDateGreek(day),
-      })),
-      { key: 'custom', label: 'Custom', date: 'Βάρδια' },
-    ],
-    [weekDays],
-  );
 
   function getScrollStep() {
     const container = scrollRef.current;
@@ -81,8 +200,16 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
   }
 
   return (
-    <section className="glass-panel rounded-2xl p-2 sm:p-4">
-      <h2 className="mb-2 text-base font-bold text-slate-900 sm:mb-3 sm:text-lg dark:text-white">Εβδομαδιαίο Πλάνο</h2>
+    <section id="weekly-grid-export" className="glass-panel rounded-2xl p-2 sm:p-4">
+      <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
+        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Dynamic Sandbox Week</h2>
+        {isSaving ? (
+          <div className="inline-flex items-center gap-1 rounded-full border border-brand-200/70 bg-brand-50/80 px-2 py-1 text-[11px] font-semibold text-brand-800 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100">
+            <Loader2 size={12} className="animate-spin" />
+            Saving...
+          </div>
+        ) : null}
+      </div>
 
       <div className="mb-3 flex items-center gap-2 md:hidden">
         <button
@@ -125,109 +252,34 @@ export default function WeeklyGrid({ weekDays, shifts, employees, onDeleteShift,
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth md:grid md:min-w-[1120px] md:grid-cols-8 md:snap-none"
+        className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth md:grid md:min-w-[1120px] md:grid-cols-2 md:gap-4 md:snap-none xl:grid-cols-4"
       >
         {weekDays.map((day, index) => {
           const dayShifts = shifts.filter((shift) => shift.date === day);
+          const dayTemplates = placedTemplatesByDay.get(day) || [];
 
           return (
-            <div
-              key={day}
-              className="glass-soft min-w-full shrink-0 space-y-2 rounded-xl p-1.5 snap-start md:w-auto md:min-w-0 md:space-y-3 md:p-2 md:snap-none"
-            >
-              <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-sm sm:text-xs dark:bg-slate-950/85 dark:text-cyan-100">
-                {WEEKDAY_LABELS[index]} ({formatDateGreek(day)})
-              </header>
-
-              {SHIFT_PRESETS.map((preset) => {
-                const slotShifts = dayShifts.filter(
-                  (shift) => shift.startTime === preset.startTime && shift.endTime === preset.endTime,
-                );
-
-                return (
-                  <DropShiftSlot
-                    key={getSlotId(day, preset)}
-                    slotId={getSlotId(day, preset)}
-                    slot={{ ...preset, date: day }}
-                    shifts={slotShifts}
-                    getEmployeeById={getEmployeeById}
-                    isConflict={hasConflict}
-                    onDeleteShift={onDeleteShift}
-                    canManage={canManage}
-                  />
-                );
-              })}
-
+            <div key={day} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+              <DayBox
+                day={day}
+                index={index}
+                dayShifts={dayShifts}
+                dayTemplates={dayTemplates}
+                canManage={canManage}
+                getEmployeeById={getEmployeeById}
+                hasConflict={hasConflict}
+                onDeleteShift={onDeleteShift}
+                onDeleteShiftTemplate={onDeleteShiftTemplate}
+                onClearDay={(date) => {
+                  const shouldClear = window.confirm(`Να διαγραφούν όλες οι βάρδιες για ${formatDateGreek(date)};`);
+                  if (!shouldClear) return;
+                  onClearDayShifts(date);
+                }}
+              />
             </div>
           );
         })}
-
-        <div className="glass-soft min-w-full shrink-0 space-y-2 rounded-xl p-1.5 snap-start md:w-auto md:min-w-0 md:space-y-3 md:p-2 md:snap-none">
-          <header className="rounded-lg bg-slate-900/85 px-2 py-1 text-center text-[11px] font-semibold text-white backdrop-blur-sm sm:text-xs dark:bg-slate-950/85 dark:text-cyan-100">
-            Custom Βάρδια
-          </header>
-
-          <section
-            ref={setCustomColumnRef}
-            className={`space-y-3 rounded-xl border p-2 backdrop-blur-sm transition ${
-              isOverCustomColumn && canManage
-                ? 'border-cyan-400/80 bg-cyan-50/70 dark:border-pink-300/70 dark:bg-pink-500/15'
-                : 'border-white/40 bg-white/30 dark:border-cyan-300/30 dark:bg-slate-900/35'
-            }`}
-          >
-            {customShiftsByDay.some((group) => group.shifts.length) ? (
-              customShiftsByDay.map((group, index) =>
-                group.shifts.length ? (
-                  <div key={group.day} className="space-y-2">
-                    <p className="text-[11px] font-semibold text-slate-700 sm:text-xs dark:text-slate-200">
-                      {WEEKDAY_LABELS[index]} ({formatDateGreek(group.day)})
-                    </p>
-                    <div className="space-y-2">
-                      {group.shifts.map((shift) => {
-                        const employee = getEmployeeById(shift.employeeId);
-                        const hasShiftConflict = hasConflict(shift);
-
-                        return (
-                          <article
-                            key={shift.id}
-                            className={`rounded-lg border p-2 text-[11px] sm:text-xs shadow-sm backdrop-blur-sm ${
-                              hasShiftConflict
-                                ? 'border-red-400 bg-red-100/80 dark:border-red-300/60 dark:bg-red-500/20'
-                                : 'border-white/35 bg-white/55 dark:border-cyan-300/30 dark:bg-slate-900/45'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-semibold text-slate-900 dark:text-white">
-                                {employee?.fullName || 'Άγνωστος'}
-                              </p>
-                              {canManage ? (
-                                <button
-                                  type="button"
-                                  onClick={() => onDeleteShift(shift.id)}
-                                  className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
-                                  title="Διαγραφή βάρδιας"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              ) : null}
-                            </div>
-                            <p className="text-slate-700 dark:text-slate-200">
-                              {shift.startTime} - {shift.endTime} ({getShiftDurationHours(shift)} ώρες)
-                            </p>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null,
-              )
-            ) : (
-              <p className="text-[11px] text-slate-500 sm:text-xs dark:text-slate-400">Σύρε custom βάρδια εδώ</p>
-            )}
-          </section>
-        </div>
       </div>
     </section>
   );
 }
-

@@ -1,24 +1,26 @@
-import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+﻿import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { AlertTriangle, Plus, ShieldCheck, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import { useThemeMode } from '../../hooks/useThemeMode';
-import { calculateWeeklyTotals } from '../../utils/analytics';
+import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import {
+  exportPayrollReportToExcel,
+  exportPayrollReportToPdf,
   exportScheduleToExcel,
   exportScheduleToPdf,
   exportScheduleToWord,
-} from '../../utils/exportUtils';
+} from '../../utils/exportService';
 import { getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AdminLoginModal from './AdminLoginModal';
 import AnalyticsPanel from './AnalyticsPanel';
 import EmployeeProfileModal from './EmployeeProfileModal';
 import EmployeeSidebar from './EmployeeSidebar';
+import HistoryView from './HistoryView';
 import ManualShiftForm from './ManualShiftForm';
-import TemplateAssignModal from './TemplateAssignModal';
 import UndoSnackbar from './UndoSnackbar';
 import WeekToolbar from './WeekToolbar';
 import WeeklyGrid from './WeeklyGrid';
@@ -26,15 +28,18 @@ import WeeklyGrid from './WeeklyGrid';
 export default function MainDashboard() {
   const [activeDragItem, setActiveDragItem] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
-  const [templateAssignState, setTemplateAssignState] = useState({
-    open: false,
-    template: null,
-    date: '',
-    allowDateSelection: false,
-  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const [isManualSheetOpen, setIsManualSheetOpen] = useState(false);
+  const [quickAssignDraft, setQuickAssignDraft] = useState({
+    open: false,
+    employeeId: '',
+    employeeName: '',
+    date: '',
+    startTime: '06:00',
+    endTime: '14:00',
+    type: SHIFT_TYPES.WORK,
+  });
 
   const { isDark, toggleTheme } = useThemeMode();
   const sensors = useSensors(
@@ -46,9 +51,14 @@ export default function MainDashboard() {
     employees,
     shifts,
     shiftTemplates,
+    attendanceHistory,
+    historyFilters,
+    isHistoryLoading,
+    isWeekLocked,
     weekStart,
     isLoading,
     isAuthLoading,
+    isSaving,
     warningMessage,
     errorMessage,
     isAdmin,
@@ -61,6 +71,7 @@ export default function MainDashboard() {
     deleteEmployee,
     addShift,
     deleteShift,
+    clearDayShifts,
     clearWeekShifts,
     goToPreviousWeek,
     goToNextWeek,
@@ -75,7 +86,11 @@ export default function MainDashboard() {
     undoLastAction,
     dismissUndo,
     addShiftTemplate,
+    placeShiftTemplate,
+    assignShiftFromTemplate,
     deleteShiftTemplate,
+    setHistoryFilters,
+    finalizeCurrentWeek,
   } = useSchedulerStore();
 
   useEffect(() => {
@@ -111,64 +126,38 @@ export default function MainDashboard() {
     const activeData = active.data.current;
     const overData = over.data.current;
 
-    if (activeData?.type === 'employee' && overData?.type === 'slot') {
-      const employee = activeData.employee;
-      const slot = overData.slot;
+    if (activeData?.type === 'employee' && overData?.type === 'day-box') {
+      const employeeId = activeData.employee?.id;
+      const employeeName = activeData.employee?.fullName || '';
+      const date = overData.day?.date || '';
+      if (!employeeId || !date) return;
 
-      await addShift({
-        employeeId: employee.id,
-        date: slot.date,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        label: slot.label,
-      });
-      return;
-    }
-
-    if (activeData?.type === 'shift-template' && overData?.type === 'custom-column') {
-      const template = activeData.template;
-      if (!template) return;
-
-      if (!employees.length) {
-        setWarningMessage('Δεν υπάρχουν υπάλληλοι για ανάθεση της custom βάρδιας.');
-        return;
-      }
-
-      setTemplateAssignState({
+      setQuickAssignDraft({
         open: true,
-        template,
-        date: weekDays[0] || '',
-        allowDateSelection: true,
+        employeeId,
+        employeeName,
+        date,
+        startTime: '06:00',
+        endTime: '14:00',
+        type: SHIFT_TYPES.WORK,
       });
       return;
     }
 
-    if (activeData?.type === 'shift-template' && overData?.type === 'day') {
+    if (activeData?.type === 'employee' && overData?.type === 'template-assignment') {
+      await assignShiftFromTemplate({
+        templateId: overData.template?.id,
+        employeeId: activeData.employee?.id,
+      });
+      return;
+    }
+
+    if (activeData?.type === 'shift-template' && overData?.type === 'day-box') {
       const template = activeData.template;
       const date = overData.day?.date;
       if (!template || !date) return;
 
-      if (!employees.length) {
-        setWarningMessage('Δεν υπάρχουν υπάλληλοι για ανάθεση της custom βάρδιας.');
-        return;
-      }
-
-      const templateEmployeeId =
-        template.employeeId && employees.some((employee) => employee.id === template.employeeId) ? template.employeeId : '';
-
-      if (templateEmployeeId) {
-        await addShift({
-          employeeId: templateEmployeeId,
-          date,
-          startTime: template.startTime,
-          endTime: template.endTime,
-          label: template.label,
-          trackUndo: true,
-        });
-        return;
-      }
-
-      setTemplateAssignState({ open: true, template, date, allowDateSelection: false });
+      await placeShiftTemplate({ templateId: template.id, date });
     }
   }
 
@@ -188,27 +177,6 @@ export default function MainDashboard() {
         label: `${template.label} (${template.startTime}-${template.endTime})`,
       });
     }
-  }
-
-  async function handleAssignTemplate(employeeId, selectedDate) {
-    const { template, date } = templateAssignState;
-    const finalDate = selectedDate || date;
-    if (!template || !finalDate || !employeeId) return;
-
-    await addShift({
-      employeeId,
-      date: finalDate,
-      startTime: template.startTime,
-      endTime: template.endTime,
-      label: template.label,
-      trackUndo: true,
-    });
-
-    setTemplateAssignState({ open: false, template: null, date: '', allowDateSelection: false });
-  }
-
-  function closeTemplateAssign() {
-    setTemplateAssignState({ open: false, template: null, date: '', allowDateSelection: false });
   }
 
   async function handleCopyWhatsapp() {
@@ -232,6 +200,34 @@ export default function MainDashboard() {
     await editEmployee(profilePayload);
   }
 
+  async function handleQuickAssignSave(event) {
+    event.preventDefault();
+    const { employeeId, date, startTime, endTime, type } = quickAssignDraft;
+    if (!employeeId || !date) return;
+    if (isWeekLocked) {
+      setWarningMessage('Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται νέα ανάθεση.');
+      return;
+    }
+
+    const shiftData = {
+      employeeId,
+      date,
+      startTime,
+      endTime,
+      type,
+      label: getShiftTypeLabel(type),
+      trackUndo: true,
+    };
+
+    try {
+      const saved = await addShift(shiftData);
+      if (!saved) return;
+      setQuickAssignDraft((prev) => ({ ...prev, open: false }));
+    } catch (error) {
+      setWarningMessage(error?.message || 'Αποτυχία αποθήκευσης ανάθεσης.');
+    }
+  }
+
   function getExportPayload() {
     return {
       weekDays,
@@ -241,17 +237,39 @@ export default function MainDashboard() {
     };
   }
 
-  function handleExportPdf() {
+  async function handleExportPayrollExcel() {
+    const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
     try {
-      exportScheduleToPdf(getExportPayload());
+      await exportPayrollReportToExcel({
+        employeeName: selectedEmployee?.fullName || 'Όλοι',
+        yearMonth: historyFilters.yearMonth,
+        historyRows: attendanceHistory,
+      });
+    } catch {
+      setWarningMessage('Αποτυχία εξαγωγής payroll Excel.');
+    }
+  }
+
+  function handleExportPayrollPdf() {
+    const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
+    exportPayrollReportToPdf({
+      employeeName: selectedEmployee?.fullName || 'Όλοι',
+      yearMonth: historyFilters.yearMonth,
+      historyRows: attendanceHistory,
+    });
+  }
+
+  async function handleExportPdf() {
+    try {
+      await exportScheduleToPdf(getExportPayload());
     } catch {
       setWarningMessage('Αποτυχία εξαγωγής PDF.');
     }
   }
 
-  function handleExportExcel() {
+  async function handleExportExcel() {
     try {
-      exportScheduleToExcel(getExportPayload());
+      await exportScheduleToExcel(getExportPayload());
     } catch {
       setWarningMessage('Αποτυχία εξαγωγής Excel.');
     }
@@ -284,9 +302,11 @@ export default function MainDashboard() {
           onCurrentWeek={goToCurrentWeek}
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
+          onFinalizeWeek={finalizeCurrentWeek}
           onExportPdf={handleExportPdf}
           onExportExcel={handleExportExcel}
           onExportWord={handleExportWord}
+          isWeekLocked={isWeekLocked}
         />
 
         {!isFirebaseConfigured ? (
@@ -322,6 +342,7 @@ export default function MainDashboard() {
               <EmployeeSidebar
                 employees={employees}
                 shiftTemplates={shiftTemplates}
+                weekDays={weekDays}
                 isAdmin={isAdmin}
                 onAddEmployee={addEmployee}
                 onDeleteEmployee={deleteEmployee}
@@ -336,23 +357,42 @@ export default function MainDashboard() {
               <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
             </div>
 
-            <AnalyticsPanel
-              employees={employees}
-              totalsByEmployee={analytics.totalsByEmployee}
-              totalHours={analytics.totalHours}
-            />
+            {isAdmin ? (
+              <AnalyticsPanel
+                employees={employees}
+                totalsByEmployee={analytics.totalsByEmployee}
+                totalHours={analytics.totalHours}
+                leaveDaysByEmployee={analytics.leaveDaysByEmployee}
+                totalsByType={analytics.totalsByType}
+              />
+            ) : null}
           </div>
 
           <div className="order-1 md:order-2">
             <WeeklyGrid
               weekDays={weekDays}
               shifts={weekShifts}
+              shiftTemplates={shiftTemplates}
               employees={employees}
               onDeleteShift={deleteShift}
+              onDeleteShiftTemplate={deleteShiftTemplate}
+              onClearDayShifts={clearDayShifts}
               canManage={isAdmin}
+              isSaving={isSaving}
             />
           </div>
         </div>
+
+        <HistoryView
+          isAdmin={isAdmin}
+          employees={employees}
+          historyRows={attendanceHistory}
+          filters={historyFilters}
+          isLoading={isHistoryLoading}
+          onFilterChange={setHistoryFilters}
+          onExportPayrollPdf={handleExportPayrollPdf}
+          onExportPayrollExcel={handleExportPayrollExcel}
+        />
       </main>
 
       <button
@@ -440,6 +480,7 @@ export default function MainDashboard() {
               <EmployeeSidebar
                 employees={employees}
                 shiftTemplates={shiftTemplates}
+                weekDays={weekDays}
                 isAdmin={isAdmin}
                 onAddEmployee={addEmployee}
                 onDeleteEmployee={deleteEmployee}
@@ -478,16 +519,73 @@ export default function MainDashboard() {
         onSave={handleSaveProfile}
       />
 
-      <TemplateAssignModal
-        open={templateAssignState.open}
-        template={templateAssignState.template}
-        date={templateAssignState.date}
-        weekDays={weekDays}
-        allowDateSelection={templateAssignState.allowDateSelection}
-        employees={employees}
-        onClose={closeTemplateAssign}
-        onConfirm={handleAssignTemplate}
-      />
+      {quickAssignDraft.open ? (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" role="dialog" aria-modal="true">
+          <div className="glass-panel w-full max-w-md rounded-2xl p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Γρήγορη Ανάθεση</h3>
+              <button
+                type="button"
+                onClick={() => setQuickAssignDraft((prev) => ({ ...prev, open: false }))}
+                className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Κλείσιμο
+              </button>
+            </div>
+
+            <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
+              {quickAssignDraft.employeeName} - {quickAssignDraft.date}
+            </p>
+
+            <form onSubmit={handleQuickAssignSave} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Ώρα Έναρξης
+                  <input
+                    type="time"
+                    value={quickAssignDraft.startTime}
+                    onChange={(event) => setQuickAssignDraft((prev) => ({ ...prev, startTime: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  Ώρα Λήξης
+                  <input
+                    type="time"
+                    value={quickAssignDraft.endTime}
+                    onChange={(event) => setQuickAssignDraft((prev) => ({ ...prev, endTime: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                Τύπος
+                <select
+                  value={quickAssignDraft.type}
+                  onChange={(event) => setQuickAssignDraft((prev) => ({ ...prev, type: event.target.value }))}
+                  className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                >
+                  <option value={SHIFT_TYPES.WORK}>Εργασία</option>
+                  <option value={SHIFT_TYPES.REST}>Ρεπό</option>
+                  <option value={SHIFT_TYPES.LEAVE}>Άδεια</option>
+                  <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+                disabled={isSaving || isWeekLocked}
+              >
+                {isWeekLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       <UndoSnackbar undoState={undoState} onUndo={undoLastAction} onDismiss={dismissUndo} isAdmin={isAdmin} />
     </DndContext>

@@ -3,14 +3,19 @@ import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+function readEnv(key) {
+  const viteKey = `VITE_${key}`;
+  return import.meta?.env?.[viteKey] || '';
+}
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: readEnv('FIREBASE_API_KEY'),
+  authDomain: readEnv('FIREBASE_AUTH_DOMAIN'),
+  projectId: readEnv('FIREBASE_PROJECT_ID'),
+  storageBucket: readEnv('FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: readEnv('FIREBASE_MESSAGING_SENDER_ID'),
+  appId: readEnv('FIREBASE_APP_ID'),
+  measurementId: readEnv('FIREBASE_MEASUREMENT_ID'),
 };
 
 const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
@@ -26,7 +31,6 @@ if (isFirebaseConfigured) {
   db = getFirestore(app);
   auth = getAuth(app);
 
-  // Το Analytics ενεργοποιείται μόνο σε browser που το υποστηρίζει.
   if (typeof window !== 'undefined') {
     isSupported()
       .then((supported) => {

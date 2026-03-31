@@ -1,6 +1,7 @@
-import { useDraggable } from '@dnd-kit/core';
+﻿import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Sparkles } from 'lucide-react';
+import { formatDateGreek, normalizeTimeLabel } from '../../utils/time';
 
 export default function ShiftTemplateCard({ template, disabled = false }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -36,7 +37,10 @@ export default function ShiftTemplateCard({ template, disabled = false }) {
         <div className="min-w-0">
           <p className="truncate font-semibold text-slate-900 dark:text-white">{template.label}</p>
           <p className="truncate text-xs text-slate-700 dark:text-slate-300">
-            {template.startTime} - {template.endTime}
+            {template.date ? formatDateGreek(template.date) : 'Χωρίς ημερομηνία'}
+          </p>
+          <p className="truncate text-xs text-slate-700 dark:text-slate-300">
+            {normalizeTimeLabel(template.startTime)} - {normalizeTimeLabel(template.endTime)}
           </p>
         </div>
       </div>

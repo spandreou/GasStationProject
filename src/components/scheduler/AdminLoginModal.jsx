@@ -1,4 +1,4 @@
-import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
+﻿import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
 import { useState } from 'react';
 
 const DEFAULT_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
@@ -16,6 +16,7 @@ export default function AdminLoginModal({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   if (!open) return null;
 
@@ -23,16 +24,34 @@ export default function AdminLoginModal({
     setCredentials((prev) => ({ ...prev, password: '' }));
     setIsSubmitting(false);
     setIsSendingReset(false);
+    setSubmitError('');
     onClose();
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       const success = await onLogin(credentials);
       if (success) {
         setCredentials((prev) => ({ ...prev, password: '' }));
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('Firebase Auth Login Error:', {
+          code: error?.code,
+          message: error?.message,
+          raw: error,
+        });
+      }
+
+      if (error?.code === 'auth/network-request-failed') {
+        setSubmitError(
+          'Αποτυχία δικτύου. Έλεγξε σύνδεση internet και βεβαιώσου ότι το localhost είναι στα Authorized Domains του Firebase Auth.',
+        );
+      } else {
+        setSubmitError(error?.message || 'Αποτυχία σύνδεσης. Δες την κονσόλα για λεπτομέρειες.');
       }
     } finally {
       setIsSubmitting(false);
@@ -113,6 +132,12 @@ export default function AdminLoginModal({
           >
             {isSubmitting ? 'Σύνδεση...' : 'Σύνδεση'}
           </button>
+
+          {submitError ? (
+            <p className="rounded-lg border border-red-300/70 bg-red-50/70 px-3 py-2 text-xs text-red-700 dark:border-red-300/50 dark:bg-red-500/15 dark:text-red-200">
+              {submitError}
+            </p>
+          ) : null}
         </form>
 
         <button

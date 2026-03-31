@@ -1,4 +1,4 @@
-const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+﻿const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const TIME_12H_PATTERN = /^(\d{1,2}):([0-5]\d)\s*([AP]M)$/i;
 
 export function normalizeTimeLabel(value) {
@@ -28,7 +28,6 @@ export function normalizeTimeLabel(value) {
 
   return trimmed;
 }
-
 
 export function isValidTimeLabel(value) {
   return TIME_PATTERN.test(normalizeTimeLabel(value));

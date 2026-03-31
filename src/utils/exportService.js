@@ -1,8 +1,46 @@
-﻿import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } from 'docx';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
+﻿import { calculatePayrollSummary, getShiftTypeLabel } from './analytics';
 import { formatDateGreek, formatShiftTime } from './time';
+
+let xlsxModulePromise;
+let jsPdfModulePromise;
+let html2CanvasModulePromise;
+let docxModulePromise;
+let robotoFontPromise;
+
+function loadXlsx() {
+  if (!xlsxModulePromise) {
+    xlsxModulePromise = import('xlsx');
+  }
+  return xlsxModulePromise;
+}
+
+function loadJsPdf() {
+  if (!jsPdfModulePromise) {
+    jsPdfModulePromise = import('jspdf');
+  }
+  return jsPdfModulePromise;
+}
+
+function loadHtml2Canvas() {
+  if (!html2CanvasModulePromise) {
+    html2CanvasModulePromise = import('html2canvas');
+  }
+  return html2CanvasModulePromise;
+}
+
+function loadDocx() {
+  if (!docxModulePromise) {
+    docxModulePromise = import('docx');
+  }
+  return docxModulePromise;
+}
+
+function loadRobotoFont() {
+  if (!robotoFontPromise) {
+    robotoFontPromise = import('../assets/fonts/robotoRegularBase64');
+  }
+  return robotoFontPromise;
+}
 
 function buildEmployeeDayMap(shifts) {
   const map = new Map();
@@ -64,11 +102,21 @@ function downloadBlob(blob, fileName) {
   URL.revokeObjectURL(url);
 }
 
+async function setupGreekFont(doc) {
+  const { ROBOTO_REGULAR_BASE64 } = await loadRobotoFont();
+  if (!ROBOTO_REGULAR_BASE64) return;
+  doc.addFileToVFS('Roboto-Regular.ttf', ROBOTO_REGULAR_BASE64);
+  doc.addFont('Roboto-Regular.ttf', 'Roboto-Regular', 'normal');
+  doc.setFont('Roboto-Regular', 'normal');
+}
+
 export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-grid-export' }) {
   const gridElement = document.querySelector(gridSelector);
   if (!gridElement) {
     throw new Error(`WeeklyGrid container was not found: ${gridSelector}`);
   }
+
+  const [{ default: html2canvas }, { default: jsPDFCtor }] = await Promise.all([loadHtml2Canvas(), loadJsPdf()]);
 
   if (document.fonts?.ready) {
     await document.fonts.ready;
@@ -80,7 +128,7 @@ export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-gr
     backgroundColor: null,
   });
 
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
@@ -102,7 +150,8 @@ export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-gr
   doc.save(createFileName('program_pdf', weekDays, 'pdf'));
 }
 
-export function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {
+  const XLSX = await loadXlsx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
 
@@ -121,6 +170,7 @@ export function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employe
 }
 
 export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees }) {
+  const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } = await loadDocx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
 
@@ -169,4 +219,80 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
 
   const blob = await Packer.toBlob(doc);
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
+}
+
+export async function exportPayrollReportToExcel({ employeeName, yearMonth, historyRows }) {
+  const XLSX = await loadXlsx();
+  const summary = calculatePayrollSummary(historyRows);
+
+  const detailRows = historyRows.map((item) => ({
+    Ημερομηνία: item.date,
+    Τύπος: getShiftTypeLabel(item.type),
+    Ώρες: item.totalHours || 0,
+    Σχόλια: item.notes || '',
+  }));
+
+  const summaryRows = [
+    { Μετρική: 'Σύνολο Ωρών Εργασίας', Τιμή: summary.totalWorkHours },
+    { Μετρική: 'Σύνολο Ημερών Αδείας', Τιμή: summary.totalLeaveDays },
+    { Μετρική: 'Σύνολο Ρεπό', Τιμή: summary.totalRestDays },
+    { Μετρική: 'Σύνολο Ημερών Ασθενείας', Τιμή: summary.totalSickDays },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+  const detailSheet = XLSX.utils.json_to_sheet(detailRows);
+
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Payroll Summary');
+  XLSX.utils.book_append_sheet(workbook, detailSheet, 'Attendance Detail');
+
+  const safeMonth = yearMonth.replace('-', '_');
+  const safeEmployee = (employeeName || 'all').replaceAll(' ', '_');
+  XLSX.writeFile(workbook, `payroll_report_${safeEmployee}_${safeMonth}.xlsx`, { compression: true });
+}
+
+export async function exportPayrollReportToPdf({ employeeName, yearMonth, historyRows }) {
+  const { default: jsPDFCtor } = await loadJsPdf();
+  const summary = calculatePayrollSummary(historyRows);
+  const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  await setupGreekFont(doc);
+
+  let y = 50;
+  doc.setFontSize(15);
+  doc.text('Payroll Report', 40, y);
+  y += 24;
+
+  doc.setFontSize(11);
+  doc.text(`Υπάλληλος: ${employeeName || 'Όλοι'}`, 40, y);
+  y += 18;
+  doc.text(`Μήνας: ${yearMonth}`, 40, y);
+  y += 24;
+
+  doc.setFontSize(12);
+  doc.text(`Σύνολο Ωρών Εργασίας: ${summary.totalWorkHours}`, 40, y);
+  y += 18;
+  doc.text(`Σύνολο Ημερών Αδείας: ${summary.totalLeaveDays}`, 40, y);
+  y += 18;
+  doc.text(`Σύνολο Ρεπό: ${summary.totalRestDays}`, 40, y);
+  y += 18;
+  doc.text(`Σύνολο Ημερών Ασθενείας: ${summary.totalSickDays}`, 40, y);
+  y += 24;
+
+  doc.setFontSize(10);
+  doc.text('Ημερομηνία | Τύπος | Ώρες | Σχόλια', 40, y);
+  y += 14;
+
+  historyRows.forEach((row) => {
+    const line = `${row.date} | ${getShiftTypeLabel(row.type)} | ${row.totalHours || 0} | ${row.notes || '-'}`;
+    if (y > 790) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.text(line, 40, y);
+    y += 14;
+  });
+
+  const safeMonth = yearMonth.replace('-', '_');
+  const safeEmployee = (employeeName || 'all').replaceAll(' ', '_');
+  doc.save(`payroll_report_${safeEmployee}_${safeMonth}.pdf`);
 }

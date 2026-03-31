@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Ο ρόλος admin δίνεται από Firebase custom claims: request.auth.token.admin == true
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    match /employees/{employeeId} {
+      // Οι εργαζόμενοι διαβάζονται για εμφάνιση ονόματος/προγράμματος.
+      allow read: if true;
+
+      // Μόνο admin αλλάζει προσωπικά στοιχεία (ΑΦΜ, email, τηλέφωνο κλπ).
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /shifts/{shiftId} {
+      // Το πρόγραμμα είναι ορατό σε όλους τους χρήστες.
+      allow read: if true;
+
+      // Μόνο admin κάνει αλλαγές στο πρόγραμμα.
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

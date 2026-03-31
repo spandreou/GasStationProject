@@ -14,7 +14,7 @@
   where,
 } from 'firebase/firestore';
 import { buildSampleShifts, sampleEmployees } from '../data/mockData';
-import { db, isFirebaseConfigured } from './config';
+import { db } from './config';
 
 const EMPLOYEES_COLLECTION = 'employees';
 const SHIFTS_COLLECTION = 'shifts';
@@ -29,8 +29,7 @@ const LOCAL_ATTENDANCE_HISTORY_KEY = 'gas-station-attendance-history';
 const LOCAL_WEEK_LOCKS_KEY = 'gas-station-week-locks';
 
 export function isUsingLocalFallback() {
-  const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
-  return !isFirebaseConfigured || !db || isOffline;
+  return false;
 }
 
 function ensureLocalSeed() {

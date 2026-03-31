@@ -10,11 +10,9 @@ import {
   createEmployee,
   createShift,
   createShiftTemplate,
-  fetchShiftsOnce,
   fetchAttendanceHistoryByMonth,
   finalizeWeekAttendance,
   isWeekFinalized,
-  isUsingLocalFallback,
   removeEmployee,
   removeShift,
   removeShiftTemplate,
@@ -458,15 +456,6 @@ export const useSchedulerStore = create((set, get) => ({
         notes,
       });
 
-      // In Firestore mode, onSnapshot is the single source of truth for shifts.
-      // Avoid forcing a second fetch that can overwrite state with a stale server view.
-      if (isUsingLocalFallback()) {
-        const freshShifts = await fetchShiftsOnce();
-        if (Array.isArray(freshShifts)) {
-          set({ shifts: freshShifts });
-        }
-      }
-
       if (trackUndo && createdShift?.id) {
         set({
           undoState: buildUndoState('add_shift', 'Η βάρδια ανατέθηκε.', { shiftId: createdShift.id }),
@@ -503,12 +492,6 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       await updateShift(shiftId, { date, startTime, endTime, label });
-      if (isUsingLocalFallback()) {
-        const freshShifts = await fetchShiftsOnce();
-        if (Array.isArray(freshShifts)) {
-          set({ shifts: freshShifts });
-        }
-      }
     } finally {
       set({ isSaving: false });
     }
@@ -545,13 +528,6 @@ export const useSchedulerStore = create((set, get) => ({
       set({ isSaving: false });
     }
     if (!removedShift) return;
-
-    if (isUsingLocalFallback()) {
-      const freshShifts = await fetchShiftsOnce();
-      if (Array.isArray(freshShifts)) {
-        set({ shifts: freshShifts });
-      }
-    }
 
     set({
       undoState: buildUndoState('delete_shift', 'Η βάρδια διαγράφηκε.', { shift: removedShift }),
@@ -626,12 +602,6 @@ export const useSchedulerStore = create((set, get) => ({
       undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
     });
 
-    if (isUsingLocalFallback()) {
-      const freshShifts = await fetchShiftsOnce();
-      if (Array.isArray(freshShifts)) {
-        set({ shifts: freshShifts });
-      }
-    }
   },
 
   clearDayShifts: async (date) => {
@@ -649,13 +619,6 @@ export const useSchedulerStore = create((set, get) => ({
       await removeShiftsByDates([date]);
       const templatesToRemove = get().shiftTemplates.filter((template) => template.isPlaced && template.date === date);
       await Promise.all(templatesToRemove.map((template) => removeShiftTemplate(template.id)));
-
-      if (isUsingLocalFallback()) {
-        const freshShifts = await fetchShiftsOnce();
-        if (Array.isArray(freshShifts)) {
-          set({ shifts: freshShifts });
-        }
-      }
 
       set({
         warningMessage: `Καθαρίστηκαν οι βάρδιες για ${date}.`,

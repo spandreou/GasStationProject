@@ -1,45 +1,33 @@
-import { initializeApp } from 'firebase/app';
+﻿import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-function readEnv(key) {
-  const viteKey = `VITE_${key}`;
-  return import.meta?.env?.[viteKey] || '';
-}
-
 const firebaseConfig = {
-  apiKey: readEnv('FIREBASE_API_KEY'),
-  authDomain: readEnv('FIREBASE_AUTH_DOMAIN'),
-  projectId: readEnv('FIREBASE_PROJECT_ID'),
-  storageBucket: readEnv('FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: readEnv('FIREBASE_MESSAGING_SENDER_ID'),
-  appId: readEnv('FIREBASE_APP_ID'),
-  measurementId: readEnv('FIREBASE_MEASUREMENT_ID'),
+  apiKey: 'AIzaSyCw-Sa1gQWq9QBc26lotaqlC1BIxAki6_M',
+  authDomain: 'gasstationproject-9dd89.firebaseapp.com',
+  projectId: 'gasstationproject-9dd89',
+  storageBucket: 'gasstationproject-9dd89.firebasestorage.app',
+  messagingSenderId: '978890379614',
+  appId: '1:978890379614:web:a69c92841c92dc2828bfcf',
+  measurementId: 'G-3D7H5K6CFX',
 };
 
-const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
-export const isFirebaseConfigured = requiredKeys.every((key) => Boolean(firebaseConfig[key]));
+export const isFirebaseConfigured = true;
 
-let app = null;
-let db = null;
-let auth = null;
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 let analytics = null;
 
-if (isFirebaseConfigured) {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-
-  if (typeof window !== 'undefined') {
-    isSupported()
-      .then((supported) => {
-        if (supported) {
-          analytics = getAnalytics(app);
-        }
-      })
-      .catch(() => {});
-  }
+if (typeof window !== 'undefined') {
+  isSupported()
+    .then((supported) => {
+      if (supported) {
+        analytics = getAnalytics(app);
+      }
+    })
+    .catch(() => {});
 }
 
 export { analytics, app, auth, db };

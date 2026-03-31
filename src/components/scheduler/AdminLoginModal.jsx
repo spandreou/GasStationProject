@@ -1,7 +1,7 @@
 ﻿import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
 import { useState } from 'react';
 
-const DEFAULT_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+const DEFAULT_EMAIL = 'admin@example.com';
 
 export default function AdminLoginModal({
   open,

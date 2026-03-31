@@ -8,7 +8,8 @@
 } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from './config';
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+const ADMIN_EMAIL = 'admin@example.com';
+const ADMIN_PASSWORD = 'admin123';
 
 export function subscribeAdminAuth(onUserChange, onError) {
   if (!isFirebaseConfigured || !auth) {
@@ -19,7 +20,7 @@ export function subscribeAdminAuth(onUserChange, onError) {
   return onAuthStateChanged(
     auth,
     (user) => {
-      const isAdminUser = Boolean(user && (!ADMIN_EMAIL || user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()));
+      const isAdminUser = Boolean(user && user.email?.toLowerCase() === ADMIN_EMAIL);
       onUserChange(isAdminUser ? user : null);
     },
     onError,
@@ -31,10 +32,14 @@ export async function signInAdmin({ email, password }) {
     throw new Error('Το Firebase Auth δεν είναι ρυθμισμένο.');
   }
 
+  if (email?.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    throw new Error('Μη έγκυρα στοιχεία διαχειριστή.');
+  }
+
   await setPersistence(auth, browserLocalPersistence);
   const credentials = await signInWithEmailAndPassword(auth, email, password);
 
-  if (ADMIN_EMAIL && credentials.user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (credentials.user.email?.toLowerCase() !== ADMIN_EMAIL) {
     await signOut(auth);
     throw new Error('Ο λογαριασμός δεν έχει δικαιώματα διαχειριστή.');
   }
@@ -59,7 +64,7 @@ export async function sendAdminPasswordResetEmail(email) {
     throw new Error('Συμπλήρωσε email για επαναφορά κωδικού.');
   }
 
-  if (ADMIN_EMAIL && email.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
     throw new Error('Η επαναφορά επιτρέπεται μόνο για το email διαχειριστή.');
   }
 

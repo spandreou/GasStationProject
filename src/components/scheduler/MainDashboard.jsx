@@ -52,6 +52,11 @@ export default function MainDashboard() {
     employees,
     shifts,
     shiftTemplates,
+    weekHistory,
+    weekTemplates,
+    selectedHistoryWeekId,
+    selectedTemplateId,
+    sundayRuleViolations,
     announcements,
     attendanceHistory,
     historyFilters,
@@ -78,6 +83,7 @@ export default function MainDashboard() {
     goToPreviousWeek,
     goToNextWeek,
     goToCurrentWeek,
+    setWeekFromDate,
     setWarningMessage,
     clearMessages,
     openLoginModal,
@@ -94,6 +100,12 @@ export default function MainDashboard() {
     deleteAnnouncement,
     deleteShiftTemplate,
     setHistoryFilters,
+    setSelectedHistoryWeekId,
+    setSelectedTemplateId,
+    loadSelectedHistoryWeekToGrid,
+    saveCurrentWeekAsTemplate,
+    loadSelectedTemplateIntoCurrentWeek,
+    generateMagicWeek,
     finalizeCurrentWeek,
   } = useSchedulerStore();
 
@@ -307,6 +319,8 @@ export default function MainDashboard() {
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
           onFinalizeWeek={finalizeCurrentWeek}
+          onMagicWand={generateMagicWeek}
+          onJumpToWeekDate={setWeekFromDate}
           onExportPdf={handleExportPdf}
           onExportExcel={handleExportExcel}
           onExportWord={handleExportWord}
@@ -379,6 +393,18 @@ export default function MainDashboard() {
                 shifts={weekShifts}
                 shiftTemplates={shiftTemplates}
                 employees={employees}
+                weekHistory={weekHistory}
+                weekTemplates={weekTemplates}
+                selectedHistoryWeekId={selectedHistoryWeekId}
+                selectedTemplateId={selectedTemplateId}
+                sundayRuleViolations={sundayRuleViolations}
+                onSelectHistoryWeek={setSelectedHistoryWeekId}
+                onLoadSelectedHistoryWeek={loadSelectedHistoryWeekToGrid}
+                onSaveAsTemplate={saveCurrentWeekAsTemplate}
+                onSelectTemplate={setSelectedTemplateId}
+                onLoadSelectedTemplate={loadSelectedTemplateIntoCurrentWeek}
+                onMagicWand={generateMagicWeek}
+                onJumpToWeekDate={setWeekFromDate}
                 onDeleteShift={deleteShift}
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onClearDayShifts={clearDayShifts}

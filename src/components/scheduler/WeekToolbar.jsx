@@ -13,6 +13,7 @@
   Menu,
   MoonStar,
   RefreshCw,
+  Sparkles,
   SunMedium,
   Trash2,
 } from 'lucide-react';
@@ -84,6 +85,8 @@ export default function WeekToolbar({
   onCopyWhatsapp,
   onClearWeek,
   onFinalizeWeek,
+  onMagicWand,
+  onJumpToWeekDate,
   onExportPdf,
   onExportExcel,
   onExportWord,
@@ -211,6 +214,23 @@ export default function WeekToolbar({
             <RefreshCw size={16} />
             Τρέχουσα
           </button>
+
+          <button
+            type="button"
+            onClick={onMagicWand}
+            disabled={!isAdmin}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+          >
+            <Sparkles size={16} />
+            Magic Wand
+          </button>
+
+          <input
+            type="date"
+            onChange={(event) => onJumpToWeekDate?.(event.target.value)}
+            className="input-glass rounded-lg border border-white/35 bg-white/40 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+            title="Μετάβαση σε εβδομάδα"
+          />
 
           <button
             type="button"

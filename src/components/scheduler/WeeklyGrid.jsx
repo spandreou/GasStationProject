@@ -58,6 +58,7 @@ function DayBox({
   dayTemplates,
   canManage,
   getEmployeeById,
+  getSundayViolationMessage,
   hasConflict,
   onDeleteShift,
   onDeleteShiftTemplate,
@@ -108,16 +109,25 @@ function DayBox({
           />
         ))}
 
-        {dayShifts.map((shift) => (
-          <AssignedShiftItem
-            key={shift.id}
-            shift={shift}
-            employee={getEmployeeById(shift.employeeId)}
-            hasConflict={hasConflict(shift)}
-            onDelete={onDeleteShift}
-            canManage={canManage}
-          />
-        ))}
+        {dayShifts.map((shift) => {
+          const sundayWarning = getSundayViolationMessage(shift.id);
+          return (
+            <div key={shift.id} className="space-y-1">
+              <AssignedShiftItem
+                shift={shift}
+                employee={getEmployeeById(shift.employeeId)}
+                hasConflict={hasConflict(shift)}
+                onDelete={onDeleteShift}
+                canManage={canManage}
+              />
+              {sundayWarning ? (
+                <p className="rounded border border-amber-300/60 bg-amber-50/70 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/10 dark:text-amber-200">
+                  {sundayWarning}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -128,6 +138,18 @@ export default function WeeklyGrid({
   shifts,
   shiftTemplates,
   employees,
+  weekHistory = [],
+  weekTemplates = [],
+  selectedHistoryWeekId = '',
+  selectedTemplateId = '',
+  sundayRuleViolations = {},
+  onSelectHistoryWeek,
+  onLoadSelectedHistoryWeek,
+  onSaveAsTemplate,
+  onSelectTemplate,
+  onLoadSelectedTemplate,
+  onMagicWand,
+  onJumpToWeekDate,
   onDeleteShift,
   onDeleteShiftTemplate,
   onClearDayShifts,
@@ -163,6 +185,10 @@ export default function WeeklyGrid({
 
   function getEmployeeById(employeeId) {
     return employeeById.get(employeeId);
+  }
+
+  function getSundayViolationMessage(shiftId) {
+    return sundayRuleViolations?.[shiftId] || '';
   }
 
   function hasConflict(shift) {
@@ -209,6 +235,75 @@ export default function WeeklyGrid({
             Saving...
           </div>
         ) : null}
+      </div>
+
+      <div className="mb-3 grid gap-2 md:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+            onChange={(event) => onJumpToWeekDate?.(event.target.value)}
+          />
+          <select
+            className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+            value={selectedHistoryWeekId}
+            onChange={(event) => onSelectHistoryWeek?.(event.target.value)}
+          >
+            <option value="">Ιστορικό εβδομάδων</option>
+            {weekHistory.map((item) => (
+              <option key={item.id} value={item.weekId}>
+                {item.weekStart} ({item.source || 'manual'})
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={onLoadSelectedHistoryWeek}
+            className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+          >
+            Φόρτωση Εβδομάδας
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <select
+            className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+            value={selectedTemplateId}
+            onChange={(event) => onSelectTemplate?.(event.target.value)}
+          >
+            <option value="">Templates</option>
+            {weekTemplates.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              const name = window.prompt('Όνομα template');
+              if (!name) return;
+              onSaveAsTemplate?.(name);
+            }}
+            className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+          >
+            Save as Template
+          </button>
+          <button
+            type="button"
+            onClick={onLoadSelectedTemplate}
+            className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+          >
+            Load Template
+          </button>
+          <button
+            type="button"
+            onClick={onMagicWand}
+            className="rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
+          >
+            ✨ Magic Wand
+          </button>
+        </div>
       </div>
 
       <div className="mb-3 flex items-center gap-2 md:hidden">
@@ -267,6 +362,7 @@ export default function WeeklyGrid({
                 dayTemplates={dayTemplates}
                 canManage={canManage}
                 getEmployeeById={getEmployeeById}
+                getSundayViolationMessage={getSundayViolationMessage}
                 hasConflict={hasConflict}
                 onDeleteShift={onDeleteShift}
                 onDeleteShiftTemplate={onDeleteShiftTemplate}

@@ -91,6 +91,10 @@ function createFileName(prefix, weekDays, extension) {
   return `${prefix}_${from}_${to}.${extension}`;
 }
 
+function buildWeekRangeLabel(weekDays) {
+  return `Πρόγραμμα: ${formatDateGreek(weekDays[0])} - ${formatDateGreek(weekDays[weekDays.length - 1])}`;
+}
+
 function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -132,8 +136,9 @@ export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-gr
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
+  const titleHeight = 30;
   const availableWidth = pageWidth - margin * 2;
-  const availableHeight = pageHeight - margin * 2;
+  const availableHeight = pageHeight - margin * 2 - titleHeight;
 
   let imageWidth = availableWidth;
   let imageHeight = (canvas.height * imageWidth) / canvas.width;
@@ -144,7 +149,11 @@ export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-gr
   }
 
   const x = (pageWidth - imageWidth) / 2;
-  const y = (pageHeight - imageHeight) / 2;
+  const y = margin + titleHeight + (availableHeight - imageHeight) / 2;
+
+  await setupGreekFont(doc);
+  doc.setFontSize(13);
+  doc.text(buildWeekRangeLabel(weekDays), margin, margin + 14);
 
   doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imageWidth, imageHeight, undefined, 'FAST');
   doc.save(createFileName('program_pdf', weekDays, 'pdf'));
@@ -154,6 +163,7 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   const XLSX = await loadXlsx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
+  const weekRangeLabel = buildWeekRangeLabel(weekDays);
 
   const rows = matrix.map((row) => {
     const entry = { Υπάλληλος: row.employeeName };
@@ -163,7 +173,9 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
     return entry;
   });
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const worksheet = XLSX.utils.json_to_sheet([]);
+  XLSX.utils.sheet_add_aoa(worksheet, [[weekRangeLabel], []], { origin: 'A1' });
+  XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A3' });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
@@ -205,7 +217,7 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
       {
         children: [
           new Paragraph({
-            text: `Πρόγραμμα εβδομάδας ${formatDateGreek(weekDays[0])} - ${formatDateGreek(weekDays[6])}`,
+            text: buildWeekRangeLabel(weekDays),
           }),
           new Paragraph(''),
           new Table({

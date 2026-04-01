@@ -8,19 +8,28 @@ import {
 } from '../firebase/authService';
 import {
   createAnnouncement,
+  createManyShifts,
   createEmployee,
   createShift,
   createShiftTemplate,
+  fetchLatestWeekSnapshotByWeekId,
   fetchAttendanceHistoryByMonth,
+  fetchShiftsByDates,
+  fetchWeekHistoryList,
+  fetchWeekTemplates,
   finalizeWeekAttendance,
+  hasConsecutiveSundayAssignment,
   isWeekFinalized,
   removeAnnouncement,
   removeEmployee,
   removeShift,
   removeShiftTemplate,
+  removeWeekShifts,
   removeShiftsByDates,
   removeShiftsByEmployee,
   restoreShift,
+  saveWeekHistorySnapshot,
+  saveWeekTemplate,
   subscribeEmployees,
   subscribeAnnouncements,
   subscribeShifts,
@@ -29,6 +38,11 @@ import {
   updateShift,
   updateShiftTemplate,
 } from '../firebase/schedulerService';
+import {
+  evaluateSundayRuleViolation,
+  generateSmartWeekSchedule,
+  getWeekIdFromWeekStart,
+} from '../utils/autoSchedulerService';
 import { hasTimeOverlap } from '../utils/overlap';
 import { getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
 import { getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
@@ -80,6 +94,11 @@ export const useSchedulerStore = create((set, get) => ({
   shiftTemplates: [],
   announcements: [],
   attendanceHistory: [],
+  weekHistory: [],
+  weekTemplates: [],
+  selectedHistoryWeekId: '',
+  selectedTemplateId: '',
+  sundayRuleViolations: {},
   historyFilters: {
     employeeId: '',
     yearMonth: getCurrentYearMonth(),
@@ -145,8 +164,10 @@ export const useSchedulerStore = create((set, get) => ({
         if (user) {
           await get().refreshWeekLockStatus();
           await get().loadAttendanceHistory();
+          await get().loadWeekHistory();
+          await get().loadWeekTemplates();
         } else {
-          set({ attendanceHistory: [] });
+          set({ attendanceHistory: [], weekHistory: [], weekTemplates: [] });
         }
       },
       () => set({ warningMessage: 'Αποτυχία ελέγχου σύνδεσης διαχειριστή.', isAuthLoading: false }),
@@ -202,6 +223,13 @@ export const useSchedulerStore = create((set, get) => ({
 
   setWeekStart: async (weekStart) => {
     set({ weekStart });
+    await get().refreshWeekLockStatus();
+  },
+
+  setWeekFromDate: async (dateValue) => {
+    if (!dateValue) return;
+    const monday = getMonday(new Date(`${dateValue}T00:00:00`));
+    set({ weekStart: getIsoDate(monday) });
     await get().refreshWeekLockStatus();
   },
 
@@ -454,6 +482,14 @@ export const useSchedulerStore = create((set, get) => ({
 
     try {
       parseShiftInput(startTime, endTime);
+      const sundayViolation = await evaluateSundayRuleViolation({
+        employeeId,
+        date,
+        startTime,
+        endTime,
+        hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+      });
+
       const isWork = type === SHIFT_TYPES.WORK;
       const conflict = isWork ? hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime }) : false;
 
@@ -474,10 +510,23 @@ export const useSchedulerStore = create((set, get) => ({
         });
       }
 
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
+
       if (conflict) {
         set({
           warningMessage: 'Προειδοποίηση: Υπάρχει χρονική επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
         });
+      }
+
+      if (sundayViolation.violated && createdShift?.id) {
+        set((state) => ({
+          sundayRuleViolations: {
+            ...state.sundayRuleViolations,
+            [createdShift.id]: sundayViolation.message,
+          },
+          warningMessage: sundayViolation.message,
+        }));
       }
 
       return createdShift;
@@ -504,6 +553,8 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       await updateShift(shiftId, { date, startTime, endTime, label });
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
     } finally {
       set({ isSaving: false });
     }
@@ -544,6 +595,8 @@ export const useSchedulerStore = create((set, get) => ({
     set({
       undoState: buildUndoState('delete_shift', 'Η βάρδια διαγράφηκε.', { shift: removedShift }),
     });
+    await get().saveCurrentWeekSnapshot('manual_save');
+    await get().loadWeekHistory();
   },
 
   finalizeCurrentWeek: async () => {
@@ -613,6 +666,8 @@ export const useSchedulerStore = create((set, get) => ({
       warningMessage: 'Οι βάρδιες της εβδομάδας διαγράφηκαν.',
       undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
     });
+    await get().saveCurrentWeekSnapshot('manual_save');
+    await get().loadWeekHistory();
 
   },
 
@@ -638,6 +693,144 @@ export const useSchedulerStore = create((set, get) => ({
     }
   },
 
+  loadWeekHistory: async () => {
+    if (!get().isAdmin) return;
+    try {
+      const weekHistory = await fetchWeekHistoryList(60);
+      set({ weekHistory });
+    } catch {
+      set({ warningMessage: 'Αποτυχία φόρτωσης ιστορικού εβδομάδων.' });
+    }
+  },
+
+  loadWeekTemplates: async () => {
+    if (!get().isAdmin) return;
+    try {
+      const weekTemplates = await fetchWeekTemplates();
+      set({ weekTemplates });
+    } catch {
+      set({ warningMessage: 'Αποτυχία φόρτωσης templates.' });
+    }
+  },
+
+  setSelectedHistoryWeekId: (selectedHistoryWeekId) => set({ selectedHistoryWeekId }),
+  setSelectedTemplateId: (selectedTemplateId) => set({ selectedTemplateId }),
+
+  saveCurrentWeekSnapshot: async (source = 'manual_save') => {
+    if (!get().isAdmin) return;
+    const weekStart = get().weekStart;
+    const weekDays = getWeekDays(weekStart);
+    const weekSet = new Set(weekDays);
+    const weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+
+    await saveWeekHistorySnapshot({
+      weekId: getWeekIdFromWeekStart(weekStart),
+      weekStart: weekDays[0],
+      weekEnd: weekDays[6],
+      source,
+      shifts: weekShifts.map((shift) => ({
+        employeeId: shift.employeeId,
+        date: shift.date,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        label: shift.label || '',
+        type: shift.type || SHIFT_TYPES.WORK,
+        notes: shift.notes || '',
+      })),
+      createdBy: get().adminUser?.email || '',
+    });
+  },
+
+  loadSelectedHistoryWeekToGrid: async () => {
+    if (!requireAdmin(get, set)) return;
+    const selectedWeekId = get().selectedHistoryWeekId;
+    if (!selectedWeekId) return;
+
+    const snapshot = await fetchLatestWeekSnapshotByWeekId(selectedWeekId);
+    if (!snapshot?.weekStart || !Array.isArray(snapshot.shifts)) {
+      set({ warningMessage: 'Δεν βρέθηκε αποθηκευμένη εβδομάδα για φόρτωση.' });
+      return;
+    }
+
+    const weekDays = getWeekDays(snapshot.weekStart);
+    set({ isSaving: true, weekStart: snapshot.weekStart });
+    try {
+      await removeWeekShifts(weekDays);
+      await createManyShifts(snapshot.shifts);
+      set({ warningMessage: 'Η εβδομάδα φορτώθηκε από το ιστορικό.' });
+      await get().refreshWeekLockStatus();
+      await get().saveCurrentWeekSnapshot('history_load');
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  saveCurrentWeekAsTemplate: async (name) => {
+    if (!requireAdmin(get, set)) return;
+    const templateName = (name || '').trim();
+    if (!templateName) {
+      set({ warningMessage: 'Δώσε όνομα template.' });
+      return;
+    }
+
+    const weekDays = getWeekDays(get().weekStart);
+    const weekSet = new Set(weekDays);
+    const weekShifts = get().shifts
+      .filter((shift) => weekSet.has(shift.date))
+      .map((shift) => ({
+        employeeId: shift.employeeId,
+        dateOffset: weekDays.indexOf(shift.date),
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        label: shift.label || '',
+        type: shift.type || SHIFT_TYPES.WORK,
+        notes: shift.notes || '',
+      }))
+      .filter((shift) => shift.dateOffset >= 0);
+
+    await saveWeekTemplate({
+      name: templateName,
+      weekStart: get().weekStart,
+      shifts: weekShifts,
+      createdBy: get().adminUser?.email || '',
+    });
+    set({ warningMessage: 'Το template αποθηκεύτηκε.' });
+    await get().loadWeekTemplates();
+  },
+
+  loadSelectedTemplateIntoCurrentWeek: async () => {
+    if (!requireAdmin(get, set)) return;
+    const templateId = get().selectedTemplateId;
+    if (!templateId) return;
+
+    const template = get().weekTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      set({ warningMessage: 'Δεν βρέθηκε template.' });
+      return;
+    }
+
+    const weekDays = getWeekDays(get().weekStart);
+    const shiftsToCreate = (template.shifts || []).map((shift) => ({
+      employeeId: shift.employeeId,
+      date: weekDays[shift.dateOffset] || weekDays[0],
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      label: shift.label || 'Template',
+      type: shift.type || SHIFT_TYPES.WORK,
+      notes: shift.notes || '',
+    }));
+
+    set({ isSaving: true });
+    try {
+      await removeWeekShifts(weekDays);
+      await createManyShifts(shiftsToCreate);
+      set({ warningMessage: 'Το template εφαρμόστηκε στην εβδομάδα.' });
+      await get().saveCurrentWeekSnapshot('template_load');
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
   deleteAnnouncement: async (announcementId) => {
     if (!requireAdmin(get, set)) return;
     if (!announcementId) return;
@@ -648,6 +841,38 @@ export const useSchedulerStore = create((set, get) => ({
       set({ warningMessage: 'Η ανακοίνωση διαγράφηκε.' });
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία διαγραφής ανακοίνωσης.' });
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  generateMagicWeek: async () => {
+    if (!requireAdmin(get, set)) return;
+    if (get().isWeekLocked) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return;
+    }
+
+    const weekDays = getWeekDays(get().weekStart);
+    set({ isSaving: true });
+    try {
+      const { shifts: generatedShifts, warnings } = await generateSmartWeekSchedule({
+        weekDays,
+        employees: get().employees,
+        allShifts: get().shifts,
+        hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+      });
+
+      await removeWeekShifts(weekDays);
+      await createManyShifts(generatedShifts);
+      await get().saveCurrentWeekSnapshot('magic_wand');
+      await get().loadWeekHistory();
+
+      if (warnings.length) {
+        set({ warningMessage: warnings.join(' | ') });
+      } else {
+        set({ warningMessage: 'Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand.' });
+      }
     } finally {
       set({ isSaving: false });
     }
@@ -673,6 +898,8 @@ export const useSchedulerStore = create((set, get) => ({
         warningMessage: `Καθαρίστηκαν οι βάρδιες για ${date}.`,
         shiftTemplates: get().shiftTemplates.filter((template) => !(template.isPlaced && template.date === date)),
       });
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
     } finally {
       set({ isSaving: false });
     }

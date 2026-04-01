@@ -22,6 +22,8 @@ const SHIFT_TEMPLATES_COLLECTION = 'shiftTemplates';
 const ATTENDANCE_HISTORY_COLLECTION = 'attendance_history';
 const WEEK_LOCKS_COLLECTION = 'week_locks';
 const ANNOUNCEMENTS_COLLECTION = 'announcements';
+const WEEK_HISTORY_COLLECTION = 'week_history';
+const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 
 const LOCAL_EMPLOYEES_KEY = 'gas-station-employees';
 const LOCAL_SHIFTS_KEY = 'gas-station-shifts';
@@ -542,4 +544,111 @@ export async function createAnnouncement(payload) {
 
 export async function removeAnnouncement(announcementId) {
   await withFirestoreWrite(() => deleteDoc(doc(db, ANNOUNCEMENTS_COLLECTION, announcementId)));
+}
+
+export async function fetchShiftsByDates(dates) {
+  const dateSet = new Set(dates || []);
+  if (!dateSet.size) return [];
+
+  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
+  return shiftsSnapshot.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .filter((item) => dateSet.has(item.date))
+    .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+}
+
+export async function hasConsecutiveSundayAssignment({ employeeId, previousSundayDate }) {
+  if (!employeeId || !previousSundayDate) return false;
+  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
+  return shiftsSnapshot.docs.some((item) => {
+    const shift = item.data();
+    return (
+      shift.employeeId === employeeId &&
+      shift.date === previousSundayDate &&
+      shift.startTime === '08:00' &&
+      shift.endTime === '20:00' &&
+      (shift.type || 'work') === 'work'
+    );
+  });
+}
+
+export async function saveWeekHistorySnapshot({ weekId, weekStart, weekEnd, source, shifts, createdBy = '' }) {
+  if (!weekId) throw new Error('Λείπει weekId για αποθήκευση ιστορικού.');
+
+  await withFirestoreWrite(() =>
+    addDoc(collection(db, WEEK_HISTORY_COLLECTION), {
+      weekId,
+      weekStart,
+      weekEnd,
+      source: source || 'manual',
+      shifts: Array.isArray(shifts) ? shifts : [],
+      createdBy,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+}
+
+export async function fetchWeekHistoryList(limit = 40) {
+  const historySnapshot = await getDocs(query(collection(db, WEEK_HISTORY_COLLECTION), orderBy('createdAt', 'desc')));
+  return historySnapshot.docs
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .slice(0, limit);
+}
+
+export async function fetchLatestWeekSnapshotByWeekId(weekId) {
+  if (!weekId) return null;
+  const historySnapshot = await getDocs(query(collection(db, WEEK_HISTORY_COLLECTION), where('weekId', '==', weekId)));
+  const entries = historySnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+  if (!entries.length) return null;
+  entries.sort((a, b) => {
+    const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+    const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
+  return entries[0];
+}
+
+export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = '' }) {
+  if (!name?.trim()) throw new Error('Δώσε όνομα template.');
+
+  const payload = {
+    name: name.trim(),
+    weekStart,
+    shifts: Array.isArray(shifts) ? shifts : [],
+    createdBy,
+  };
+
+  await withFirestoreWrite(() =>
+    addDoc(collection(db, WEEK_TEMPLATES_COLLECTION), {
+      ...payload,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+}
+
+export async function fetchWeekTemplates() {
+  const templatesSnapshot = await getDocs(query(collection(db, WEEK_TEMPLATES_COLLECTION), orderBy('updatedAt', 'desc')));
+  return templatesSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+export async function removeWeekShifts(weekDays) {
+  const existing = await fetchShiftsByDates(weekDays);
+  await Promise.all(existing.map((shift) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, shift.id)))));
+}
+
+export async function createManyShifts(shifts) {
+  if (!Array.isArray(shifts) || !shifts.length) return;
+  await Promise.all(
+    shifts.map((shift) =>
+      withFirestoreWrite(() =>
+        addDoc(collection(db, SHIFTS_COLLECTION), {
+          ...shift,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }),
+      ),
+    ),
+  );
 }

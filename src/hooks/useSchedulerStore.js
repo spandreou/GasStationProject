@@ -464,8 +464,12 @@ export const useSchedulerStore = create((set, get) => ({
     startTime,
     endTime,
     label,
+    shiftType = 'custom',
+    customLabel = '',
     type = SHIFT_TYPES.WORK,
     notes = '',
+    isHoliday = false,
+    specialDayLabel = '',
     trackUndo = false,
   }) => {
     if (!requireAdmin(get, set)) return null;
@@ -492,6 +496,12 @@ export const useSchedulerStore = create((set, get) => ({
 
       const isWork = type === SHIFT_TYPES.WORK;
       const conflict = isWork ? hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime }) : false;
+      if (conflict) {
+        set({
+          warningMessage: 'Αποτυχία αποθήκευσης: Υπάρχει επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
+        });
+        return null;
+      }
 
       set({ isSaving: true });
       const createdShift = await createShift({
@@ -502,6 +512,10 @@ export const useSchedulerStore = create((set, get) => ({
         type,
         label: label || 'Χειροκίνητη',
         notes,
+        shiftType,
+        customLabel: shiftType === 'custom' ? customLabel || label || 'Προσαρμοσμένη' : '',
+        isHoliday: Boolean(isHoliday),
+        specialDayLabel: specialDayLabel?.trim() || '',
       });
 
       if (trackUndo && createdShift?.id) {
@@ -512,12 +526,6 @@ export const useSchedulerStore = create((set, get) => ({
 
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();
-
-      if (conflict) {
-        set({
-          warningMessage: 'Προειδοποίηση: Υπάρχει χρονική επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
-        });
-      }
 
       if (sundayViolation.violated && createdShift?.id) {
         set((state) => ({
@@ -552,6 +560,21 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
+      parseShiftInput(startTime, endTime);
+      const isWork = (currentShift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK;
+      if (isWork) {
+        const conflict = hasTimeOverlap(get().shifts, {
+          id: shiftId,
+          employeeId: currentShift.employeeId,
+          date,
+          startTime,
+          endTime,
+        });
+        if (conflict) {
+          set({ warningMessage: 'Αποτυχία μετακίνησης: εντοπίστηκε επικάλυψη βάρδιας.' });
+          return;
+        }
+      }
       await updateShift(shiftId, { date, startTime, endTime, label });
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();

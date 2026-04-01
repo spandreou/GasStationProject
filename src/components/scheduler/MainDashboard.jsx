@@ -13,6 +13,7 @@ import {
   exportScheduleToPdf,
   exportScheduleToWord,
 } from '../../utils/exportService';
+import { getMonthDays } from '../../utils/scheduleUtils';
 import { getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AdminLoginModal from './AdminLoginModal';
@@ -32,6 +33,9 @@ export default function MainDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const [isManualSheetOpen, setIsManualSheetOpen] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState('week');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [quickAssignDraft, setQuickAssignDraft] = useState({
     open: false,
     employeeId: '',
@@ -122,11 +126,20 @@ export default function MainDashboard() {
 
   const weekDays = useMemo(() => getWeekDays(weekStart), [weekStart]);
   const weekSet = useMemo(() => new Set(weekDays), [weekDays]);
+  const monthInfo = useMemo(() => getMonthDays(selectedYear, selectedMonth), [selectedMonth, selectedYear]);
+  const monthDays = monthInfo.days;
+  const monthSet = useMemo(() => new Set(monthDays), [monthDays]);
 
   const weekShifts = useMemo(
     () => shifts.filter((shift) => weekSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, weekSet],
   );
+  const monthShifts = useMemo(
+    () => shifts.filter((shift) => monthSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
+    [shifts, monthSet],
+  );
+  const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
+  const visibleShifts = scheduleMode === 'month' ? monthShifts : weekShifts;
 
   const analytics = useMemo(
     () => calculateWeeklyTotals(weekShifts, employees, weekDays),
@@ -372,7 +385,7 @@ export default function MainDashboard() {
             </div>
 
             <div className="hidden md:block">
-              <ManualShiftForm employees={employees} weekDays={weekDays} onCreateShift={addShift} canManage={isAdmin} />
+              <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={addShift} canManage={isAdmin} />
             </div>
 
             {isAdmin ? (
@@ -390,14 +403,21 @@ export default function MainDashboard() {
             <div className="space-y-5 sm:space-y-4">
               <WeeklyGrid
                 weekDays={weekDays}
-                shifts={weekShifts}
+                monthDays={monthDays}
+                shifts={visibleShifts}
                 shiftTemplates={shiftTemplates}
                 employees={employees}
                 weekHistory={weekHistory}
                 weekTemplates={weekTemplates}
                 selectedHistoryWeekId={selectedHistoryWeekId}
                 selectedTemplateId={selectedTemplateId}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                scheduleMode={scheduleMode}
                 sundayRuleViolations={sundayRuleViolations}
+                onChangeScheduleMode={setScheduleMode}
+                onSelectMonth={setSelectedMonth}
+                onSelectYear={setSelectedYear}
                 onSelectHistoryWeek={setSelectedHistoryWeekId}
                 onLoadSelectedHistoryWeek={loadSelectedHistoryWeekToGrid}
                 onSaveAsTemplate={saveCurrentWeekAsTemplate}
@@ -493,7 +513,7 @@ export default function MainDashboard() {
             <div className="max-h-[78vh] overflow-y-auto pb-4">
               <ManualShiftForm
                 employees={employees}
-                weekDays={weekDays}
+                weekDays={visibleDays}
                 onCreateShift={async (payload) => {
                   await addShift(payload);
                   setIsManualSheetOpen(false);

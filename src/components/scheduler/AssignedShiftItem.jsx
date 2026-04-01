@@ -1,5 +1,6 @@
 ﻿import { X } from 'lucide-react';
 import { getShiftDurationHours, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
+import { getDurationLabel, getShiftTypeLabel as getScheduleShiftTypeLabel } from '../../utils/scheduleUtils';
 
 function getTypeClass(type) {
   switch (type) {
@@ -19,6 +20,8 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
   const type = shift.type || SHIFT_TYPES.WORK;
   const isWork = type === SHIFT_TYPES.WORK;
   const typeClass = getTypeClass(type);
+  const scheduleShiftLabel = getScheduleShiftTypeLabel(shift.shiftType || 'custom');
+  const customLabel = shift.shiftType === 'custom' ? shift.customLabel || shift.label : '';
 
   return (
     <article
@@ -46,10 +49,27 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
       </div>
 
       <p className="text-slate-700 dark:text-slate-200">{getShiftTypeLabel(type)}</p>
+      {isWork ? (
+        <p className="text-slate-700 dark:text-slate-200">
+          {scheduleShiftLabel}
+          {customLabel ? ` • ${customLabel}` : ''}
+        </p>
+      ) : null}
       <p className="text-slate-700 dark:text-slate-200">
         {shift.startTime} - {shift.endTime}
-        {isWork ? <span className="hidden sm:inline"> ({getShiftDurationHours(shift)} ώρες)</span> : <span className="hidden sm:inline"> (1 ημέρα)</span>}
+        {isWork ? (
+          <span className="hidden sm:inline"> ({getDurationLabel(shift.startTime, shift.endTime)} | {getShiftDurationHours(shift)} ώρες)</span>
+        ) : (
+          <span className="hidden sm:inline"> (1 ημέρα)</span>
+        )}
       </p>
+
+      {shift.notes ? <p className="mt-1 text-slate-700/90 dark:text-slate-300/90">Σημείωση: {shift.notes}</p> : null}
+      {shift.isHoliday ? (
+        <p className="mt-1 inline-flex rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/20 dark:text-amber-100">
+          {shift.specialDayLabel?.trim() ? `Ειδικό Ωράριο: ${shift.specialDayLabel}` : 'Αργία'}
+        </p>
+      ) : null}
 
       {hasConflict && isWork ? (
         <p className="mt-1 hidden font-medium text-red-700 sm:block dark:text-red-300">Επικάλυψη με άλλη βάρδια</p>
@@ -57,3 +77,4 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
     </article>
   );
 }
+

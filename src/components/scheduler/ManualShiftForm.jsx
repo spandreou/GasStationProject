@@ -1,21 +1,26 @@
-﻿import { useEffect, useState } from 'react';
-import { SHIFT_PRESETS } from '../../data/constants';
-import { SHIFT_TYPES, getShiftTypeLabel } from '../../utils/analytics';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { SHIFT_PRESETS, SHIFT_TYPE_OPTIONS } from '../../data/constants';
+import { SHIFT_TYPES } from '../../utils/analytics';
 
 const initialManualState = {
   employeeId: '',
   date: '',
+  shiftType: 'intermediate',
+  customLabel: '',
   startTime: '10:00',
   endTime: '18:00',
   type: SHIFT_TYPES.WORK,
   notes: '',
+  isHoliday: false,
+  specialDayLabel: '',
 };
 
 export default function ManualShiftForm({ employees, weekDays, onCreateShift, canManage }) {
+  const availableDays = weekDays || [];
   const [form, setForm] = useState({
     ...initialManualState,
     employeeId: employees[0]?.id || '',
-    date: weekDays[0] || '',
+    date: availableDays[0] || '',
   });
 
   const hasEmployees = employees.length > 0;
@@ -26,24 +31,40 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
       employeeId: employees.some((employee) => employee.id === prev.employeeId)
         ? prev.employeeId
         : employees[0]?.id || '',
-      date: weekDays.includes(prev.date) ? prev.date : weekDays[0] || '',
+      date: availableDays.includes(prev.date) ? prev.date : availableDays[0] || '',
     }));
-  }, [employees, weekDays]);
+  }, [employees, availableDays]);
+
+  const shiftTypeLabel = useMemo(() => {
+    return SHIFT_TYPE_OPTIONS.find((item) => item.value === form.shiftType)?.label || 'Προσαρμοσμένη';
+  }, [form.shiftType]);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    await onCreateShift({ ...form, label: getShiftTypeLabel(form.type) });
-    setForm((prev) => ({ ...prev, notes: '' }));
+    await onCreateShift({
+      ...form,
+      label: form.shiftType === 'custom' ? form.customLabel || 'Προσαρμοσμένη' : shiftTypeLabel,
+      shiftType: form.shiftType,
+    });
+    setForm((prev) => ({ ...prev, notes: '', specialDayLabel: '', customLabel: prev.shiftType === 'custom' ? prev.customLabel : '' }));
   }
 
   function applyPreset(preset) {
-    setForm((prev) => ({ ...prev, startTime: preset.startTime, endTime: preset.endTime, label: preset.label }));
+    setForm((prev) => ({
+      ...prev,
+      shiftType: preset.shiftType,
+      startTime: preset.startTime,
+      endTime: preset.endTime,
+      customLabel: preset.shiftType === 'custom' ? prev.customLabel : '',
+    }));
   }
 
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
       <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Χειροκίνητη Βάρδια</h2>
-      <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">Ορισμός βάρδιας και τύπου (εργασία ή απουσία).</p>
+      <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">
+        Παραμετροποίηση βάρδιας: τύπος, ώρες, ειδικό ωράριο, σημειώσεις.
+      </p>
 
       <div className="mb-3 flex flex-wrap gap-2">
         {SHIFT_PRESETS.map((preset) => (
@@ -54,7 +75,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             className="rounded-lg border border-brand-200/70 bg-brand-50/85 px-2 py-1 text-[11px] font-semibold text-brand-800 sm:text-xs backdrop-blur-sm hover:bg-brand-100 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100 dark:hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!canManage}
           >
-            Preset: {preset.startTime}-{preset.endTime}
+            {preset.label}: {preset.startTime}-{preset.endTime}
           </button>
         ))}
       </div>
@@ -86,7 +107,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             required
             disabled={!canManage}
           >
-            {weekDays.map((day) => (
+            {availableDays.map((day) => (
               <option key={day} value={day}>
                 {day}
               </option>
@@ -94,8 +115,25 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           </select>
         </label>
 
-        <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
+        <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Τύπος Βάρδιας
+          <select
+            className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+            value={form.shiftType}
+            onChange={(event) => setForm((prev) => ({ ...prev, shiftType: event.target.value }))}
+            required
+            disabled={!canManage}
+          >
+            {SHIFT_TYPE_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          Κατηγορία Παρουσίας
           <select
             className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.type}
@@ -109,6 +147,20 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
           </select>
         </label>
+
+        {form.shiftType === 'custom' ? (
+          <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
+            Custom Label
+            <input
+              className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+              placeholder="π.χ. Εκπαίδευση / Inventory"
+              value={form.customLabel}
+              onChange={(event) => setForm((prev) => ({ ...prev, customLabel: event.target.value }))}
+              disabled={!canManage}
+              required
+            />
+          </label>
+        ) : null}
 
         <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
           Ώρα Έναρξης
@@ -133,6 +185,29 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             disabled={!canManage}
           />
         </label>
+
+        <label className="md:col-span-2 inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/40 px-3 py-2 text-sm text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-100">
+          <input
+            type="checkbox"
+            checked={form.isHoliday}
+            onChange={(event) => setForm((prev) => ({ ...prev, isHoliday: event.target.checked }))}
+            disabled={!canManage}
+          />
+          Αργία / Ειδικό Ωράριο
+        </label>
+
+        {form.isHoliday ? (
+          <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
+            Περιγραφή Ειδικής Ημέρας
+            <input
+              className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
+              placeholder="π.χ. Ειδικό Ωράριο 08:00-20:00"
+              value={form.specialDayLabel}
+              onChange={(event) => setForm((prev) => ({ ...prev, specialDayLabel: event.target.value }))}
+              disabled={!canManage}
+            />
+          </label>
+        ) : null}
 
         <label className="text-sm font-medium text-slate-900 md:col-span-2 dark:text-slate-100">
           Σημειώσεις

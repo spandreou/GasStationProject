@@ -21,6 +21,7 @@ const SHIFTS_COLLECTION = 'shifts';
 const SHIFT_TEMPLATES_COLLECTION = 'shiftTemplates';
 const ATTENDANCE_HISTORY_COLLECTION = 'attendance_history';
 const WEEK_LOCKS_COLLECTION = 'week_locks';
+const ANNOUNCEMENTS_COLLECTION = 'announcements';
 
 const LOCAL_EMPLOYEES_KEY = 'gas-station-employees';
 const LOCAL_SHIFTS_KEY = 'gas-station-shifts';
@@ -513,4 +514,32 @@ export async function fetchShiftsOnce() {
   } catch (error) {
     handleFirestoreFailure(error);
   }
+}
+
+export function subscribeAnnouncements(onData, onError) {
+  const announcementsQuery = query(collection(db, ANNOUNCEMENTS_COLLECTION), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    announcementsQuery,
+    (snapshot) => {
+      const announcements = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      onData(announcements);
+    },
+    onError,
+  );
+}
+
+export async function createAnnouncement(payload) {
+  const docRef = await withFirestoreWrite(() =>
+    addDoc(collection(db, ANNOUNCEMENTS_COLLECTION), {
+      ...payload,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+
+  return { id: docRef.id, ...payload };
+}
+
+export async function removeAnnouncement(announcementId) {
+  await withFirestoreWrite(() => deleteDoc(doc(db, ANNOUNCEMENTS_COLLECTION, announcementId)));
 }

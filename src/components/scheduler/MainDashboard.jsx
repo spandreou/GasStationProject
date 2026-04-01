@@ -16,6 +16,7 @@ import {
 import { getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AdminLoginModal from './AdminLoginModal';
+import AnnouncementBoard from './AnnouncementBoard';
 import AnalyticsPanel from './AnalyticsPanel';
 import EmployeeProfileModal from './EmployeeProfileModal';
 import EmployeeSidebar from './EmployeeSidebar';
@@ -51,6 +52,7 @@ export default function MainDashboard() {
     employees,
     shifts,
     shiftTemplates,
+    announcements,
     attendanceHistory,
     historyFilters,
     isHistoryLoading,
@@ -86,8 +88,10 @@ export default function MainDashboard() {
     undoLastAction,
     dismissUndo,
     addShiftTemplate,
+    addAnnouncement,
     placeShiftTemplate,
     assignShiftFromTemplate,
+    deleteAnnouncement,
     deleteShiftTemplate,
     setHistoryFilters,
     finalizeCurrentWeek,
@@ -369,17 +373,26 @@ export default function MainDashboard() {
           </div>
 
           <div className="order-1 md:order-2">
-            <WeeklyGrid
-              weekDays={weekDays}
-              shifts={weekShifts}
-              shiftTemplates={shiftTemplates}
-              employees={employees}
-              onDeleteShift={deleteShift}
-              onDeleteShiftTemplate={deleteShiftTemplate}
-              onClearDayShifts={clearDayShifts}
-              canManage={isAdmin}
-              isSaving={isSaving}
-            />
+            <div className="space-y-5 sm:space-y-4">
+              <WeeklyGrid
+                weekDays={weekDays}
+                shifts={weekShifts}
+                shiftTemplates={shiftTemplates}
+                employees={employees}
+                onDeleteShift={deleteShift}
+                onDeleteShiftTemplate={deleteShiftTemplate}
+                onClearDayShifts={clearDayShifts}
+                canManage={isAdmin}
+                isSaving={isSaving}
+              />
+              <AnnouncementBoard
+                announcements={announcements}
+                isAdmin={isAdmin}
+                isSaving={isSaving}
+                onAddAnnouncement={addAnnouncement}
+                onDeleteAnnouncement={deleteAnnouncement}
+              />
+            </div>
           </div>
         </div>
 

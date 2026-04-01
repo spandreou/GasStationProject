@@ -7,12 +7,14 @@ import {
   subscribeAdminAuth,
 } from '../firebase/authService';
 import {
+  createAnnouncement,
   createEmployee,
   createShift,
   createShiftTemplate,
   fetchAttendanceHistoryByMonth,
   finalizeWeekAttendance,
   isWeekFinalized,
+  removeAnnouncement,
   removeEmployee,
   removeShift,
   removeShiftTemplate,
@@ -20,6 +22,7 @@ import {
   removeShiftsByEmployee,
   restoreShift,
   subscribeEmployees,
+  subscribeAnnouncements,
   subscribeShifts,
   subscribeShiftTemplates,
   updateEmployee,
@@ -75,6 +78,7 @@ export const useSchedulerStore = create((set, get) => ({
   employees: [],
   shifts: [],
   shiftTemplates: [],
+  announcements: [],
   attendanceHistory: [],
   historyFilters: {
     employeeId: '',
@@ -96,6 +100,7 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeEmployees: null,
   _unsubscribeShifts: null,
   _unsubscribeTemplates: null,
+  _unsubscribeAnnouncements: null,
   _unsubscribeAuth: null,
 
   initializeData: () => {
@@ -123,6 +128,11 @@ export const useSchedulerStore = create((set, get) => ({
       () => set({ errorMessage: 'Αποτυχία φόρτωσης custom βαρδιών.' }),
     );
 
+    const unsubscribeAnnouncements = subscribeAnnouncements(
+      (announcements) => set({ announcements }),
+      () => set({ errorMessage: 'Αποτυχία φόρτωσης ανακοινώσεων.' }),
+    );
+
     const unsubscribeAuth = subscribeAdminAuth(
       async (user) => {
         set({
@@ -146,15 +156,17 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeEmployees: unsubscribeEmployees,
       _unsubscribeShifts: unsubscribeShifts,
       _unsubscribeTemplates: unsubscribeTemplates,
+      _unsubscribeAnnouncements: unsubscribeAnnouncements,
       _unsubscribeAuth: unsubscribeAuth,
     });
   },
 
   cleanupData: () => {
-    const { _unsubscribeEmployees, _unsubscribeShifts, _unsubscribeTemplates, _unsubscribeAuth } = get();
+    const { _unsubscribeEmployees, _unsubscribeShifts, _unsubscribeTemplates, _unsubscribeAnnouncements, _unsubscribeAuth } = get();
     _unsubscribeEmployees?.();
     _unsubscribeShifts?.();
     _unsubscribeTemplates?.();
+    _unsubscribeAnnouncements?.();
     _unsubscribeAuth?.();
   },
 
@@ -602,6 +614,43 @@ export const useSchedulerStore = create((set, get) => ({
       undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
     });
 
+  },
+
+  addAnnouncement: async ({ title, body }) => {
+    if (!requireAdmin(get, set)) return;
+    if (!title?.trim() || !body?.trim()) {
+      set({ warningMessage: 'Συμπλήρωσε τίτλο και περιεχόμενο ανακοίνωσης.' });
+      return;
+    }
+
+    set({ isSaving: true });
+    try {
+      await createAnnouncement({
+        title: title.trim(),
+        body: body.trim(),
+        authorEmail: get().adminUser?.email || '',
+      });
+      set({ warningMessage: 'Η ανακοίνωση δημοσιεύτηκε.' });
+    } catch (error) {
+      set({ warningMessage: error.message || 'Αποτυχία δημοσίευσης ανακοίνωσης.' });
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  deleteAnnouncement: async (announcementId) => {
+    if (!requireAdmin(get, set)) return;
+    if (!announcementId) return;
+
+    set({ isSaving: true });
+    try {
+      await removeAnnouncement(announcementId);
+      set({ warningMessage: 'Η ανακοίνωση διαγράφηκε.' });
+    } catch (error) {
+      set({ warningMessage: error.message || 'Αποτυχία διαγραφής ανακοίνωσης.' });
+    } finally {
+      set({ isSaving: false });
+    }
   },
 
   clearDayShifts: async (date) => {

@@ -12,6 +12,7 @@ const initialManualState = {
   type: SHIFT_TYPES.WORK,
   notes: '',
   isHoliday: false,
+  isSpecialDay: false,
   specialDayLabel: '',
 };
 
@@ -193,10 +194,20 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             onChange={(event) => setForm((prev) => ({ ...prev, isHoliday: event.target.checked }))}
             disabled={!canManage}
           />
-          Αργία / Ειδικό Ωράριο
+          Αργία
         </label>
 
-        {form.isHoliday ? (
+        <label className="md:col-span-2 inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/40 px-3 py-2 text-sm text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-100">
+          <input
+            type="checkbox"
+            checked={form.isSpecialDay}
+            onChange={(event) => setForm((prev) => ({ ...prev, isSpecialDay: event.target.checked }))}
+            disabled={!canManage}
+          />
+          Ειδικό Ωράριο
+        </label>
+
+        {form.isHoliday || form.isSpecialDay ? (
           <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
             Περιγραφή Ειδικής Ημέρας
             <input

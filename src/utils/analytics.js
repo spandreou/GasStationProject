@@ -1,4 +1,5 @@
-﻿import { calculateShiftDurationMinutes, minutesToHours } from './time';
+﻿import { inferShiftType } from './scheduleUtils';
+import { calculateShiftDurationMinutes, minutesToHours } from './time';
 
 export const SHIFT_TYPES = {
   WORK: 'work',
@@ -37,6 +38,21 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     return acc;
   }, {});
 
+  const shiftsCountByEmployee = employees.reduce((acc, employee) => {
+    acc[employee.id] = 0;
+    return acc;
+  }, {});
+
+  const workBreakdownByEmployee = employees.reduce((acc, employee) => {
+    acc[employee.id] = {
+      morning: 0,
+      intermediate: 0,
+      evening: 0,
+      custom: 0,
+    };
+    return acc;
+  }, {});
+
   const leaveDaysByEmployee = employees.reduce((acc, employee) => {
     acc[employee.id] = {
       restDays: 0,
@@ -56,6 +72,15 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     if (type === SHIFT_TYPES.WORK) {
       const shiftHours = getShiftDurationHours(shift);
       totalsByEmployee[shift.employeeId] = (totalsByEmployee[shift.employeeId] || 0) + shiftHours;
+      shiftsCountByEmployee[shift.employeeId] = (shiftsCountByEmployee[shift.employeeId] || 0) + 1;
+
+      const scheduleType = inferShiftType(shift);
+      if (!workBreakdownByEmployee[shift.employeeId]) {
+        workBreakdownByEmployee[shift.employeeId] = { morning: 0, intermediate: 0, evening: 0, custom: 0 };
+      }
+      workBreakdownByEmployee[shift.employeeId][scheduleType] =
+        (workBreakdownByEmployee[shift.employeeId][scheduleType] || 0) + 1;
+
       totalHours += shiftHours;
       return;
     }
@@ -84,6 +109,8 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
         Math.round(hours * 100) / 100,
       ]),
     ),
+    shiftsCountByEmployee,
+    workBreakdownByEmployee,
     leaveDaysByEmployee,
     totalsByType,
   };

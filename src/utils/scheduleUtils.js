@@ -2,7 +2,7 @@
 import { getIsoDate } from './time';
 
 /**
- * @typedef {'morning' | 'intermediate' | 'night' | 'custom'} ShiftType
+ * @typedef {'morning' | 'intermediate' | 'evening' | 'custom' | 'off'} ShiftType
  */
 
 /**
@@ -11,11 +11,13 @@ import { getIsoDate } from './time';
  * @property {string} employeeId
  * @property {string} [employeeName]
  * @property {string} date
- * @property {ShiftType} [shiftType]
+ * @property {ShiftType | 'night'} [shiftType]
  * @property {string} startTime
  * @property {string} endTime
  * @property {string} [notes]
  * @property {boolean} [isHoliday]
+ * @property {boolean} [isSpecialDay]
+ * @property {boolean} [isManualOverride]
  * @property {string} [customLabel]
  * @property {string} [specialDayLabel]
  */
@@ -23,24 +25,37 @@ import { getIsoDate } from './time';
 export const SHIFT_TYPE_ORDER = {
   morning: 0,
   intermediate: 1,
-  night: 2,
+  evening: 2,
   custom: 3,
+  off: 4,
 };
 
+export function toCanonicalShiftType(value) {
+  if (value === 'night') return 'evening';
+  if (SHIFT_TYPE_ORDER[value] !== undefined) return value;
+  return 'custom';
+}
+
 export function getShiftTypeLabel(shiftType) {
-  return SHIFT_TYPE_OPTIONS.find((item) => item.value === shiftType)?.label || 'Προσαρμοσμένη';
+  const normalized = toCanonicalShiftType(shiftType);
+  return SHIFT_TYPE_OPTIONS.find((item) => item.value === normalized)?.label || 'Προσαρμοσμένη';
 }
 
 export function inferShiftType(entry) {
-  if (entry?.shiftType && SHIFT_TYPE_ORDER[entry.shiftType] !== undefined) {
-    return entry.shiftType;
+  const normalized = toCanonicalShiftType(entry?.shiftType);
+  if (normalized !== 'custom' || entry?.shiftType === 'custom') {
+    return normalized;
   }
 
   const start = entry?.startTime || '';
   if (start >= '05:00' && start < '09:00') return 'morning';
   if (start >= '09:00' && start < '14:00') return 'intermediate';
-  if (start >= '14:00' && start <= '23:59') return 'night';
+  if (start >= '14:00' && start <= '23:59') return 'evening';
   return 'custom';
+}
+
+export function inferShiftTypeFromTimes(startTime, endTime) {
+  return inferShiftType({ startTime, endTime });
 }
 
 export function compareShiftsByScheduleOrder(a, b) {
@@ -71,6 +86,14 @@ export function getWeekDaysFromDate(dateValue) {
     current.setDate(date.getDate() + index);
     return getIsoDate(current);
   });
+}
+
+export function getWeekStartFromDate(dateValue) {
+  return getWeekDaysFromDate(dateValue)[0] || '';
+}
+
+export function getDateWeekKey(dateValue) {
+  return `week_${getWeekStartFromDate(dateValue)}`;
 }
 
 export function getMonthDays(year, monthIndex) {

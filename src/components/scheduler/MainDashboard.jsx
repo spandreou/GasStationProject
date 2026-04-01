@@ -36,6 +36,11 @@ export default function MainDashboard() {
   const [scheduleMode, setScheduleMode] = useState('week');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [monthlyRoleConfig, setMonthlyRoleConfig] = useState({
+    coreAId: '',
+    coreBId: '',
+    intermediateId: '',
+  });
   const [quickAssignDraft, setQuickAssignDraft] = useState({
     open: false,
     employeeId: '',
@@ -110,6 +115,7 @@ export default function MainDashboard() {
     saveCurrentWeekAsTemplate,
     loadSelectedTemplateIntoCurrentWeek,
     generateMagicWeek,
+    generateMagicMonth,
     finalizeCurrentWeek,
   } = useSchedulerStore();
 
@@ -145,6 +151,34 @@ export default function MainDashboard() {
     () => calculateWeeklyTotals(weekShifts, employees, weekDays),
     [weekShifts, employees, weekDays],
   );
+
+  useEffect(() => {
+    const activeEmployees = employees
+      .filter((employee) => employee?.isActive !== false)
+      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', 'el'));
+
+    setMonthlyRoleConfig((prev) => {
+      const validPrevCoreA = activeEmployees.some((item) => item.id === prev.coreAId) ? prev.coreAId : '';
+      const coreAId = validPrevCoreA || activeEmployees[0]?.id || '';
+
+      const validPrevCoreB =
+        activeEmployees.some((item) => item.id === prev.coreBId) && prev.coreBId !== coreAId ? prev.coreBId : '';
+      const coreBId = validPrevCoreB || activeEmployees.find((item) => item.id !== coreAId)?.id || '';
+
+      const validPrevIntermediate =
+        activeEmployees.some((item) => item.id === prev.intermediateId) &&
+        prev.intermediateId !== coreAId &&
+        prev.intermediateId !== coreBId
+          ? prev.intermediateId
+          : '';
+      const intermediateId =
+        validPrevIntermediate ||
+        activeEmployees.find((item) => item.id !== coreAId && item.id !== coreBId)?.id ||
+        '';
+
+      return { coreAId, coreBId, intermediateId };
+    });
+  }, [employees]);
 
   async function handleDragEnd(event) {
     const { active, over } = event;
@@ -312,6 +346,19 @@ export default function MainDashboard() {
     }
   }
 
+  async function handleGenerateMonthlySchedule() {
+    await generateMagicMonth({
+      month: selectedMonth,
+      year: selectedYear,
+      roleConfig: monthlyRoleConfig,
+      rules: {
+        weeklyRotationEnabled: true,
+        avoidConsecutiveSundays: true,
+        allowManualOverride: true,
+      },
+    });
+  }
+
   if (isLoading || isAuthLoading) {
     return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
@@ -388,15 +435,15 @@ export default function MainDashboard() {
               <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={addShift} canManage={isAdmin} />
             </div>
 
-            {isAdmin ? (
-              <AnalyticsPanel
-                employees={employees}
-                totalsByEmployee={analytics.totalsByEmployee}
-                totalHours={analytics.totalHours}
-                leaveDaysByEmployee={analytics.leaveDaysByEmployee}
-                totalsByType={analytics.totalsByType}
-              />
-            ) : null}
+            <AnalyticsPanel
+              employees={employees}
+              totalsByEmployee={analytics.totalsByEmployee}
+              totalHours={analytics.totalHours}
+              leaveDaysByEmployee={analytics.leaveDaysByEmployee}
+              totalsByType={analytics.totalsByType}
+              shiftsCountByEmployee={analytics.shiftsCountByEmployee}
+              workBreakdownByEmployee={analytics.workBreakdownByEmployee}
+            />
           </div>
 
           <div className="order-1 md:order-2">
@@ -414,16 +461,19 @@ export default function MainDashboard() {
                 selectedMonth={selectedMonth}
                 selectedYear={selectedYear}
                 scheduleMode={scheduleMode}
+                monthlyRoleConfig={monthlyRoleConfig}
                 sundayRuleViolations={sundayRuleViolations}
                 onChangeScheduleMode={setScheduleMode}
                 onSelectMonth={setSelectedMonth}
                 onSelectYear={setSelectedYear}
+                onChangeMonthlyRoleConfig={setMonthlyRoleConfig}
                 onSelectHistoryWeek={setSelectedHistoryWeekId}
                 onLoadSelectedHistoryWeek={loadSelectedHistoryWeekToGrid}
                 onSaveAsTemplate={saveCurrentWeekAsTemplate}
                 onSelectTemplate={setSelectedTemplateId}
                 onLoadSelectedTemplate={loadSelectedTemplateIntoCurrentWeek}
                 onMagicWand={generateMagicWeek}
+                onGenerateMonthlySchedule={handleGenerateMonthlySchedule}
                 onJumpToWeekDate={setWeekFromDate}
                 onDeleteShift={deleteShift}
                 onDeleteShiftTemplate={deleteShiftTemplate}

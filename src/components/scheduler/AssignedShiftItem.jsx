@@ -65,9 +65,13 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
       </p>
 
       {shift.notes ? <p className="mt-1 text-slate-700/90 dark:text-slate-300/90">Σημείωση: {shift.notes}</p> : null}
-      {shift.isHoliday ? (
+      {shift.isHoliday || shift.isSpecialDay ? (
         <p className="mt-1 inline-flex rounded-full border border-amber-300/70 bg-amber-100/80 px-2 py-0.5 text-[10px] font-semibold text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/20 dark:text-amber-100">
-          {shift.specialDayLabel?.trim() ? `Ειδικό Ωράριο: ${shift.specialDayLabel}` : 'Αργία'}
+          {shift.specialDayLabel?.trim()
+            ? `Ειδικό Ωράριο: ${shift.specialDayLabel}`
+            : shift.isHoliday
+              ? 'Αργία'
+              : 'Ειδικό Ωράριο'}
         </p>
       ) : null}
 

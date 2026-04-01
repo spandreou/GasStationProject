@@ -40,11 +40,13 @@ import {
 } from '../firebase/schedulerService';
 import {
   evaluateSundayRuleViolation,
+  generateSmartMonthSchedule,
   generateSmartWeekSchedule,
   getWeekIdFromWeekStart,
 } from '../utils/autoSchedulerService';
 import { hasTimeOverlap } from '../utils/overlap';
 import { getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
+import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
 import { getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 
 function getCurrentWeekStart() {
@@ -54,6 +56,11 @@ function getCurrentWeekStart() {
 function getCurrentYearMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getMonthDateSet(year, month) {
+  const { days } = getMonthDays(year, month);
+  return new Set(days);
 }
 
 function parseShiftInput(startTime, endTime) {
@@ -464,12 +471,14 @@ export const useSchedulerStore = create((set, get) => ({
     startTime,
     endTime,
     label,
-    shiftType = 'custom',
+    shiftType = '',
     customLabel = '',
     type = SHIFT_TYPES.WORK,
     notes = '',
     isHoliday = false,
+    isSpecialDay = false,
     specialDayLabel = '',
+    isManualOverride = true,
     trackUndo = false,
   }) => {
     if (!requireAdmin(get, set)) return null;
@@ -504,6 +513,7 @@ export const useSchedulerStore = create((set, get) => ({
       }
 
       set({ isSaving: true });
+      const normalizedShiftType = shiftType || inferShiftTypeFromTimes(startTime, endTime);
       const createdShift = await createShift({
         employeeId,
         date,
@@ -512,10 +522,12 @@ export const useSchedulerStore = create((set, get) => ({
         type,
         label: label || 'Χειροκίνητη',
         notes,
-        shiftType,
-        customLabel: shiftType === 'custom' ? customLabel || label || 'Προσαρμοσμένη' : '',
+        shiftType: normalizedShiftType,
+        customLabel: normalizedShiftType === 'custom' ? customLabel || label || 'Προσαρμοσμένη' : '',
         isHoliday: Boolean(isHoliday),
+        isSpecialDay: Boolean(isSpecialDay || isHoliday),
         specialDayLabel: specialDayLabel?.trim() || '',
+        isManualOverride: Boolean(isManualOverride),
       });
 
       if (trackUndo && createdShift?.id) {
@@ -575,7 +587,14 @@ export const useSchedulerStore = create((set, get) => ({
           return;
         }
       }
-      await updateShift(shiftId, { date, startTime, endTime, label });
+      await updateShift(shiftId, {
+        date,
+        startTime,
+        endTime,
+        label,
+        shiftType: currentShift.shiftType || inferShiftTypeFromTimes(startTime, endTime),
+        isManualOverride: true,
+      });
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();
     } finally {
@@ -759,6 +778,12 @@ export const useSchedulerStore = create((set, get) => ({
         label: shift.label || '',
         type: shift.type || SHIFT_TYPES.WORK,
         notes: shift.notes || '',
+        shiftType: shift.shiftType || inferShiftTypeFromTimes(shift.startTime, shift.endTime),
+        customLabel: shift.customLabel || '',
+        isHoliday: Boolean(shift.isHoliday),
+        isSpecialDay: Boolean(shift.isSpecialDay),
+        specialDayLabel: shift.specialDayLabel || '',
+        isManualOverride: Boolean(shift.isManualOverride),
       })),
       createdBy: get().adminUser?.email || '',
     });
@@ -808,6 +833,11 @@ export const useSchedulerStore = create((set, get) => ({
         label: shift.label || '',
         type: shift.type || SHIFT_TYPES.WORK,
         notes: shift.notes || '',
+        shiftType: shift.shiftType || inferShiftTypeFromTimes(shift.startTime, shift.endTime),
+        customLabel: shift.customLabel || '',
+        isHoliday: Boolean(shift.isHoliday),
+        isSpecialDay: Boolean(shift.isSpecialDay),
+        specialDayLabel: shift.specialDayLabel || '',
       }))
       .filter((shift) => shift.dateOffset >= 0);
 
@@ -841,6 +871,12 @@ export const useSchedulerStore = create((set, get) => ({
       label: shift.label || 'Template',
       type: shift.type || SHIFT_TYPES.WORK,
       notes: shift.notes || '',
+      shiftType: shift.shiftType || inferShiftTypeFromTimes(shift.startTime, shift.endTime),
+      customLabel: shift.customLabel || '',
+      isHoliday: Boolean(shift.isHoliday),
+      isSpecialDay: Boolean(shift.isSpecialDay),
+      specialDayLabel: shift.specialDayLabel || '',
+      isManualOverride: true,
     }));
 
     set({ isSaving: true });
@@ -877,6 +913,11 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const weekDays = getWeekDays(get().weekStart);
+    const weekSet = new Set(weekDays);
+    const weekExistingShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+    const manualWeekShifts = weekExistingShifts.filter((shift) => shift.isManualOverride);
+    const autoWeekShifts = weekExistingShifts.filter((shift) => !shift.isManualOverride);
+
     set({ isSaving: true });
     try {
       const { shifts: generatedShifts, warnings } = await generateSmartWeekSchedule({
@@ -886,16 +927,84 @@ export const useSchedulerStore = create((set, get) => ({
         hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
       });
 
-      await removeWeekShifts(weekDays);
-      await createManyShifts(generatedShifts);
+      const manualKey = new Set(manualWeekShifts.map((shift) => `${shift.employeeId}_${shift.date}`));
+      const safeGeneratedShifts = generatedShifts.filter((shift) => {
+        if (manualKey.has(`${shift.employeeId}_${shift.date}`)) return false;
+        return !hasTimeOverlap(manualWeekShifts, shift);
+      });
+
+      await Promise.all(autoWeekShifts.map((shift) => removeShift(shift.id)));
+      await createManyShifts(safeGeneratedShifts);
       await get().saveCurrentWeekSnapshot('magic_wand');
       await get().loadWeekHistory();
 
       if (warnings.length) {
         set({ warningMessage: warnings.join(' | ') });
       } else {
-        set({ warningMessage: 'Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand.' });
+        set({
+          warningMessage: `Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand. Διατηρήθηκαν ${manualWeekShifts.length} manual entries.`,
+        });
       }
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  generateMagicMonth: async ({
+    year,
+    month,
+    roleConfig = {},
+    rules = {},
+  }) => {
+    if (!requireAdmin(get, set)) return;
+    if (typeof year !== 'number' || typeof month !== 'number') {
+      set({ warningMessage: 'Μη έγκυρα στοιχεία μήνα για αυτόματη δημιουργία.' });
+      return;
+    }
+
+    const monthDateSet = getMonthDateSet(year, month);
+    const monthShifts = get().shifts.filter((shift) => monthDateSet.has(shift.date));
+    const manualOverrides = monthShifts.filter((shift) => shift.isManualOverride);
+    const autoGenerated = monthShifts.filter((shift) => !shift.isManualOverride);
+
+    set({ isSaving: true });
+    try {
+      const { shifts: generatedShifts, warnings, meta } = generateSmartMonthSchedule({
+        month,
+        year,
+        employees: get().employees,
+        allShifts: get().shifts,
+        existingMonthShifts: monthShifts,
+        rules,
+        roleConfig,
+      });
+
+      await Promise.all(autoGenerated.map((shift) => removeShift(shift.id)));
+      await createManyShifts(generatedShifts);
+
+      const warningMessages = [];
+      if (warnings?.length) warningMessages.push(...warnings);
+      warningMessages.push(
+        `Ολοκληρώθηκε αυτόματη δημιουργία μήνα. Auto entries: ${generatedShifts.length}, Manual overrides: ${manualOverrides.length}.`,
+      );
+
+      set({
+        warningMessage: warningMessages.join(' | '),
+      });
+
+      if (meta?.monthDays?.length) {
+        const firstDay = meta.monthDays[0];
+        if (firstDay) {
+          const monday = getMonday(new Date(`${firstDay}T00:00:00`));
+          set({ weekStart: getIsoDate(monday) });
+          await get().refreshWeekLockStatus();
+        }
+      }
+    } catch (error) {
+      set({
+        warningMessage:
+          error?.message || 'Αποτυχία αυτόματης δημιουργίας μηνιαίου προγράμματος.',
+      });
     } finally {
       set({ isSaving: false });
     }

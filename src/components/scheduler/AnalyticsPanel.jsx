@@ -6,12 +6,14 @@ export default function AnalyticsPanel({
   totalHours,
   leaveDaysByEmployee,
   totalsByType,
+  shiftsCountByEmployee = {},
+  workBreakdownByEmployee = {},
 }) {
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
       <div className="mb-2 flex items-center gap-2 sm:mb-3">
         <Clock3 size={18} className="text-brand-600 dark:text-cyan-300" />
-        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Σύνοψη Ωρών & Απουσιών</h2>
+        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ώρες Εβδομάδας Ανά Υπάλληλο</h2>
       </div>
 
       <div className="mb-2 rounded-lg bg-brand-50/85 p-2 text-xs font-semibold text-brand-900 sm:text-sm dark:bg-cyan-500/15 dark:text-cyan-100">
@@ -27,12 +29,23 @@ export default function AnalyticsPanel({
       <div className="space-y-2">
         {employees.map((employee) => {
           const leave = leaveDaysByEmployee?.[employee.id] || { restDays: 0, leaveDays: 0, sickDays: 0 };
+          const breakdown = workBreakdownByEmployee?.[employee.id] || {
+            morning: 0,
+            intermediate: 0,
+            evening: 0,
+            custom: 0,
+          };
+
           return (
             <div key={employee.id} className="glass-soft rounded-lg px-3 py-2 text-xs sm:text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-slate-800 dark:text-slate-100">{employee.fullName}</span>
                 <span className="font-bold text-slate-900 dark:text-white">{totalsByEmployee[employee.id] || 0} ώρες</span>
               </div>
+              <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
+                Βάρδιες: {shiftsCountByEmployee?.[employee.id] || 0} | Πρωινές: {breakdown.morning || 0} | Ενδιάμεσες:{' '}
+                {breakdown.intermediate || 0} | Απογευματινές: {breakdown.evening || 0}
+              </p>
               <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                 Ρεπό: {leave.restDays} | Άδεια: {leave.leaveDays} | Ασθένεια: {leave.sickDays}
               </p>

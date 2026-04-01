@@ -29,9 +29,10 @@ const MONTH_OPTIONS = [
 ];
 
 function getDaySpecialInfo(dayShifts) {
-  const specialShift = (dayShifts || []).find((item) => item.isHoliday);
+  const specialShift = (dayShifts || []).find((item) => item.isHoliday || item.isSpecialDay);
   if (!specialShift) return null;
-  return specialShift.specialDayLabel?.trim() || 'Αργία';
+  if (specialShift.specialDayLabel?.trim()) return specialShift.specialDayLabel.trim();
+  return specialShift.isHoliday ? 'Αργία' : 'Ειδικό Ωράριο';
 }
 
 function getDayLabel(date) {
@@ -203,16 +204,19 @@ export default function WeeklyGrid({
   selectedMonth = new Date().getMonth(),
   selectedYear = new Date().getFullYear(),
   scheduleMode = 'week',
+  monthlyRoleConfig = { coreAId: '', coreBId: '', intermediateId: '' },
   sundayRuleViolations = {},
   onChangeScheduleMode,
   onSelectMonth,
   onSelectYear,
+  onChangeMonthlyRoleConfig,
   onSelectHistoryWeek,
   onLoadSelectedHistoryWeek,
   onSaveAsTemplate,
   onSelectTemplate,
   onLoadSelectedTemplate,
   onMagicWand,
+  onGenerateMonthlySchedule,
   onJumpToWeekDate,
   onDeleteShift,
   onDeleteShiftTemplate,
@@ -253,6 +257,11 @@ export default function WeeklyGrid({
     const year = new Date().getFullYear();
     return Array.from({ length: 7 }, (_, index) => year - 3 + index);
   }, []);
+
+  const activeEmployees = useMemo(
+    () => (employees || []).filter((employee) => employee?.isActive !== false),
+    [employees],
+  );
 
   function getEmployeeById(employeeId) {
     return employeeById.get(employeeId);
@@ -484,6 +493,74 @@ export default function WeeklyGrid({
                 {monthYears.map((year) => (
                   <option key={year} value={year}>
                     {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={onGenerateMonthlySchedule}
+              disabled={!canManage}
+              className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Αυτόματη δημιουργία μηνιαίου προγράμματος
+            </button>
+          </div>
+
+          <div className="mb-3 grid gap-2 md:grid-cols-3">
+            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+              Core Employee A
+              <select
+                value={monthlyRoleConfig?.coreAId || ''}
+                onChange={(event) =>
+                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, coreAId: event.target.value }))
+                }
+                disabled={!canManage}
+                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+              >
+                <option value="">Επιλογή</option>
+                {activeEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+              Core Employee B
+              <select
+                value={monthlyRoleConfig?.coreBId || ''}
+                onChange={(event) =>
+                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, coreBId: event.target.value }))
+                }
+                disabled={!canManage}
+                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+              >
+                <option value="">Επιλογή</option>
+                {activeEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+              Intermediate Employee
+              <select
+                value={monthlyRoleConfig?.intermediateId || ''}
+                onChange={(event) =>
+                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, intermediateId: event.target.value }))
+                }
+                disabled={!canManage}
+                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+              >
+                <option value="">Επιλογή</option>
+                {activeEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.fullName}
                   </option>
                 ))}
               </select>

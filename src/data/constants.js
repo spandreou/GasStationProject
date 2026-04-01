@@ -2,13 +2,13 @@
   { id: 'morning', label: 'Πρωινός', startTime: '06:00', endTime: '14:00', shiftType: 'morning' },
   { id: 'intermediate-0900', label: 'Ενδιάμεσος', startTime: '09:00', endTime: '17:00', shiftType: 'intermediate' },
   { id: 'intermediate-1000', label: 'Ενδιάμεσος', startTime: '10:00', endTime: '18:00', shiftType: 'intermediate' },
-  { id: 'night', label: 'Βραδινός', startTime: '14:00', endTime: '22:00', shiftType: 'night' },
+  { id: 'evening', label: 'Απογευματινός', startTime: '14:00', endTime: '22:00', shiftType: 'evening' },
 ];
 
 export const SHIFT_TYPE_OPTIONS = [
   { value: 'morning', label: 'Πρωινός' },
   { value: 'intermediate', label: 'Ενδιάμεσος' },
-  { value: 'night', label: 'Βραδινός' },
+  { value: 'evening', label: 'Απογευματινός / Βραδινός' },
   { value: 'custom', label: 'Προσαρμοσμένη' },
 ];
 

@@ -151,10 +151,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
 
         {form.shiftType === 'custom' ? (
           <label className="text-sm font-medium text-slate-900 dark:text-slate-100 md:col-span-2">
-            Custom Label
+            Ετικέτα Προσαρμοσμένης Βάρδιας
             <input
               className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
-              placeholder="π.χ. Εκπαίδευση / Inventory"
+              placeholder="π.χ. Εκπαίδευση / Απογραφή"
               value={form.customLabel}
               onChange={(event) => setForm((prev) => ({ ...prev, customLabel: event.target.value }))}
               disabled={!canManage}

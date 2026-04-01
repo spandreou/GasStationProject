@@ -42,7 +42,7 @@ export default function HistoryView({
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-sm hover:bg-white/70 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70"
           >
             <FileText size={14} />
-            Payroll PDF
+            Μισθοδοσία PDF
           </button>
           <button
             type="button"
@@ -50,7 +50,7 @@ export default function HistoryView({
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-sm hover:bg-white/70 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70"
           >
             <FileSpreadsheet size={14} />
-            Payroll Excel
+            Μισθοδοσία Excel
           </button>
         </div>
       </div>

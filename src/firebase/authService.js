@@ -6,13 +6,53 @@
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { auth, isFirebaseConfigured } from './config';
+import {
+  adminEmail,
+  adminPassword,
+  auth,
+  isAdminEmailConfigured,
+  isDemoMode,
+  isFirebaseConfigured,
+  isUsingDemoAdminFallback,
+  isUsingDemoPasswordFallback,
+} from './config';
 
-const ADMIN_EMAIL = 'admin@example.com';
-const ADMIN_PASSWORD = 'admin123';
+function normalizeEmail(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
+}
+
+function isAllowedAdminEmail(email) {
+  return normalizeEmail(email) === adminEmail;
+}
+
+function assertAdminAuthConfigured() {
+  if (!isFirebaseConfigured || !auth) {
+    throw new Error('Το Firebase Auth δεν είναι ρυθμισμένο. Έλεγξε τα env vars του Firebase.');
+  }
+
+  if (!isAdminEmailConfigured) {
+    throw new Error('Λείπει το VITE_ADMIN_EMAIL. Ορίσε email admin για το demo περιβάλλον.');
+  }
+}
+
+export function getConfiguredAdminEmail() {
+  return adminEmail;
+}
+
+export function getAdminAuthModeLabel() {
+  if (isDemoMode) {
+    if (isUsingDemoAdminFallback || isUsingDemoPasswordFallback) {
+      return 'Demo Admin Mode (fallback credentials)';
+    }
+    return 'Demo Admin Mode';
+  }
+  return 'Admin Mode';
+}
 
 export function subscribeAdminAuth(onUserChange, onError) {
-  if (!isFirebaseConfigured || !auth) {
+  if (!isFirebaseConfigured || !auth || !isAdminEmailConfigured) {
     onUserChange(null);
     return () => {};
   }
@@ -20,7 +60,7 @@ export function subscribeAdminAuth(onUserChange, onError) {
   return onAuthStateChanged(
     auth,
     (user) => {
-      const isAdminUser = Boolean(user && user.email?.toLowerCase() === ADMIN_EMAIL);
+      const isAdminUser = Boolean(user && isAllowedAdminEmail(user.email));
       onUserChange(isAdminUser ? user : null);
     },
     onError,
@@ -28,18 +68,20 @@ export function subscribeAdminAuth(onUserChange, onError) {
 }
 
 export async function signInAdmin({ email, password }) {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Το Firebase Auth δεν είναι ρυθμισμένο.');
-  }
+  assertAdminAuthConfigured();
 
-  if (email?.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    throw new Error('Μη έγκυρα στοιχεία διαχειριστή.');
+  const normalizedEmail = normalizeEmail(email);
+  if (!isAllowedAdminEmail(normalizedEmail)) {
+    throw new Error('Μη επιτρεπόμενο email διαχειριστή για το τρέχον demo περιβάλλον.');
+  }
+  if (isDemoMode && String(password || '') !== String(adminPassword || '')) {
+    throw new Error('Λάθος demo κωδικός. Χρησιμοποίησε τον configured admin κωδικό.');
   }
 
   await setPersistence(auth, browserLocalPersistence);
-  const credentials = await signInWithEmailAndPassword(auth, email, password);
+  const credentials = await signInWithEmailAndPassword(auth, normalizedEmail, password);
 
-  if (credentials.user.email?.toLowerCase() !== ADMIN_EMAIL) {
+  if (!isAllowedAdminEmail(credentials.user.email)) {
     await signOut(auth);
     throw new Error('Ο λογαριασμός δεν έχει δικαιώματα διαχειριστή.');
   }
@@ -56,17 +98,16 @@ export async function signOutAdmin() {
 }
 
 export async function sendAdminPasswordResetEmail(email) {
-  if (!isFirebaseConfigured || !auth) {
-    throw new Error('Το Firebase Auth δεν είναι ρυθμισμένο.');
-  }
+  assertAdminAuthConfigured();
 
   if (!email?.trim()) {
     throw new Error('Συμπλήρωσε email για επαναφορά κωδικού.');
   }
 
-  if (email.trim().toLowerCase() !== ADMIN_EMAIL) {
-    throw new Error('Η επαναφορά επιτρέπεται μόνο για το email διαχειριστή.');
+  const normalizedEmail = normalizeEmail(email);
+  if (!isAllowedAdminEmail(normalizedEmail)) {
+    throw new Error('Η επαναφορά επιτρέπεται μόνο για το demo admin email.');
   }
 
-  await sendPasswordResetEmail(auth, email.trim());
+  await sendPasswordResetEmail(auth, normalizedEmail);
 }

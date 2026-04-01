@@ -1,7 +1,5 @@
 ﻿import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
-import { useState } from 'react';
-
-const DEFAULT_EMAIL = 'admin@example.com';
+import { useEffect, useState } from 'react';
 
 export default function AdminLoginModal({
   open,
@@ -9,14 +7,24 @@ export default function AdminLoginModal({
   onLogin,
   onRequestPasswordReset,
   isFirebaseConfigured,
+  defaultEmail = '',
+  isDemoMode = true,
 }) {
   const [credentials, setCredentials] = useState({
-    email: DEFAULT_EMAIL,
+    email: defaultEmail,
     password: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setCredentials((prev) => ({
+      ...prev,
+      email: prev.email || defaultEmail,
+    }));
+  }, [defaultEmail, open]);
 
   if (!open) return null;
 
@@ -32,6 +40,7 @@ export default function AdminLoginModal({
     event.preventDefault();
     setIsSubmitting(true);
     setSubmitError('');
+
     try {
       const success = await onLogin(credentials);
       if (success) {
@@ -48,7 +57,7 @@ export default function AdminLoginModal({
 
       if (error?.code === 'auth/network-request-failed') {
         setSubmitError(
-          'Αποτυχία δικτύου. Έλεγξε σύνδεση internet και βεβαιώσου ότι το localhost είναι στα Authorized Domains του Firebase Auth.',
+          'Αποτυχία δικτύου. Έλεγξε internet και ότι το domain είναι στα Authorized Domains του Firebase Auth.',
         );
       } else {
         setSubmitError(error?.message || 'Αποτυχία σύνδεσης. Δες την κονσόλα για λεπτομέρειες.');
@@ -69,8 +78,8 @@ export default function AdminLoginModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-4 sm:items-center">
-      <div className="glass-panel w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-t-2xl p-4 sm:rounded-2xl">
-        <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70 sm:hidden" />
+      <div className="glass-panel w-full max-h-[85vh] max-w-sm overflow-y-auto rounded-t-2xl p-4 sm:rounded-2xl">
+        <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 sm:hidden dark:bg-slate-700/70" />
         <div className="mb-3 flex items-center justify-between">
           <h3 className="inline-flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white">
             <LockKeyhole size={18} />
@@ -85,11 +94,20 @@ export default function AdminLoginModal({
           </button>
         </div>
 
+        <div className="mb-3 rounded-lg border border-cyan-300/45 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-900 dark:border-cyan-300/35 dark:bg-cyan-500/10 dark:text-cyan-100">
+          {isDemoMode ? 'Demo Admin Mode: πειραματική πρόσβαση μόνο για παρουσίαση.' : 'Admin Mode'}
+        </div>
+
         <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
           {isFirebaseConfigured
-            ? 'Χρησιμοποίησε λογαριασμό Firebase Auth για είσοδο.'
+            ? `Χρησιμοποίησε λογαριασμό Firebase Auth με email admin (${defaultEmail || 'admin@example.com'}).`
             : 'Το Firebase Auth δεν είναι διαθέσιμο στο τρέχον περιβάλλον.'}
         </p>
+        {isDemoMode ? (
+          <p className="mb-3 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-300">
+            Demo στοιχεία: <strong>admin@example.com</strong> / <strong>admin123</strong>
+          </p>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -100,8 +118,8 @@ export default function AdminLoginModal({
                 type="email"
                 value={credentials.email}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, email: event.target.value }))}
-                placeholder="admin@email.com"
-                className="w-full border-none bg-transparent p-0 text-sm text-slate-950 font-semibold outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
+                placeholder="admin@example.com"
+                className="w-full border-none bg-transparent p-0 text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
                 autoFocus
                 required
                 disabled={!isFirebaseConfigured}
@@ -118,7 +136,7 @@ export default function AdminLoginModal({
                 value={credentials.password}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, password: event.target.value }))}
                 placeholder="Κωδικός"
-                className="w-full border-none bg-transparent p-0 text-sm text-slate-950 font-semibold outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
+                className="w-full border-none bg-transparent p-0 text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
                 required
                 disabled={!isFirebaseConfigured}
               />
@@ -127,7 +145,7 @@ export default function AdminLoginModal({
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400"
             disabled={!isFirebaseConfigured || isSubmitting}
           >
             {isSubmitting ? 'Σύνδεση...' : 'Σύνδεση'}
@@ -143,7 +161,7 @@ export default function AdminLoginModal({
         <button
           type="button"
           onClick={handlePasswordReset}
-          className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50/70 dark:border-cyan-300/40 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-800/60 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50/70 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/40 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-800/60"
           disabled={!isFirebaseConfigured || !credentials.email || isSendingReset}
         >
           {isSendingReset ? 'Αποστολή email...' : 'Ξέχασα τον κωδικό'}

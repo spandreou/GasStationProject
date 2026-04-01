@@ -184,7 +184,7 @@ export default function WeekToolbar({
               className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50/90 px-2.5 py-1.5 text-xs font-semibold text-amber-900 backdrop-blur-sm hover:bg-amber-100 dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
             >
               <LockKeyhole size={16} />
-              Admin Login
+              Είσοδος Διαχειριστή
             </button>
           ) : (
             <button
@@ -222,7 +222,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-sm text-slate-900 backdrop-blur-md hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
           >
             <Sparkles size={16} />
-            Magic Wand
+            Αυτόματη Δημιουργία
           </button>
 
           <input
@@ -258,7 +258,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg bg-indigo-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-indigo-700 dark:bg-indigo-500/80 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FolderCheck size={16} />
-            {isWeekLocked ? 'Οριστικοποιημένη' : 'Finalize Week'}
+            {isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
           </button>
 
           <button
@@ -267,7 +267,7 @@ export default function WeekToolbar({
             className="inline-flex items-center gap-1 rounded-lg bg-green-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-green-700 dark:bg-emerald-500/80 dark:hover:bg-emerald-500"
           >
             <Copy size={16} />
-            Copy for WhatsApp
+            Αντιγραφή για WhatsApp
           </button>
 
           <ExportDropdown onExportPdf={onExportPdf} onExportExcel={onExportExcel} onExportWord={onExportWord} />
@@ -299,7 +299,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 {isDark ? <SunMedium size={15} /> : <MoonStar size={15} />}
-                {isDark ? 'Light mode' : 'Dark mode'}
+                {isDark ? 'Light θέμα' : 'Dark θέμα'}
               </button>
 
               {!isAdmin ? (
@@ -309,7 +309,7 @@ export default function WeekToolbar({
                   className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-left text-sm font-semibold text-amber-900 shadow-sm transition hover:bg-amber-100 dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
                 >
                   <LockKeyhole size={15} />
-                  Admin Login
+                  Είσοδος Διαχειριστή
                 </button>
               ) : (
                 <button
@@ -328,7 +328,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-left text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100 dark:border-emerald-300/40 dark:bg-emerald-500/15 dark:text-emerald-100 dark:hover:bg-emerald-500/25"
               >
                 <Copy size={15} />
-                Copy WhatsApp
+                Αντιγραφή για WhatsApp
               </button>
 
               <div className="my-1 h-px bg-slate-200/70 dark:bg-slate-700/70" />
@@ -377,7 +377,7 @@ export default function WeekToolbar({
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/90 px-4 py-3 text-left text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-300/40 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
               >
                 <FolderCheck size={15} />
-                {isWeekLocked ? 'Οριστικοποιημένη Εβδομάδα' : 'Finalize Week'}
+                {isWeekLocked ? 'Οριστικοποιημένη Εβδομάδα' : 'Οριστικοποίηση Εβδομάδας'}
               </button>
             </div>
           </div>

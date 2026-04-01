@@ -1,5 +1,5 @@
-﻿import { create } from 'zustand';
-import { isFirebaseConfigured } from '../firebase/config';
+import { create } from 'zustand';
+import { firebaseConfigErrorMessage, isFirebaseConfigured } from '../firebase/config';
 import {
   sendAdminPasswordResetEmail,
   signInAdmin,
@@ -14,7 +14,6 @@ import {
   createShiftTemplate,
   fetchLatestWeekSnapshotByWeekId,
   fetchAttendanceHistoryByMonth,
-  fetchShiftsByDates,
   fetchWeekHistoryList,
   fetchWeekTemplates,
   finalizeWeekAttendance,
@@ -117,7 +116,6 @@ export const useSchedulerStore = create((set, get) => ({
   isSaving: false,
   errorMessage: '',
   warningMessage: '',
-  firebaseMode: 'production',
   weekStart: getCurrentWeekStart(),
   isAdmin: false,
   adminUser: null,
@@ -132,7 +130,7 @@ export const useSchedulerStore = create((set, get) => ({
   initializeData: () => {
     if (!isFirebaseConfigured) {
       set({
-        errorMessage: 'Το Firebase δεν είναι ρυθμισμένο. Συμπλήρωσε τα env vars για Firestore/Auth.',
+        errorMessage: firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Συμπλήρωσε τα env vars για Firestore/Auth.',
         isLoading: false,
         isAuthLoading: false,
       });
@@ -1037,5 +1035,3 @@ export const useSchedulerStore = create((set, get) => ({
     }
   },
 }));
-
-

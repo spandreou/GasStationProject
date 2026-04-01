@@ -1,10 +1,11 @@
-﻿import {
+import {
   addDoc,
   collection,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -13,7 +14,6 @@
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { buildSampleShifts, sampleEmployees } from '../data/mockData';
 import { db } from './config';
 
 const EMPLOYEES_COLLECTION = 'employees';
@@ -25,93 +25,37 @@ const ANNOUNCEMENTS_COLLECTION = 'announcements';
 const WEEK_HISTORY_COLLECTION = 'week_history';
 const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 
-const LOCAL_EMPLOYEES_KEY = 'gas-station-employees';
-const LOCAL_SHIFTS_KEY = 'gas-station-shifts';
-const LOCAL_SHIFT_TEMPLATES_KEY = 'gas-station-shift-templates';
-const LOCAL_ATTENDANCE_HISTORY_KEY = 'gas-station-attendance-history';
-const LOCAL_WEEK_LOCKS_KEY = 'gas-station-week-locks';
-
-export function isUsingLocalFallback() {
-  return false;
-}
-
-function ensureLocalSeed() {
-  if (!localStorage.getItem(LOCAL_EMPLOYEES_KEY)) {
-    localStorage.setItem(LOCAL_EMPLOYEES_KEY, JSON.stringify(sampleEmployees));
-  }
-
-  if (!localStorage.getItem(LOCAL_SHIFTS_KEY)) {
-    localStorage.setItem(LOCAL_SHIFTS_KEY, JSON.stringify(buildSampleShifts()));
-  }
-
-  if (!localStorage.getItem(LOCAL_SHIFT_TEMPLATES_KEY)) {
-    localStorage.setItem(LOCAL_SHIFT_TEMPLATES_KEY, JSON.stringify([]));
-  }
-
-  if (!localStorage.getItem(LOCAL_ATTENDANCE_HISTORY_KEY)) {
-    localStorage.setItem(LOCAL_ATTENDANCE_HISTORY_KEY, JSON.stringify([]));
-  }
-
-  if (!localStorage.getItem(LOCAL_WEEK_LOCKS_KEY)) {
-    localStorage.setItem(LOCAL_WEEK_LOCKS_KEY, JSON.stringify([]));
-  }
-
-  // Repair old mojibake in demo employee names/roles stored in localStorage.
-  try {
-    const employees = JSON.parse(localStorage.getItem(LOCAL_EMPLOYEES_KEY) || '[]');
-    if (!Array.isArray(employees) || !employees.length) return;
-
-    const fallbackById = new Map(sampleEmployees.map((employee) => [employee.id, employee]));
-    let changed = false;
-
-    const repaired = employees.map((employee) => {
-      const hasMojibake =
-        typeof employee?.fullName === 'string' &&
-        employee.fullName.includes('Ξ') &&
-        fallbackById.has(employee.id);
-
-      if (!hasMojibake) return employee;
-
-      changed = true;
-      const fallback = fallbackById.get(employee.id);
-      return {
-        ...employee,
-        fullName: fallback.fullName,
-        role: fallback.role,
-      };
-    });
-
-    if (changed) {
-      localStorage.setItem(LOCAL_EMPLOYEES_KEY, JSON.stringify(repaired));
-    }
-  } catch {
-    // Ignore migration errors and keep current local data intact.
-  }
-}
-
-function readLocalItems(key) {
-  ensureLocalSeed();
-  return JSON.parse(localStorage.getItem(key) || '[]');
-}
-
-function writeLocalItems(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
+const MAX_IN_QUERY_VALUES = 10;
 
 function createLocalUnsubscribe() {
   return () => {};
 }
 
+function ensureFirestoreReady() {
+  if (!db) {
+    throw new Error('Το Firebase Firestore δεν είναι ρυθμισμένο. Έλεγξε τα env vars.');
+  }
+}
+
+export function isUsingLocalFallback() {
+  return false;
+}
+
 function handleFirestoreFailure(error) {
-  console.error('❌ Firestore Update Failed:', error);
+  if (import.meta.env.DEV) {
+    console.error('Firestore request failed:', error);
+  }
+
   if (error?.code === 'permission-denied') {
     throw new Error('Permission denied από Firestore Rules. Έλεγξε τα Rules στο Firebase Console.');
   }
+
   throw error;
 }
 
 async function withFirestoreWrite(operation) {
   try {
+    ensureFirestoreReady();
     return await operation();
   } catch (error) {
     handleFirestoreFailure(error);
@@ -132,13 +76,26 @@ function getMonthRange(yearMonth) {
   return { start, end };
 }
 
+function chunkValues(values, size = MAX_IN_QUERY_VALUES) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function toDataWithId(snapshot) {
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+function toTimestampMillis(value) {
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  return 0;
+}
+
 export function subscribeEmployees(onData, onError) {
-  if (isUsingLocalFallback()) {
-    try {
-      onData(readLocalItems(LOCAL_EMPLOYEES_KEY));
-    } catch (error) {
-      onError?.(error);
-    }
+  if (!db) {
+    onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
@@ -146,20 +103,15 @@ export function subscribeEmployees(onData, onError) {
   return onSnapshot(
     employeesQuery,
     (snapshot) => {
-      const employees = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      onData(employees);
+      onData(toDataWithId(snapshot));
     },
     onError,
   );
 }
 
 export function subscribeShifts(onData, onError) {
-  if (isUsingLocalFallback()) {
-    try {
-      onData(readLocalItems(LOCAL_SHIFTS_KEY));
-    } catch (error) {
-      onError?.(error);
-    }
+  if (!db) {
+    onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
@@ -167,20 +119,15 @@ export function subscribeShifts(onData, onError) {
   return onSnapshot(
     shiftsQuery,
     (snapshot) => {
-      const shifts = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      onData(shifts);
+      onData(toDataWithId(snapshot));
     },
     onError,
   );
 }
 
 export function subscribeShiftTemplates(onData, onError) {
-  if (isUsingLocalFallback()) {
-    try {
-      onData(readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY));
-    } catch (error) {
-      onError?.(error);
-    }
+  if (!db) {
+    onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
@@ -188,9 +135,7 @@ export function subscribeShiftTemplates(onData, onError) {
   return onSnapshot(
     templatesQuery,
     (snapshot) => {
-      const templates = snapshot.docs
-        .map((item) => ({ id: item.id, ...item.data() }))
-        .sort((a, b) => (a.label || '').localeCompare(b.label || '', 'el'));
+      const templates = toDataWithId(snapshot).sort((a, b) => (a.label || '').localeCompare(b.label || '', 'el'));
       onData(templates);
     },
     onError,
@@ -198,12 +143,7 @@ export function subscribeShiftTemplates(onData, onError) {
 }
 
 export async function createShift(payload) {
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
-    const createdShift = { ...payload, id: crypto.randomUUID() };
-    writeLocalItems(LOCAL_SHIFTS_KEY, [...shifts, createdShift]);
-    return createdShift;
-  }
+  ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
     addDoc(collection(db, SHIFTS_COLLECTION), {
@@ -217,12 +157,7 @@ export async function createShift(payload) {
 }
 
 export async function createShiftTemplate(payload) {
-  if (isUsingLocalFallback()) {
-    const templates = readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY);
-    const createdTemplate = { ...payload, id: crypto.randomUUID() };
-    writeLocalItems(LOCAL_SHIFT_TEMPLATES_KEY, [...templates, createdTemplate]);
-    return createdTemplate;
-  }
+  ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
     addDoc(collection(db, SHIFT_TEMPLATES_COLLECTION), {
@@ -240,13 +175,7 @@ export async function restoreShift(shift) {
     throw new Error('Δεν υπάρχει id βάρδιας για επαναφορά.');
   }
 
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
-    const filtered = shifts.filter((item) => item.id !== shift.id);
-    writeLocalItems(LOCAL_SHIFTS_KEY, [...filtered, shift]);
-    return shift;
-  }
-
+  ensureFirestoreReady();
   const { id, ...payload } = shift;
   await withFirestoreWrite(() =>
     setDoc(doc(db, SHIFTS_COLLECTION, id), {
@@ -254,17 +183,12 @@ export async function restoreShift(shift) {
       updatedAt: serverTimestamp(),
     }),
   );
+
   return shift;
 }
 
 export async function updateShift(shiftId, payload) {
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY).map((shift) =>
-      shift.id === shiftId ? { ...shift, ...payload } : shift,
-    );
-    writeLocalItems(LOCAL_SHIFTS_KEY, shifts);
-    return;
-  }
+  ensureFirestoreReady();
 
   const shiftDoc = doc(db, SHIFTS_COLLECTION, shiftId);
   await withFirestoreWrite(() =>
@@ -273,87 +197,68 @@ export async function updateShift(shiftId, payload) {
 }
 
 export async function removeShift(shiftId) {
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
-    const removedShift = shifts.find((shift) => shift.id === shiftId) || null;
-    writeLocalItems(
-      LOCAL_SHIFTS_KEY,
-      shifts.filter((shift) => shift.id !== shiftId),
-    );
-    return removedShift;
-  }
+  ensureFirestoreReady();
 
   const shiftDocRef = doc(db, SHIFTS_COLLECTION, shiftId);
   const shiftDoc = await getDoc(shiftDocRef);
   const removedShift = shiftDoc.exists() ? { id: shiftDoc.id, ...shiftDoc.data() } : null;
   await withFirestoreWrite(() => deleteDoc(shiftDocRef));
+
   return removedShift;
 }
 
 export async function removeShiftsByEmployee(employeeId) {
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
-    const removed = shifts.filter((shift) => shift.employeeId === employeeId);
-    writeLocalItems(
-      LOCAL_SHIFTS_KEY,
-      shifts.filter((shift) => shift.employeeId !== employeeId),
-    );
-    return removed;
-  }
+  ensureFirestoreReady();
 
-  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
-  const matched = shiftsSnapshot.docs.filter((item) => item.data().employeeId === employeeId);
-  const removed = matched.map((item) => ({ id: item.id, ...item.data() }));
+  const shiftsSnapshot = await getDocs(
+    query(collection(db, SHIFTS_COLLECTION), where('employeeId', '==', employeeId)),
+  );
+
+  const removed = shiftsSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
   await Promise.all(
-    matched.map((item) =>
+    shiftsSnapshot.docs.map((item) =>
       withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id))),
     ),
   );
+
   return removed;
 }
 
 export async function removeShiftsByDates(dates) {
-  const dateSet = new Set(dates);
+  ensureFirestoreReady();
 
-  if (isUsingLocalFallback()) {
-    const shifts = readLocalItems(LOCAL_SHIFTS_KEY);
-    const removed = shifts.filter((shift) => dateSet.has(shift.date));
-    writeLocalItems(
-      LOCAL_SHIFTS_KEY,
-      shifts.filter((shift) => !dateSet.has(shift.date)),
+  const dateValues = [...new Set(dates || [])].filter(Boolean);
+  if (!dateValues.length) return [];
+
+  const matchedDocsById = new Map();
+
+  for (const dateChunk of chunkValues(dateValues)) {
+    const shiftsSnapshot = await getDocs(
+      query(collection(db, SHIFTS_COLLECTION), where('date', 'in', dateChunk)),
     );
-    return removed;
+
+    shiftsSnapshot.docs.forEach((item) => {
+      matchedDocsById.set(item.id, item);
+    });
   }
 
-  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
-  const matched = shiftsSnapshot.docs.filter((item) => dateSet.has(item.data().date));
-  const removed = matched.map((item) => ({ id: item.id, ...item.data() }));
+  const matchedDocs = [...matchedDocsById.values()];
+  const removed = matchedDocs.map((item) => ({ id: item.id, ...item.data() }));
+
   await Promise.all(
-    matched.map((item) =>
-      withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id))),
-    ),
+    matchedDocs.map((item) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id)))),
   );
+
   return removed;
 }
 
 export async function removeShiftTemplate(templateId) {
-  if (isUsingLocalFallback()) {
-    const templates = readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY).filter((template) => template.id !== templateId);
-    writeLocalItems(LOCAL_SHIFT_TEMPLATES_KEY, templates);
-    return;
-  }
-
+  ensureFirestoreReady();
   await withFirestoreWrite(() => deleteDoc(doc(db, SHIFT_TEMPLATES_COLLECTION, templateId)));
 }
 
 export async function updateShiftTemplate(templateId, payload) {
-  if (isUsingLocalFallback()) {
-    const templates = readLocalItems(LOCAL_SHIFT_TEMPLATES_KEY).map((template) =>
-      template.id === templateId ? { ...template, ...payload } : template,
-    );
-    writeLocalItems(LOCAL_SHIFT_TEMPLATES_KEY, templates);
-    return;
-  }
+  ensureFirestoreReady();
 
   const templateDoc = doc(db, SHIFT_TEMPLATES_COLLECTION, templateId);
   await withFirestoreWrite(() =>
@@ -362,12 +267,7 @@ export async function updateShiftTemplate(templateId, payload) {
 }
 
 export async function createEmployee(payload) {
-  if (isUsingLocalFallback()) {
-    const employees = readLocalItems(LOCAL_EMPLOYEES_KEY);
-    const employee = { ...payload, id: crypto.randomUUID() };
-    writeLocalItems(LOCAL_EMPLOYEES_KEY, [...employees, employee]);
-    return employee;
-  }
+  ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
     addDoc(collection(db, EMPLOYEES_COLLECTION), {
@@ -381,13 +281,7 @@ export async function createEmployee(payload) {
 }
 
 export async function updateEmployee(employeeId, payload) {
-  if (isUsingLocalFallback()) {
-    const employees = readLocalItems(LOCAL_EMPLOYEES_KEY).map((employee) =>
-      employee.id === employeeId ? { ...employee, ...payload } : employee,
-    );
-    writeLocalItems(LOCAL_EMPLOYEES_KEY, employees);
-    return;
-  }
+  ensureFirestoreReady();
 
   const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
   await withFirestoreWrite(() =>
@@ -396,26 +290,14 @@ export async function updateEmployee(employeeId, payload) {
 }
 
 export async function removeEmployee(employeeId) {
-  if (isUsingLocalFallback()) {
-    const employees = readLocalItems(LOCAL_EMPLOYEES_KEY).filter((employee) => employee.id !== employeeId);
-    writeLocalItems(LOCAL_EMPLOYEES_KEY, employees);
-    return;
-  }
-
+  ensureFirestoreReady();
   await withFirestoreWrite(() => deleteDoc(doc(db, EMPLOYEES_COLLECTION, employeeId)));
 }
 
 export async function fetchAttendanceHistoryByMonth({ yearMonth, employeeId = '' }) {
+  ensureFirestoreReady();
+
   const { start, end } = getMonthRange(yearMonth);
-
-  if (isUsingLocalFallback()) {
-    const history = readLocalItems(LOCAL_ATTENDANCE_HISTORY_KEY)
-      .filter((item) => item.date >= start && item.date < end)
-      .filter((item) => (employeeId ? item.employeeId === employeeId : true))
-      .sort((a, b) => a.date.localeCompare(b.date));
-    return history;
-  }
-
   const constraints = [where('date', '>=', start), where('date', '<', end), orderBy('date', 'asc')];
   if (employeeId) {
     constraints.unshift(where('employeeId', '==', employeeId));
@@ -423,22 +305,20 @@ export async function fetchAttendanceHistoryByMonth({ yearMonth, employeeId = ''
 
   const attendanceQuery = query(collection(db, ATTENDANCE_HISTORY_COLLECTION), ...constraints);
   const snapshot = await getDocs(attendanceQuery);
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+  return toDataWithId(snapshot);
 }
 
 export async function isWeekFinalized(weekStart) {
   if (!weekStart) return false;
 
-  if (isUsingLocalFallback()) {
-    const locks = readLocalItems(LOCAL_WEEK_LOCKS_KEY);
-    return locks.some((item) => item.weekStart === weekStart);
-  }
-
+  ensureFirestoreReady();
   const lockDoc = await getDoc(doc(db, WEEK_LOCKS_COLLECTION, weekStart));
   return lockDoc.exists();
 }
 
 export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adminEmail = '' }) {
+  ensureFirestoreReady();
+
   if (!weekStart || !Array.isArray(weekDays) || !weekDays.length) {
     throw new Error('Δεν βρέθηκαν δεδομένα εβδομάδας για οριστικοποίηση.');
   }
@@ -449,35 +329,6 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
   }
 
   const validEntries = (entries || []).filter((item) => item?.employeeId && item?.date);
-
-  if (isUsingLocalFallback()) {
-    const history = readLocalItems(LOCAL_ATTENDANCE_HISTORY_KEY);
-    const finalizedAt = new Date().toISOString();
-    const payload = validEntries.map((item) => ({
-      ...item,
-      id: crypto.randomUUID(),
-      weekStart,
-      finalizedAt,
-      createdAt: finalizedAt,
-      updatedAt: finalizedAt,
-    }));
-
-    writeLocalItems(LOCAL_ATTENDANCE_HISTORY_KEY, [...history, ...payload]);
-
-    const locks = readLocalItems(LOCAL_WEEK_LOCKS_KEY);
-    writeLocalItems(LOCAL_WEEK_LOCKS_KEY, [
-      ...locks,
-      {
-        id: weekStart,
-        weekStart,
-        weekDays,
-        finalizedAt,
-        finalizedBy: adminEmail || '',
-      },
-    ]);
-
-    return { alreadyFinalized: false, created: payload.length };
-  }
 
   for (const item of validEntries) {
     await withFirestoreWrite(() =>
@@ -505,32 +356,37 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
 }
 
 export async function fetchShiftsOnce() {
-  if (isUsingLocalFallback()) {
-    return readLocalItems(LOCAL_SHIFTS_KEY);
-  }
+  ensureFirestoreReady();
 
   const shiftsQuery = query(collection(db, SHIFTS_COLLECTION), orderBy('date', 'asc'));
   try {
     const snapshot = await getDocs(shiftsQuery);
-    return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+    return toDataWithId(snapshot);
   } catch (error) {
     handleFirestoreFailure(error);
+    return [];
   }
 }
 
 export function subscribeAnnouncements(onData, onError) {
+  if (!db) {
+    onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
+    return createLocalUnsubscribe();
+  }
+
   const announcementsQuery = query(collection(db, ANNOUNCEMENTS_COLLECTION), orderBy('createdAt', 'desc'));
   return onSnapshot(
     announcementsQuery,
     (snapshot) => {
-      const announcements = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      onData(announcements);
+      onData(toDataWithId(snapshot));
     },
     onError,
   );
 }
 
 export async function createAnnouncement(payload) {
+  ensureFirestoreReady();
+
   const docRef = await withFirestoreWrite(() =>
     addDoc(collection(db, ANNOUNCEMENTS_COLLECTION), {
       ...payload,
@@ -543,37 +399,51 @@ export async function createAnnouncement(payload) {
 }
 
 export async function removeAnnouncement(announcementId) {
+  ensureFirestoreReady();
   await withFirestoreWrite(() => deleteDoc(doc(db, ANNOUNCEMENTS_COLLECTION, announcementId)));
 }
 
 export async function fetchShiftsByDates(dates) {
-  const dateSet = new Set(dates || []);
-  if (!dateSet.size) return [];
+  ensureFirestoreReady();
 
-  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
-  return shiftsSnapshot.docs
-    .map((item) => ({ id: item.id, ...item.data() }))
-    .filter((item) => dateSet.has(item.date))
-    .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+  const dateValues = [...new Set(dates || [])].filter(Boolean);
+  if (!dateValues.length) return [];
+
+  const matchedShifts = [];
+
+  for (const dateChunk of chunkValues(dateValues)) {
+    const shiftsSnapshot = await getDocs(
+      query(collection(db, SHIFTS_COLLECTION), where('date', 'in', dateChunk)),
+    );
+
+    matchedShifts.push(...toDataWithId(shiftsSnapshot));
+  }
+
+  return matchedShifts.sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
 }
 
 export async function hasConsecutiveSundayAssignment({ employeeId, previousSundayDate }) {
   if (!employeeId || !previousSundayDate) return false;
-  const shiftsSnapshot = await getDocs(query(collection(db, SHIFTS_COLLECTION)));
-  return shiftsSnapshot.docs.some((item) => {
+  ensureFirestoreReady();
+
+  const sundaySnapshot = await getDocs(
+    query(
+      collection(db, SHIFTS_COLLECTION),
+      where('employeeId', '==', employeeId),
+      where('date', '==', previousSundayDate),
+      where('type', '==', 'work'),
+    ),
+  );
+
+  return sundaySnapshot.docs.some((item) => {
     const shift = item.data();
-    return (
-      shift.employeeId === employeeId &&
-      shift.date === previousSundayDate &&
-      shift.startTime === '08:00' &&
-      shift.endTime === '20:00' &&
-      (shift.type || 'work') === 'work'
-    );
+    return shift.startTime === '08:00' && shift.endTime === '20:00';
   });
 }
 
 export async function saveWeekHistorySnapshot({ weekId, weekStart, weekEnd, source, shifts, createdBy = '' }) {
   if (!weekId) throw new Error('Λείπει weekId για αποθήκευση ιστορικού.');
+  ensureFirestoreReady();
 
   await withFirestoreWrite(() =>
     addDoc(collection(db, WEEK_HISTORY_COLLECTION), {
@@ -589,28 +459,35 @@ export async function saveWeekHistorySnapshot({ weekId, weekStart, weekEnd, sour
   );
 }
 
-export async function fetchWeekHistoryList(limit = 40) {
-  const historySnapshot = await getDocs(query(collection(db, WEEK_HISTORY_COLLECTION), orderBy('createdAt', 'desc')));
-  return historySnapshot.docs
-    .map((item) => ({ id: item.id, ...item.data() }))
-    .slice(0, limit);
+export async function fetchWeekHistoryList(maxRows = 40) {
+  ensureFirestoreReady();
+
+  const safeLimit = Math.max(1, Math.min(200, Number(maxRows) || 40));
+  const historySnapshot = await getDocs(
+    query(collection(db, WEEK_HISTORY_COLLECTION), orderBy('createdAt', 'desc'), limit(safeLimit)),
+  );
+
+  return toDataWithId(historySnapshot);
 }
 
 export async function fetchLatestWeekSnapshotByWeekId(weekId) {
   if (!weekId) return null;
-  const historySnapshot = await getDocs(query(collection(db, WEEK_HISTORY_COLLECTION), where('weekId', '==', weekId)));
-  const entries = historySnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+  ensureFirestoreReady();
+
+  const historySnapshot = await getDocs(
+    query(collection(db, WEEK_HISTORY_COLLECTION), where('weekId', '==', weekId)),
+  );
+
+  const entries = toDataWithId(historySnapshot);
   if (!entries.length) return null;
-  entries.sort((a, b) => {
-    const aTime = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : 0;
-    const bTime = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : 0;
-    return bTime - aTime;
-  });
+
+  entries.sort((a, b) => toTimestampMillis(b.createdAt) - toTimestampMillis(a.createdAt));
   return entries[0];
 }
 
 export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = '' }) {
   if (!name?.trim()) throw new Error('Δώσε όνομα template.');
+  ensureFirestoreReady();
 
   const payload = {
     name: name.trim(),
@@ -629,16 +506,27 @@ export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = ''
 }
 
 export async function fetchWeekTemplates() {
-  const templatesSnapshot = await getDocs(query(collection(db, WEEK_TEMPLATES_COLLECTION), orderBy('updatedAt', 'desc')));
-  return templatesSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+  ensureFirestoreReady();
+
+  const templatesSnapshot = await getDocs(
+    query(collection(db, WEEK_TEMPLATES_COLLECTION), orderBy('updatedAt', 'desc')),
+  );
+
+  return toDataWithId(templatesSnapshot);
 }
 
 export async function removeWeekShifts(weekDays) {
+  ensureFirestoreReady();
+
   const existing = await fetchShiftsByDates(weekDays);
-  await Promise.all(existing.map((shift) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, shift.id)))));
+  await Promise.all(
+    existing.map((shift) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, shift.id)))),
+  );
 }
 
 export async function createManyShifts(shifts) {
+  ensureFirestoreReady();
+
   if (!Array.isArray(shifts) || !shifts.length) return;
   await Promise.all(
     shifts.map((shift) =>

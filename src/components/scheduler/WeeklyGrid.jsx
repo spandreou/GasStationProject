@@ -3,14 +3,12 @@ import { ChevronLeft, ChevronRight, Loader2, Trash2, UserRound, X } from 'lucide
 import { useMemo, useRef, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
-import { findOverlapConflicts } from '../../utils/overlap';
 import {
   formatGreekDate,
   getDurationLabel,
   groupAndSortShiftsByDay,
-  sortShiftsByScheduleOrder,
 } from '../../utils/scheduleUtils';
-import { formatDateGreek, normalizeTimeLabel } from '../../utils/time';
+import { formatDateGreek, normalizeTimeLabel, timeToMinutes } from '../../utils/time';
 import AssignedShiftItem from './AssignedShiftItem';
 
 const MONTH_OPTIONS = [
@@ -37,6 +35,44 @@ function getDaySpecialInfo(dayShifts) {
 
 function getDayLabel(date) {
   return new Intl.DateTimeFormat('el-GR', { weekday: 'long' }).format(new Date(`${date}T00:00:00`));
+}
+
+function buildConflictShiftIdSet(shifts) {
+  const shiftsByEmployeeDay = new Map();
+  const conflictIds = new Set();
+
+  for (const shift of shifts || []) {
+    if ((shift.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) continue;
+    if (!shift.employeeId || !shift.date || !shift.id) continue;
+
+    const key = `${shift.employeeId}_${shift.date}`;
+    if (!shiftsByEmployeeDay.has(key)) {
+      shiftsByEmployeeDay.set(key, []);
+    }
+    shiftsByEmployeeDay.get(key).push(shift);
+  }
+
+  for (const dayShifts of shiftsByEmployeeDay.values()) {
+    dayShifts.sort((a, b) => {
+      const startDiff = timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+      if (startDiff !== 0) return startDiff;
+      return timeToMinutes(a.endTime) - timeToMinutes(b.endTime);
+    });
+
+    for (let index = 0; index < dayShifts.length; index += 1) {
+      const current = dayShifts[index];
+      const currentEnd = timeToMinutes(current.endTime);
+
+      for (let nextIndex = index + 1; nextIndex < dayShifts.length; nextIndex += 1) {
+        const next = dayShifts[nextIndex];
+        if (timeToMinutes(next.startTime) >= currentEnd) break;
+        conflictIds.add(current.id);
+        conflictIds.add(next.id);
+      }
+    }
+  }
+
+  return conflictIds;
 }
 
 function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
@@ -92,7 +128,7 @@ function DayBox({
   canManage,
   getEmployeeById,
   getSundayViolationMessage,
-  hasConflict,
+  conflictShiftIds,
   onDeleteShift,
   onDeleteShiftTemplate,
   onClearDay,
@@ -158,7 +194,7 @@ function DayBox({
               <AssignedShiftItem
                 shift={shift}
                 employee={getEmployeeById(shift.employeeId)}
-                hasConflict={hasConflict(shift)}
+                hasConflict={conflictShiftIds.has(shift.id)}
                 onDelete={onDeleteShift}
                 canManage={canManage}
               />
@@ -229,6 +265,7 @@ export default function WeeklyGrid({
   const [activeIndex, setActiveIndex] = useState(0);
 
   const grouped = useMemo(() => groupAndSortShiftsByDay(shifts), [shifts]);
+  const conflictShiftIds = useMemo(() => buildConflictShiftIdSet(shifts), [shifts]);
 
   const navItems = useMemo(
     () =>
@@ -271,11 +308,6 @@ export default function WeeklyGrid({
     return sundayRuleViolations?.[shiftId] || '';
   }
 
-  function hasConflict(shift) {
-    if ((shift.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) return false;
-    return findOverlapConflicts(shifts, shift).length > 0;
-  }
-
   function clearDayWithConfirm(date) {
     const shouldClear = window.confirm(`Να διαγραφούν όλες οι βάρδιες για ${formatDateGreek(date)};`);
     if (!shouldClear) return;
@@ -314,13 +346,13 @@ export default function WeeklyGrid({
   return (
     <section id="weekly-grid-export" className="glass-panel rounded-2xl p-2 sm:p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
-        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Dynamic Sandbox Week</h2>
+        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Βαρδιών</h2>
         <div className="flex flex-wrap items-center gap-2">
           <ScheduleModeSelector scheduleMode={scheduleMode} onChange={onChangeScheduleMode} />
           {isSaving ? (
             <div className="inline-flex items-center gap-1 rounded-full border border-brand-200/70 bg-brand-50/80 px-2 py-1 text-[11px] font-semibold text-brand-800 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100">
               <Loader2 size={12} className="animate-spin" />
-              Saving...
+              Αποθήκευση...
             </div>
           ) : null}
         </div>
@@ -343,7 +375,7 @@ export default function WeeklyGrid({
                 <option value="">Ιστορικό εβδομάδων</option>
                 {weekHistory.map((item) => (
                   <option key={item.id} value={item.weekId}>
-                    {item.weekStart} ({item.source || 'manual'})
+                    {item.weekStart} ({item.source || 'χειροκίνητα'})
                   </option>
                 ))}
               </select>
@@ -362,7 +394,7 @@ export default function WeeklyGrid({
                 value={selectedTemplateId}
                 onChange={(event) => onSelectTemplate?.(event.target.value)}
               >
-                <option value="">Templates</option>
+                <option value="">Πρότυπα</option>
                 {weekTemplates.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -372,27 +404,27 @@ export default function WeeklyGrid({
               <button
                 type="button"
                 onClick={() => {
-                  const name = window.prompt('Όνομα template');
+                  const name = window.prompt('Όνομα προτύπου');
                   if (!name) return;
                   onSaveAsTemplate?.(name);
                 }}
                 className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
-                Save as Template
+                Αποθήκευση ως Πρότυπο
               </button>
               <button
                 type="button"
                 onClick={onLoadSelectedTemplate}
                 className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
-                Load Template
+                Φόρτωση Προτύπου
               </button>
               <button
                 type="button"
                 onClick={onMagicWand}
                 className="rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
               >
-                Magic Wand
+                Αυτόματη Δημιουργία
               </button>
             </div>
           </div>
@@ -441,7 +473,7 @@ export default function WeeklyGrid({
             className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth md:grid md:min-w-[1120px] md:grid-cols-2 md:gap-4 md:snap-none xl:grid-cols-4"
           >
             {weekDays.map((day, index) => {
-              const dayShifts = sortShiftsByScheduleOrder(grouped[day] || []);
+              const dayShifts = grouped[day] || [];
               const dayTemplates = placedTemplatesByDay.get(day) || [];
 
               return (
@@ -455,7 +487,7 @@ export default function WeeklyGrid({
                     canManage={canManage}
                     getEmployeeById={getEmployeeById}
                     getSundayViolationMessage={getSundayViolationMessage}
-                    hasConflict={hasConflict}
+                    conflictShiftIds={conflictShiftIds}
                     onDeleteShift={onDeleteShift}
                     onDeleteShiftTemplate={onDeleteShiftTemplate}
                     onClearDay={clearDayWithConfirm}
@@ -510,7 +542,7 @@ export default function WeeklyGrid({
 
           <div className="mb-3 grid gap-2 md:grid-cols-3">
             <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Core Employee A
+              Βασικός Υπάλληλος Α
               <select
                 value={monthlyRoleConfig?.coreAId || ''}
                 onChange={(event) =>
@@ -529,7 +561,7 @@ export default function WeeklyGrid({
             </label>
 
             <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Core Employee B
+              Βασικός Υπάλληλος Β
               <select
                 value={monthlyRoleConfig?.coreBId || ''}
                 onChange={(event) =>
@@ -548,7 +580,7 @@ export default function WeeklyGrid({
             </label>
 
             <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Intermediate Employee
+              Ενδιάμεσος Υπάλληλος
               <select
                 value={monthlyRoleConfig?.intermediateId || ''}
                 onChange={(event) =>
@@ -569,7 +601,7 @@ export default function WeeklyGrid({
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {monthDays.map((day) => {
-              const dayShifts = sortShiftsByScheduleOrder(grouped[day] || []);
+              const dayShifts = grouped[day] || [];
               return (
                 <DayBox
                   key={day}
@@ -581,7 +613,7 @@ export default function WeeklyGrid({
                   canManage={canManage}
                   getEmployeeById={getEmployeeById}
                   getSundayViolationMessage={getSundayViolationMessage}
-                  hasConflict={hasConflict}
+                  conflictShiftIds={conflictShiftIds}
                   onDeleteShift={onDeleteShift}
                   onDeleteShiftTemplate={onDeleteShiftTemplate}
                   onClearDay={clearDayWithConfirm}
@@ -600,4 +632,5 @@ export default function WeeklyGrid({
     </section>
   );
 }
+
 

@@ -3,24 +3,70 @@ import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyCw-Sa1gQWq9QBc26lotaqlC1BIxAki6_M',
-  authDomain: 'gasstationproject-9dd89.firebaseapp.com',
-  projectId: 'gasstationproject-9dd89',
-  storageBucket: 'gasstationproject-9dd89.firebasestorage.app',
-  messagingSenderId: '978890379614',
-  appId: '1:978890379614:web:a69c92841c92dc2828bfcf',
-  measurementId: 'G-3D7H5K6CFX',
+const REQUIRED_FIREBASE_ENV_KEYS = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'VITE_FIREBASE_APP_ID',
+];
+
+const DEMO_ADMIN_EMAIL_FALLBACK = 'admin@example.com';
+const DEMO_ADMIN_PASSWORD_FALLBACK = 'admin123';
+
+function getEnvValue(name) {
+  const value = import.meta.env[name];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+const firebaseEnv = {
+  apiKey: getEnvValue('VITE_FIREBASE_API_KEY'),
+  authDomain: getEnvValue('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnvValue('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnvValue('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnvValue('VITE_FIREBASE_APP_ID'),
+  measurementId: getEnvValue('VITE_FIREBASE_MEASUREMENT_ID'),
 };
 
-export const isFirebaseConfigured = true;
+export const missingFirebaseEnvKeys = REQUIRED_FIREBASE_ENV_KEYS.filter((key) => !getEnvValue(key));
+export const isFirebaseConfigured = missingFirebaseEnvKeys.length === 0;
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+export const appMode = (getEnvValue('VITE_APP_MODE') || 'demo').toLowerCase();
+export const isDemoMode = appMode !== 'production';
+export const adminEmail = (getEnvValue('VITE_ADMIN_EMAIL') || DEMO_ADMIN_EMAIL_FALLBACK).toLowerCase();
+export const adminPassword = getEnvValue('VITE_ADMIN_PASSWORD') || DEMO_ADMIN_PASSWORD_FALLBACK;
+export const isUsingDemoAdminFallback = !getEnvValue('VITE_ADMIN_EMAIL');
+export const isUsingDemoPasswordFallback = !getEnvValue('VITE_ADMIN_PASSWORD');
+export const isAdminEmailConfigured = Boolean(adminEmail);
+
+export const firebaseConfigErrorMessage = isFirebaseConfigured
+  ? ''
+  : `Το Firebase δεν είναι ρυθμισμένο. Λείπουν env vars: ${missingFirebaseEnvKeys.join(', ')}`;
+
+if (import.meta.env.DEV && !isFirebaseConfigured) {
+  console.error(firebaseConfigErrorMessage);
+}
+
+const firebaseConfig = isFirebaseConfigured
+  ? {
+      apiKey: firebaseEnv.apiKey,
+      authDomain: firebaseEnv.authDomain,
+      projectId: firebaseEnv.projectId,
+      storageBucket: firebaseEnv.storageBucket,
+      messagingSenderId: firebaseEnv.messagingSenderId,
+      appId: firebaseEnv.appId,
+      measurementId: firebaseEnv.measurementId || undefined,
+    }
+  : null;
+
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+const db = app ? getFirestore(app) : null;
+const auth = app ? getAuth(app) : null;
 let analytics = null;
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && app) {
   isSupported()
     .then((supported) => {
       if (supported) {

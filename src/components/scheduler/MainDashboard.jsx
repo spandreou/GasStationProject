@@ -1,8 +1,8 @@
-﻿import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { AlertTriangle, Plus, ShieldCheck, WifiOff } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
-import { isFirebaseConfigured } from '../../firebase/config';
+import { adminEmail, firebaseConfigErrorMessage, isDemoMode, isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
@@ -52,10 +52,8 @@ export default function MainDashboard() {
   });
 
   const { isDark, toggleTheme } = useThemeMode();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
-  );
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 6 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } });
 
   const {
     employees,
@@ -118,6 +116,8 @@ export default function MainDashboard() {
     generateMagicMonth,
     finalizeCurrentWeek,
   } = useSchedulerStore();
+
+  const sensors = useSensors(...(isAdmin ? [pointerSensor, touchSensor] : []));
 
   useEffect(() => {
     initializeData();
@@ -395,14 +395,16 @@ export default function MainDashboard() {
         {!isFirebaseConfigured ? (
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/70 p-3 text-sm text-amber-900 dark:text-amber-200">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
-            Δεν βρέθηκαν Firebase env vars. Η εφαρμογή τρέχει σε local demo mode με localStorage.
+            {firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Έλεγξε τα env vars στο Vercel/τοπικό περιβάλλον.'}
           </div>
         ) : null}
 
         {!isAdmin ? (
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-[10px] text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-            <p className="line-clamp-2 sm:line-clamp-none">Read-only mode: Μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.</p>
+            <p className="line-clamp-2 sm:line-clamp-none">
+              Λειτουργία μόνο ανάγνωσης: μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
+            </p>
           </div>
         ) : null}
 
@@ -627,6 +629,8 @@ export default function MainDashboard() {
         onLogin={loginAsAdmin}
         onRequestPasswordReset={requestPasswordReset}
         isFirebaseConfigured={isFirebaseConfigured}
+        defaultEmail={adminEmail}
+        isDemoMode={isDemoMode}
       />
 
       <EmployeeProfileModal
@@ -709,3 +713,4 @@ export default function MainDashboard() {
     </DndContext>
   );
 }
+

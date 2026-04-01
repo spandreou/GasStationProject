@@ -140,7 +140,7 @@ export default function EmployeeSidebar({
               className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 sm:text-xs dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
             >
               <Lock size={12} />
-              Admin Login
+              Είσοδος Διαχειριστή
             </button>
           ) : null}
         </div>
@@ -272,7 +272,7 @@ export default function EmployeeSidebar({
             disabled={!isAdmin}
           >
             <Plus size={16} />
-            Προσθήκη Template
+            Προσθήκη Προτύπου
           </button>
         </form>
       </section>

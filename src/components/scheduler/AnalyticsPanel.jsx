@@ -2,6 +2,10 @@
 
 export default function AnalyticsPanel({
   employees,
+  mode = 'week',
+  onModeChange,
+  selectedMonth,
+  selectedYear,
   totalsByEmployee,
   totalHours,
   leaveDaysByEmployee,
@@ -9,15 +13,48 @@ export default function AnalyticsPanel({
   shiftsCountByEmployee = {},
   workBreakdownByEmployee = {},
 }) {
+  const isMonthMode = mode === 'month';
+  const monthLabel = new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(
+    new Date(selectedYear || new Date().getFullYear(), selectedMonth ?? new Date().getMonth(), 1),
+  );
+
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
-      <div className="mb-2 flex items-center gap-2 sm:mb-3">
-        <Clock3 size={18} className="text-brand-600 dark:text-cyan-300" />
-        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ώρες Εβδομάδας Ανά Υπάλληλο</h2>
+      <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
+        <div className="flex items-center gap-2">
+          <Clock3 size={18} className="text-brand-600 dark:text-cyan-300" />
+          <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">
+            {isMonthMode ? 'Ώρες Μήνα Ανά Υπάλληλο' : 'Ώρες Εβδομάδας Ανά Υπάλληλο'}
+          </h2>
+        </div>
+        <div className="inline-flex rounded-lg border border-slate-300/70 bg-white/50 p-1 dark:border-cyan-300/35 dark:bg-slate-900/45">
+          <button
+            type="button"
+            onClick={() => onModeChange?.('week')}
+            className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+              !isMonthMode
+                ? 'bg-brand-500 text-white'
+                : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
+            }`}
+          >
+            Εβδομάδα
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange?.('month')}
+            className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+              isMonthMode
+                ? 'bg-brand-500 text-white'
+                : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
+            }`}
+          >
+            Μήνας
+          </button>
+        </div>
       </div>
 
       <div className="mb-2 rounded-lg bg-brand-50/85 p-2 text-xs font-semibold text-brand-900 sm:text-sm dark:bg-cyan-500/15 dark:text-cyan-100">
-        Σύνολο εβδομάδας: {totalHours} ώρες
+        {isMonthMode ? `Σύνολο μήνα (${monthLabel}): ${totalHours} ώρες` : `Σύνολο εβδομάδας: ${totalHours} ώρες`}
       </div>
 
       <div className="mb-3 grid grid-cols-3 gap-2 text-[11px] sm:text-xs">

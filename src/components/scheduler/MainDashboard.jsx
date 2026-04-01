@@ -147,10 +147,15 @@ export default function MainDashboard() {
   const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
   const visibleShifts = scheduleMode === 'month' ? monthShifts : weekShifts;
 
-  const analytics = useMemo(
+  const weeklyAnalytics = useMemo(
     () => calculateWeeklyTotals(weekShifts, employees, weekDays),
     [weekShifts, employees, weekDays],
   );
+  const monthlyAnalytics = useMemo(
+    () => calculateWeeklyTotals(monthShifts, employees, monthDays),
+    [monthShifts, employees, monthDays],
+  );
+  const analytics = scheduleMode === 'month' ? monthlyAnalytics : weeklyAnalytics;
 
   useEffect(() => {
     const activeEmployees = employees
@@ -437,6 +442,10 @@ export default function MainDashboard() {
 
             <AnalyticsPanel
               employees={employees}
+              mode={scheduleMode}
+              onModeChange={setScheduleMode}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
               totalsByEmployee={analytics.totalsByEmployee}
               totalHours={analytics.totalHours}
               leaveDaysByEmployee={analytics.leaveDaysByEmployee}

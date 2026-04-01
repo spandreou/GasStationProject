@@ -110,6 +110,7 @@ export default function MainDashboard() {
     setSelectedHistoryWeekId,
     setSelectedTemplateId,
     loadSelectedHistoryWeekToGrid,
+    saveCurrentWeekManually,
     saveCurrentWeekAsTemplate,
     loadSelectedTemplateIntoCurrentWeek,
     generateMagicWeek,
@@ -381,6 +382,7 @@ export default function MainDashboard() {
           onPrevWeek={goToPreviousWeek}
           onNextWeek={goToNextWeek}
           onCurrentWeek={goToCurrentWeek}
+          onSaveWeek={saveCurrentWeekManually}
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
           onFinalizeWeek={finalizeCurrentWeek}

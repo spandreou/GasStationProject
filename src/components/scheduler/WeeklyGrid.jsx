@@ -37,6 +37,25 @@ function getDayLabel(date) {
   return new Intl.DateTimeFormat('el-GR', { weekday: 'long' }).format(new Date(`${date}T00:00:00`));
 }
 
+function getSnapshotSourceLabel(source) {
+  switch (source) {
+    case 'manual_save_button':
+      return 'Αποθήκευση';
+    case 'manual_save':
+      return 'Αυτόματη Αποθήκευση';
+    case 'magic_wand':
+      return 'Magic Wand';
+    case 'finalize':
+      return 'Οριστικοποίηση';
+    case 'template_load':
+      return 'Φόρτωση Προτύπου';
+    case 'history_load':
+      return 'Φόρτωση Ιστορικού';
+    default:
+      return source || 'χειροκίνητα';
+  }
+}
+
 function buildConflictShiftIdSet(shifts) {
   const shiftsByEmployeeDay = new Map();
   const conflictIds = new Set();
@@ -375,7 +394,7 @@ export default function WeeklyGrid({
                 <option value="">Ιστορικό εβδομάδων</option>
                 {weekHistory.map((item) => (
                   <option key={item.id} value={item.weekId}>
-                    {item.weekStart} ({item.source || 'χειροκίνητα'})
+                    {item.weekStart} ({getSnapshotSourceLabel(item.source)})
                   </option>
                 ))}
               </select>

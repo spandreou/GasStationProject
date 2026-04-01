@@ -441,9 +441,20 @@ export async function hasConsecutiveSundayAssignment({ employeeId, previousSunda
   });
 }
 
-export async function saveWeekHistorySnapshot({ weekId, weekStart, weekEnd, source, shifts, createdBy = '' }) {
+export async function saveWeekHistorySnapshot({
+  weekId,
+  weekStart,
+  weekEnd,
+  source,
+  shifts,
+  createdBy = '',
+  metadata = {},
+}) {
   if (!weekId) throw new Error('Λείπει weekId για αποθήκευση ιστορικού.');
   ensureFirestoreReady();
+
+  const safeShifts = Array.isArray(shifts) ? shifts : [];
+  const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
 
   await withFirestoreWrite(() =>
     addDoc(collection(db, WEEK_HISTORY_COLLECTION), {
@@ -451,8 +462,16 @@ export async function saveWeekHistorySnapshot({ weekId, weekStart, weekEnd, sour
       weekStart,
       weekEnd,
       source: source || 'manual',
-      shifts: Array.isArray(shifts) ? shifts : [],
+      shifts: safeShifts,
+      shiftCount: Number.isFinite(safeMetadata.totalShifts) ? safeMetadata.totalShifts : safeShifts.length,
       createdBy,
+      savedBy: createdBy,
+      savedAt: serverTimestamp(),
+      metadata: {
+        snapshotVersion: 1,
+        saveAction: source || 'manual',
+        ...safeMetadata,
+      },
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }),

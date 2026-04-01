@@ -1,4 +1,4 @@
-﻿import { inferShiftType } from './scheduleUtils';
+import { inferShiftType } from './scheduleUtils';
 import { calculateShiftDurationMinutes, minutesToHours } from './time';
 
 export const SHIFT_TYPES = {
@@ -31,8 +31,26 @@ export function isWorkingShift(shift) {
   return (shift?.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK;
 }
 
+function isSundayDate(dateValue) {
+  if (!dateValue) return false;
+  const parsed = new Date(`${dateValue}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && parsed.getDay() === 0;
+}
+
+function getDefaultDayStatus() {
+  return {
+    hasWork: false,
+    hasRest: false,
+    hasLeave: false,
+    hasSick: false,
+  };
+}
+
 export function calculateWeeklyTotals(shifts, employees, weekDays) {
-  const weekSet = new Set(weekDays);
+  const visibleDays = [...new Set((weekDays || []).filter(Boolean))];
+  const visibleSet = new Set(visibleDays);
+  const isWeeklyRange = visibleDays.length === 7;
+
   const totalsByEmployee = employees.reduce((acc, employee) => {
     acc[employee.id] = 0;
     return acc;
@@ -58,47 +76,109 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
       restDays: 0,
       leaveDays: 0,
       sickDays: 0,
+      nonWorkingSundays: 0,
+      inferredRestDays: 0,
     };
     return acc;
   }, {});
 
-  let totalHours = 0;
-  const totalsByType = { restDays: 0, leaveDays: 0, sickDays: 0 };
+  const dayStatusByEmployee = employees.reduce((acc, employee) => {
+    acc[employee.id] = {};
+    return acc;
+  }, {});
 
-  shifts.forEach((shift) => {
-    if (!weekSet.has(shift.date)) return;
+  let totalHours = 0;
+  const totalsByType = { restDays: 0, leaveDays: 0, sickDays: 0, nonWorkingSundays: 0 };
+
+  (shifts || []).forEach((shift) => {
+    if (!visibleSet.has(shift.date)) return;
+
+    const employeeId = shift.employeeId;
+    if (!employeeId || !Object.prototype.hasOwnProperty.call(totalsByEmployee, employeeId)) return;
 
     const type = shift.type || SHIFT_TYPES.WORK;
+    const employeeDayStatus = dayStatusByEmployee[employeeId] || {};
+    const dayStatus = employeeDayStatus[shift.date] || getDefaultDayStatus();
+
     if (type === SHIFT_TYPES.WORK) {
       const shiftHours = getShiftDurationHours(shift);
-      totalsByEmployee[shift.employeeId] = (totalsByEmployee[shift.employeeId] || 0) + shiftHours;
-      shiftsCountByEmployee[shift.employeeId] = (shiftsCountByEmployee[shift.employeeId] || 0) + 1;
+      totalsByEmployee[employeeId] = (totalsByEmployee[employeeId] || 0) + shiftHours;
+      shiftsCountByEmployee[employeeId] = (shiftsCountByEmployee[employeeId] || 0) + 1;
 
       const scheduleType = inferShiftType(shift);
-      if (!workBreakdownByEmployee[shift.employeeId]) {
-        workBreakdownByEmployee[shift.employeeId] = { morning: 0, intermediate: 0, evening: 0, custom: 0 };
+      if (!workBreakdownByEmployee[employeeId]) {
+        workBreakdownByEmployee[employeeId] = { morning: 0, intermediate: 0, evening: 0, custom: 0 };
       }
-      workBreakdownByEmployee[shift.employeeId][scheduleType] =
-        (workBreakdownByEmployee[shift.employeeId][scheduleType] || 0) + 1;
+      workBreakdownByEmployee[employeeId][scheduleType] =
+        (workBreakdownByEmployee[employeeId][scheduleType] || 0) + 1;
+
+      dayStatus.hasWork = true;
+      employeeDayStatus[shift.date] = dayStatus;
+      dayStatusByEmployee[employeeId] = employeeDayStatus;
 
       totalHours += shiftHours;
       return;
     }
 
-    if (!leaveDaysByEmployee[shift.employeeId]) {
-      leaveDaysByEmployee[shift.employeeId] = { restDays: 0, leaveDays: 0, sickDays: 0 };
+    if (type === SHIFT_TYPES.REST) {
+      dayStatus.hasRest = true;
+    } else if (type === SHIFT_TYPES.LEAVE) {
+      dayStatus.hasLeave = true;
+    } else if (type === SHIFT_TYPES.SICK) {
+      dayStatus.hasSick = true;
     }
 
-    if (type === SHIFT_TYPES.REST) {
-      leaveDaysByEmployee[shift.employeeId].restDays += 1;
-      totalsByType.restDays += 1;
-    } else if (type === SHIFT_TYPES.LEAVE) {
-      leaveDaysByEmployee[shift.employeeId].leaveDays += 1;
-      totalsByType.leaveDays += 1;
-    } else if (type === SHIFT_TYPES.SICK) {
-      leaveDaysByEmployee[shift.employeeId].sickDays += 1;
-      totalsByType.sickDays += 1;
+    employeeDayStatus[shift.date] = dayStatus;
+    dayStatusByEmployee[employeeId] = employeeDayStatus;
+  });
+
+  employees.forEach((employee) => {
+    const employeeId = employee.id;
+    const employeeDayStatus = dayStatusByEmployee[employeeId] || {};
+
+    let restDays = 0;
+    let leaveDays = 0;
+    let sickDays = 0;
+    let nonWorkingSundays = 0;
+
+    visibleDays.forEach((date) => {
+      const dayStatus = employeeDayStatus[date] || getDefaultDayStatus();
+      const hasWork = Boolean(dayStatus.hasWork);
+
+      // Priority for non-working categories: sick > leave > rest.
+      if (!hasWork) {
+        if (dayStatus.hasSick) {
+          sickDays += 1;
+        } else if (dayStatus.hasLeave) {
+          leaveDays += 1;
+        } else if (dayStatus.hasRest) {
+          restDays += 1;
+        }
+      }
+
+      if (isSundayDate(date) && !hasWork) {
+        nonWorkingSundays += 1;
+      }
+    });
+
+    let inferredRestDays = 0;
+    if (isWeeklyRange && restDays < 1) {
+      inferredRestDays = 1 - restDays;
+      restDays += inferredRestDays;
     }
+
+    leaveDaysByEmployee[employeeId] = {
+      restDays,
+      leaveDays,
+      sickDays,
+      nonWorkingSundays,
+      inferredRestDays,
+    };
+
+    totalsByType.restDays += restDays;
+    totalsByType.leaveDays += leaveDays;
+    totalsByType.sickDays += sickDays;
+    totalsByType.nonWorkingSundays += nonWorkingSundays;
   });
 
   return {

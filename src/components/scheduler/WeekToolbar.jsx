@@ -13,6 +13,7 @@
   Menu,
   MoonStar,
   RefreshCw,
+  Save,
   Sparkles,
   SunMedium,
   Trash2,
@@ -82,6 +83,7 @@ export default function WeekToolbar({
   onPrevWeek,
   onNextWeek,
   onCurrentWeek,
+  onSaveWeek,
   onCopyWhatsapp,
   onClearWeek,
   onFinalizeWeek,
@@ -112,7 +114,9 @@ export default function WeekToolbar({
 
   function handleMoreAction(action) {
     setIsMoreOpen(false);
-    action();
+    if (typeof action === 'function') {
+      action();
+    }
   }
 
   return (
@@ -225,6 +229,16 @@ export default function WeekToolbar({
             Αυτόματη Δημιουργία
           </button>
 
+          <button
+            type="button"
+            onClick={onSaveWeek}
+            disabled={!isAdmin}
+            className="inline-flex items-center gap-1 rounded-lg bg-blue-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500/80 dark:hover:bg-blue-500"
+          >
+            <Save size={16} />
+            Αποθήκευση
+          </button>
+
           <input
             type="date"
             onChange={(event) => onJumpToWeekDate?.(event.target.value)}
@@ -329,6 +343,16 @@ export default function WeekToolbar({
               >
                 <Copy size={15} />
                 Αντιγραφή για WhatsApp
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleMoreAction(onSaveWeek)}
+                disabled={!isAdmin}
+                className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3 text-left text-sm font-semibold text-blue-800 shadow-sm transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-300/40 dark:bg-blue-500/15 dark:text-blue-100 dark:hover:bg-blue-500/25"
+              >
+                <Save size={15} />
+                Αποθήκευση Εβδομάδας
               </button>
 
               <div className="my-1 h-px bg-slate-200/70 dark:bg-slate-700/70" />

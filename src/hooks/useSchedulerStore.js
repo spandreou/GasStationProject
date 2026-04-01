@@ -13,6 +13,7 @@ import {
   createShift,
   createShiftTemplate,
   fetchLatestWeekSnapshotByWeekId,
+  fetchShiftsByDates,
   fetchAttendanceHistoryByMonth,
   fetchWeekHistoryList,
   fetchWeekTemplates,
@@ -44,7 +45,7 @@ import {
   getWeekIdFromWeekStart,
 } from '../utils/autoSchedulerService';
 import { hasTimeOverlap } from '../utils/overlap';
-import { getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
+import { calculateWeeklyTotals, getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
 import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
 import { getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 
@@ -678,8 +679,18 @@ export const useSchedulerStore = create((set, get) => ({
       return;
     }
 
+    let snapshotSaved = true;
+    try {
+      await get().saveCurrentWeekSnapshot('finalize');
+      await get().loadWeekHistory();
+    } catch {
+      snapshotSaved = false;
+    }
+
     set({
-      warningMessage: `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές.`,
+      warningMessage: snapshotSaved
+        ? `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές και αποθηκεύτηκε snapshot ιστορικού.`
+        : `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές, αλλά το snapshot ιστορικού απέτυχε.`,
       isWeekLocked: true,
     });
     await get().loadAttendanceHistory();
@@ -756,34 +767,90 @@ export const useSchedulerStore = create((set, get) => ({
   setSelectedHistoryWeekId: (selectedHistoryWeekId) => set({ selectedHistoryWeekId }),
   setSelectedTemplateId: (selectedTemplateId) => set({ selectedTemplateId }),
 
+  saveCurrentWeekManually: async () => {
+    if (!requireAdmin(get, set)) return false;
+
+    set({ isSaving: true });
+    try {
+      await get().saveCurrentWeekSnapshot('manual_save_button');
+      await get().loadWeekHistory();
+      set({ warningMessage: 'Η εβδομάδα αποθηκεύτηκε στο ιστορικό.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης ιστορικού εβδομάδας.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
   saveCurrentWeekSnapshot: async (source = 'manual_save') => {
     if (!get().isAdmin) return;
     const weekStart = get().weekStart;
+    if (!weekStart) return;
+
     const weekDays = getWeekDays(weekStart);
     const weekSet = new Set(weekDays);
-    const weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+    let weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+
+    try {
+      const firestoreWeekShifts = await fetchShiftsByDates(weekDays);
+      weekShifts = (firestoreWeekShifts || []).filter((shift) => weekSet.has(shift.date));
+    } catch {
+      // Fallback to local state snapshot if Firestore read fails.
+    }
+
+    const normalizedShifts = weekShifts.map((shift) => ({
+      employeeId: shift.employeeId,
+      date: shift.date,
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      label: shift.label || '',
+      type: shift.type || SHIFT_TYPES.WORK,
+      notes: shift.notes || '',
+      shiftType: shift.shiftType || inferShiftTypeFromTimes(shift.startTime, shift.endTime),
+      customLabel: shift.customLabel || '',
+      isHoliday: Boolean(shift.isHoliday),
+      isSpecialDay: Boolean(shift.isSpecialDay),
+      specialDayLabel: shift.specialDayLabel || '',
+      isManualOverride: Boolean(shift.isManualOverride),
+    }));
+
+    const employees = get().employees || [];
+    const analytics = calculateWeeklyTotals(normalizedShifts, employees, weekDays);
+    const employeeSummaries = employees.map((employee) => {
+      const leave = analytics.leaveDaysByEmployee?.[employee.id] || {};
+      const breakdown = analytics.workBreakdownByEmployee?.[employee.id] || {};
+      return {
+        employeeId: employee.id,
+        employeeName: employee.fullName || '',
+        totalHours: analytics.totalsByEmployee?.[employee.id] || 0,
+        shiftsCount: analytics.shiftsCountByEmployee?.[employee.id] || 0,
+        morning: breakdown.morning || 0,
+        intermediate: breakdown.intermediate || 0,
+        evening: breakdown.evening || 0,
+        custom: breakdown.custom || 0,
+        restDays: leave.restDays || 0,
+        leaveDays: leave.leaveDays || 0,
+        sickDays: leave.sickDays || 0,
+        nonWorkingSundays: leave.nonWorkingSundays || 0,
+        inferredRestDays: leave.inferredRestDays || 0,
+      };
+    });
 
     await saveWeekHistorySnapshot({
       weekId: getWeekIdFromWeekStart(weekStart),
       weekStart: weekDays[0],
       weekEnd: weekDays[6],
       source,
-      shifts: weekShifts.map((shift) => ({
-        employeeId: shift.employeeId,
-        date: shift.date,
-        startTime: shift.startTime,
-        endTime: shift.endTime,
-        label: shift.label || '',
-        type: shift.type || SHIFT_TYPES.WORK,
-        notes: shift.notes || '',
-        shiftType: shift.shiftType || inferShiftTypeFromTimes(shift.startTime, shift.endTime),
-        customLabel: shift.customLabel || '',
-        isHoliday: Boolean(shift.isHoliday),
-        isSpecialDay: Boolean(shift.isSpecialDay),
-        specialDayLabel: shift.specialDayLabel || '',
-        isManualOverride: Boolean(shift.isManualOverride),
-      })),
+      shifts: normalizedShifts,
       createdBy: get().adminUser?.email || '',
+      metadata: {
+        totalShifts: normalizedShifts.length,
+        totalWorkHours: analytics.totalHours,
+        totalsByType: analytics.totalsByType,
+        employeeSummaries,
+      },
     });
   },
 

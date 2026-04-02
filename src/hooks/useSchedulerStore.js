@@ -67,11 +67,11 @@ function getMonthDateSet(year, month) {
 
 function parseShiftInput(startTime, endTime) {
   if (!isValidTimeLabel(startTime) || !isValidTimeLabel(endTime)) {
-    throw new Error('Ξ— ΟΟΞ± Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΟƒΞµ ΞΌΞΏΟΟ†Ξ® Ξ©Ξ©:Ξ›Ξ›.');
+    throw new Error('Η ώρα πρέπει να είναι σε μορφή ΩΩ:ΛΛ.');
   }
 
   if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
-    throw new Error('Ξ— ΟΟΞ± Ξ»Ξ®ΞΎΞ·Ο‚ Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΟΟΞ± Ξ­Ξ½Ξ±ΟΞΎΞ·Ο‚.');
+    throw new Error('Η ώρα λήξης πρέπει να είναι μετά την ώρα έναρξης.');
   }
 }
 
@@ -91,7 +91,7 @@ function buildNormalizedShiftPayload({
   isManualOverride,
 }) {
   const normalizedShiftType = shiftType || inferShiftTypeFromTimes(startTime, endTime);
-  const normalizedLabel = label?.trim() || 'Ξ§ΞµΞΉΟΞΏΞΊΞ―Ξ½Ξ·Ο„Ξ·';
+  const normalizedLabel = label?.trim() || 'Χειροκίνητη';
 
   return {
     employeeId,
@@ -103,7 +103,7 @@ function buildNormalizedShiftPayload({
     notes: notes || '',
     shiftType: normalizedShiftType,
     customLabel:
-      normalizedShiftType === 'custom' ? customLabel?.trim() || normalizedLabel || 'Ξ ΟΞΏΟƒΞ±ΟΞΌΞΏΟƒΞΌΞ­Ξ½Ξ·' : '',
+      normalizedShiftType === 'custom' ? customLabel?.trim() || normalizedLabel || 'Προσαρμοσμένη' : '',
     isHoliday: Boolean(isHoliday),
     isSpecialDay: Boolean(isSpecialDay || isHoliday),
     specialDayLabel: specialDayLabel?.trim() || '',

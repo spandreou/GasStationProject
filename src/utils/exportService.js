@@ -1,9 +1,8 @@
-﻿import { calculatePayrollSummary, getShiftTypeLabel } from './analytics';
+import { calculatePayrollSummary, getShiftTypeLabel } from './analytics';
 import { formatDateGreek, formatShiftTime } from './time';
 
 let xlsxModulePromise;
 let jsPdfModulePromise;
-let html2CanvasModulePromise;
 let docxModulePromise;
 let robotoFontPromise;
 
@@ -19,13 +18,6 @@ function loadJsPdf() {
     jsPdfModulePromise = import('jspdf');
   }
   return jsPdfModulePromise;
-}
-
-function loadHtml2Canvas() {
-  if (!html2CanvasModulePromise) {
-    html2CanvasModulePromise = import('html2canvas');
-  }
-  return html2CanvasModulePromise;
 }
 
 function loadDocx() {
@@ -95,6 +87,177 @@ function buildWeekRangeLabel(weekDays) {
   return `Πρόγραμμα: ${formatDateGreek(weekDays[0])} - ${formatDateGreek(weekDays[weekDays.length - 1])}`;
 }
 
+function formatDateWithWeekday(dateValue) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  const weekday = new Intl.DateTimeFormat('el-GR', { weekday: 'long' }).format(date);
+  const formattedDate = new Intl.DateTimeFormat('el-GR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+  return `${weekday} (${formattedDate})`;
+}
+
+function formatMonthYearLabel(month, year, monthDays = []) {
+  if (typeof month === 'number' && typeof year === 'number') {
+    return new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(new Date(year, month, 1));
+  }
+
+  const fallbackDay = monthDays[0];
+  if (fallbackDay) {
+    const fallbackDate = new Date(`${fallbackDay}T00:00:00`);
+    return new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(fallbackDate);
+  }
+
+  return new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(new Date());
+}
+
+function getScheduleWorkLabel(shiftList = []) {
+  const workShifts = shiftList
+    .filter((item) => (item.type || 'work') === 'work')
+    .sort((a, b) => {
+      const startDiff = (a.startTime || '').localeCompare(b.startTime || '');
+      if (startDiff !== 0) return startDiff;
+      return (a.endTime || '').localeCompare(b.endTime || '');
+    });
+
+  if (workShifts.length > 0) {
+    return workShifts.map((item) => formatShiftTime(item.startTime, item.endTime)).join(' | ');
+  }
+
+  if (shiftList.some((item) => item.type === 'sick')) return 'Ασθένεια';
+  if (shiftList.some((item) => item.type === 'leave')) return 'Άδεια';
+  if (shiftList.some((item) => item.type === 'rest')) return 'Ρεπό';
+  return 'Ρεπό';
+}
+
+function buildScheduleRows({ days, employees, shifts }) {
+  const shiftMap = new Map();
+  (shifts || []).forEach((shift) => {
+    const key = `${shift.date}__${shift.employeeId}`;
+    if (!shiftMap.has(key)) {
+      shiftMap.set(key, []);
+    }
+    shiftMap.get(key).push(shift);
+  });
+
+  const normalizedEmployees = [...(employees || [])].sort((a, b) =>
+    (a.fullName || '').localeCompare(b.fullName || '', 'el'),
+  );
+
+  const rows = [];
+  (days || []).forEach((day) => {
+    const dateLabel = formatDateWithWeekday(day);
+    normalizedEmployees.forEach((employee) => {
+      const key = `${day}__${employee.id}`;
+      const dayShifts = shiftMap.get(key) || [];
+      rows.push({
+        date: dateLabel,
+        employee: employee.fullName || 'Άγνωστος υπάλληλος',
+        work: getScheduleWorkLabel(dayShifts),
+      });
+    });
+  });
+
+  return rows;
+}
+
+function drawPdfTable({
+  doc,
+  startX,
+  startY,
+  pageWidth,
+  pageHeight,
+  margin,
+  rows,
+}) {
+  const columnDefs = [
+    { key: 'date', title: 'Ημερομηνία', widthRatio: 0.32 },
+    { key: 'employee', title: 'Υπάλληλος', widthRatio: 0.28 },
+    { key: 'work', title: 'Εργασία', widthRatio: 0.4 },
+  ];
+
+  const tableWidth = pageWidth - margin * 2;
+  const columnWidths = columnDefs.map((column) => tableWidth * column.widthRatio);
+  const lineHeight = 12;
+  const minRowHeight = 22;
+  const cellPaddingX = 6;
+  const cellPaddingY = 5;
+  const headerHeight = 24;
+
+  const drawHeader = (y) => {
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.setFillColor(226, 232, 240);
+
+    let x = startX;
+    columnDefs.forEach((column, index) => {
+      const width = columnWidths[index];
+      doc.rect(x, y, width, headerHeight, 'FD');
+      doc.text(column.title, x + cellPaddingX, y + 15);
+      x += width;
+    });
+  };
+
+  let cursorY = startY;
+  drawHeader(cursorY);
+  cursorY += headerHeight;
+
+  doc.setFontSize(10.5);
+  doc.setTextColor(30, 41, 59);
+
+  rows.forEach((row) => {
+    const cellLines = columnDefs.map((column, index) =>
+      doc.splitTextToSize(String(row[column.key] || ''), columnWidths[index] - cellPaddingX * 2),
+    );
+
+    const maxLines = Math.max(...cellLines.map((lines) => lines.length), 1);
+    const rowHeight = Math.max(minRowHeight, maxLines * lineHeight + cellPaddingY * 2);
+
+    if (cursorY + rowHeight > pageHeight - margin) {
+      doc.addPage('a4', 'landscape');
+      cursorY = margin;
+      drawHeader(cursorY);
+      cursorY += headerHeight;
+      doc.setFontSize(10.5);
+      doc.setTextColor(30, 41, 59);
+    }
+
+    let x = startX;
+    cellLines.forEach((lines, index) => {
+      const width = columnWidths[index];
+      doc.rect(x, cursorY, width, rowHeight);
+      doc.text(lines, x + cellPaddingX, cursorY + cellPaddingY + 9);
+      x += width;
+    });
+
+    cursorY += rowHeight;
+  });
+}
+
+function buildPdfFileName({ mode, days, month, year }) {
+  if (mode === 'month') {
+    const resolvedYear =
+      typeof year === 'number' ? year : days[0] ? Number(days[0].slice(0, 4)) : new Date().getFullYear();
+    const resolvedMonth =
+      typeof month === 'number' ? String(month + 1).padStart(2, '0') : days[0] ? days[0].slice(5, 7) : '01';
+    return `program_month_${resolvedYear}-${resolvedMonth}.pdf`;
+  }
+
+  return createFileName('program_week_pdf', days, 'pdf');
+}
+
+function buildPdfTitle({ mode, days, month, year }) {
+  if (mode === 'month') {
+    return `Πρόγραμμα Μήνα: ${formatMonthYearLabel(month, year, days)}`;
+  }
+  return `Πρόγραμμα Εβδομάδας: ${formatDateGreek(days[0])} - ${formatDateGreek(days[days.length - 1])}`;
+}
+
+function buildPdfSubtitle(days) {
+  return `Σύνολο ημερών: ${days.length}`;
+}
+
 function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -114,49 +277,50 @@ async function setupGreekFont(doc) {
   doc.setFont('Roboto-Regular', 'normal');
 }
 
-export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-grid-export' }) {
-  const gridElement = document.querySelector(gridSelector);
-  if (!gridElement) {
-    throw new Error(`WeeklyGrid container was not found: ${gridSelector}`);
+export async function exportScheduleToPdf({
+  mode = 'week',
+  days = [],
+  weekDays = [],
+  employees = [],
+  shifts = [],
+  month,
+  year,
+} = {}) {
+  const targetDays = Array.isArray(days) && days.length ? days : weekDays;
+
+  if (!targetDays.length) {
+    throw new Error('Δεν βρέθηκαν ημέρες για εξαγωγή PDF.');
+  }
+  if (!employees.length) {
+    throw new Error('Δεν βρέθηκαν υπάλληλοι για εξαγωγή PDF.');
   }
 
-  const [{ default: html2canvas }, { default: jsPDFCtor }] = await Promise.all([loadHtml2Canvas(), loadJsPdf()]);
-
-  if (document.fonts?.ready) {
-    await document.fonts.ready;
-  }
-
-  const canvas = await html2canvas(gridElement, {
-    scale: Math.max(2, window.devicePixelRatio || 1),
-    useCORS: true,
-    backgroundColor: null,
-  });
-
+  const rows = buildScheduleRows({ days: targetDays, employees, shifts });
+  const { default: jsPDFCtor } = await loadJsPdf();
   const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  await setupGreekFont(doc);
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-  const titleHeight = 30;
-  const availableWidth = pageWidth - margin * 2;
-  const availableHeight = pageHeight - margin * 2 - titleHeight;
+  const margin = 28;
 
-  let imageWidth = availableWidth;
-  let imageHeight = (canvas.height * imageWidth) / canvas.width;
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(14);
+  doc.text(buildPdfTitle({ mode, days: targetDays, month, year }), margin, margin);
+  doc.setFontSize(10);
+  doc.text(buildPdfSubtitle(targetDays), margin, margin + 16);
 
-  if (imageHeight > availableHeight) {
-    imageHeight = availableHeight;
-    imageWidth = (canvas.width * imageHeight) / canvas.height;
-  }
+  drawPdfTable({
+    doc,
+    startX: margin,
+    startY: margin + 28,
+    pageWidth,
+    pageHeight,
+    margin,
+    rows,
+  });
 
-  const x = (pageWidth - imageWidth) / 2;
-  const y = margin + titleHeight + (availableHeight - imageHeight) / 2;
-
-  await setupGreekFont(doc);
-  doc.setFontSize(13);
-  doc.text(buildWeekRangeLabel(weekDays), margin, margin + 14);
-
-  doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imageWidth, imageHeight, undefined, 'FAST');
-  doc.save(createFileName('program_pdf', weekDays, 'pdf'));
+  doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
 }
 
 export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {

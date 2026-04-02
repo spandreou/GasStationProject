@@ -1,4 +1,4 @@
-﻿import {
+import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -21,12 +21,14 @@
 import { useState } from 'react';
 import { formatDateGreek } from '../../utils/time';
 
-function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
+function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onExportWord }) {
   const [isOpen, setIsOpen] = useState(false);
 
   function handleAction(action) {
     setIsOpen(false);
-    action();
+    if (typeof action === 'function') {
+      action();
+    }
   }
 
   return (
@@ -45,11 +47,19 @@ function ExportDropdown({ onExportPdf, onExportExcel, onExportWord }) {
         <div className="absolute right-0 z-[9999] mt-2 min-w-[180px] rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/90">
           <button
             type="button"
-            onClick={() => handleAction(onExportPdf)}
+            onClick={() => handleAction(onExportWeekPdf)}
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
           >
             <FileText size={15} />
-            Εξαγωγή σε PDF
+            PDF Εβδομάδας
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAction(onExportMonthPdf)}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 hover:bg-white/70 dark:text-slate-100 dark:hover:bg-slate-800/80"
+          >
+            <FileText size={15} />
+            PDF Μήνα
           </button>
           <button
             type="button"
@@ -89,7 +99,8 @@ export default function WeekToolbar({
   onFinalizeWeek,
   onMagicWand,
   onJumpToWeekDate,
-  onExportPdf,
+  onExportWeekPdf,
+  onExportMonthPdf,
   onExportExcel,
   onExportWord,
   isWeekLocked = false,
@@ -284,7 +295,12 @@ export default function WeekToolbar({
             Αντιγραφή για WhatsApp
           </button>
 
-          <ExportDropdown onExportPdf={onExportPdf} onExportExcel={onExportExcel} onExportWord={onExportWord} />
+          <ExportDropdown
+            onExportWeekPdf={onExportWeekPdf}
+            onExportMonthPdf={onExportMonthPdf}
+            onExportExcel={onExportExcel}
+            onExportWord={onExportWord}
+          />
         </div>
       </div>
 
@@ -359,11 +375,19 @@ export default function WeekToolbar({
 
               <button
                 type="button"
-                onClick={() => handleMoreAction(onExportPdf)}
+                onClick={() => handleMoreAction(onExportWeekPdf)}
                 className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
                 <FileText size={15} />
-                Εξαγωγή σε PDF
+                PDF Εβδομάδας
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMoreAction(onExportMonthPdf)}
+                className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
+              >
+                <FileText size={15} />
+                PDF Μήνα
               </button>
               <button
                 type="button"

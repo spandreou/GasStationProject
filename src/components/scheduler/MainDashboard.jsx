@@ -339,11 +339,31 @@ export default function MainDashboard() {
     });
   }
 
-  async function handleExportPdf() {
+  async function handleExportWeekPdf() {
     try {
-      await exportScheduleToPdf(getExportPayload());
+      await exportScheduleToPdf({
+        mode: 'week',
+        days: weekDays,
+        shifts: weekShifts,
+        employees,
+      });
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής PDF.');
+      setWarningMessage('Αποτυχία εξαγωγής PDF εβδομάδας.');
+    }
+  }
+
+  async function handleExportMonthPdf() {
+    try {
+      await exportScheduleToPdf({
+        mode: 'month',
+        days: monthDays,
+        shifts: monthShifts,
+        employees,
+        month: selectedMonth,
+        year: selectedYear,
+      });
+    } catch {
+      setWarningMessage('Αποτυχία εξαγωγής PDF μήνα.');
     }
   }
 
@@ -402,7 +422,8 @@ export default function MainDashboard() {
           onFinalizeWeek={finalizeCurrentWeek}
           onMagicWand={generateMagicWeek}
           onJumpToWeekDate={setWeekFromDate}
-          onExportPdf={handleExportPdf}
+          onExportWeekPdf={handleExportWeekPdf}
+          onExportMonthPdf={handleExportMonthPdf}
           onExportExcel={handleExportExcel}
           onExportWord={handleExportWord}
           isWeekLocked={isWeekLocked}

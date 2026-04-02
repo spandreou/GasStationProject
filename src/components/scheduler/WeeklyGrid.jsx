@@ -499,6 +499,23 @@ export default function WeeklyGrid({
     setDayEditorDraft(buildDraftFromShift(shift));
   }
 
+  function setEditorToSavedShift({ shiftId, payload }) {
+    if (!shiftId || !payload?.date) return;
+    setDayEditor((prev) => ({
+      ...prev,
+      date: payload.date,
+      title: getDayLabel(payload.date),
+      subtitle: formatGreekDate(payload.date),
+      editingShiftId: shiftId,
+    }));
+    setDayEditorDraft(
+      buildDraftFromShift({
+        id: shiftId,
+        ...payload,
+      }),
+    );
+  }
+
   async function handleDayEditorSave(event) {
     event.preventDefault();
     if (!canManage) return;
@@ -522,24 +539,32 @@ export default function WeeklyGrid({
     setIsEditorSaving(true);
     try {
       if (dayEditor.editingShiftId) {
+        const targetShiftId = dayEditor.editingShiftId;
         const updated = await onUpdateShift?.({
-          shiftId: dayEditor.editingShiftId,
+          shiftId: targetShiftId,
           ...payload,
         });
         if (updated) {
-          const refreshed = (grouped[payload.date] || []).find((item) => item.id === dayEditor.editingShiftId);
-          if (refreshed) {
-            setEditorToExistingShift(refreshed);
-          } else {
-            setEditorToCreateMode();
-          }
+          setEditorToSavedShift({ shiftId: targetShiftId, payload });
         }
         return;
       }
 
       const created = await onCreateShift?.(payload);
       if (created?.id) {
-        setEditorToCreateMode();
+        setDayEditor((prev) => ({
+          ...prev,
+          date: payload.date,
+          title: getDayLabel(payload.date),
+          subtitle: formatGreekDate(payload.date),
+          editingShiftId: '',
+        }));
+        setDayEditorDraft(
+          buildNewDraft({
+            date: payload.date,
+            employeeId: payload.employeeId || activeEmployees[0]?.id || '',
+          }),
+        );
       }
     } finally {
       setIsEditorSaving(false);
@@ -966,8 +991,8 @@ export default function WeeklyGrid({
                           <button
                             type="button"
                             onClick={async () => {
-                              await onDeleteShift?.(shift.id);
-                              if (dayEditor.editingShiftId === shift.id) {
+                              const deleted = await onDeleteShift?.(shift.id);
+                              if (deleted && dayEditor.editingShiftId === shift.id) {
                                 setEditorToCreateMode();
                               }
                             }}

@@ -30,6 +30,10 @@ export default function AssignedShiftItem({
   const typeClass = getTypeClass(type);
   const scheduleShiftLabel = getScheduleShiftTypeLabel(shift.shiftType || 'custom');
   const customLabel = shift.shiftType === 'custom' ? shift.customLabel || shift.label : '';
+  const canEdit = canManage && typeof onEdit === 'function';
+  const canDelete = canManage && typeof onDelete === 'function';
+  const canToggleManual = canManage && typeof onToggleManualOverride === 'function';
+  const hasActions = canEdit || canDelete;
 
   return (
     <article
@@ -40,26 +44,30 @@ export default function AssignedShiftItem({
           : 'border-white/35 bg-white/55 dark:border-cyan-300/30 dark:bg-slate-900/45')
       }`}
     >
-      {canManage ? (
+      {hasActions ? (
         <div className="absolute right-1 top-1 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onEdit?.(shift)}
-            className="rounded p-1 text-slate-500 hover:bg-sky-100 hover:text-sky-700 dark:text-slate-300 dark:hover:bg-sky-500/30 dark:hover:text-sky-200"
-            title="Επεξεργασία βάρδιας"
-            aria-label="Επεξεργασία βάρδιας"
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(shift.id)}
-            className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
-            title="Αφαίρεση βάρδιας"
-            aria-label="Αφαίρεση βάρδιας"
-          >
-            <X size={14} />
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit?.(shift)}
+              className="rounded p-1 text-slate-500 hover:bg-sky-100 hover:text-sky-700 dark:text-slate-300 dark:hover:bg-sky-500/30 dark:hover:text-sky-200"
+              title="Επεξεργασία βάρδιας"
+              aria-label="Επεξεργασία βάρδιας"
+            >
+              <Pencil size={14} />
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={() => onDelete?.(shift.id)}
+              className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
+              title="Αφαίρεση βάρδιας"
+              aria-label="Αφαίρεση βάρδιας"
+            >
+              <X size={14} />
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -72,7 +80,7 @@ export default function AssignedShiftItem({
           <span className="inline-flex rounded-full border border-fuchsia-300/70 bg-fuchsia-100/80 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-900 dark:border-fuchsia-300/40 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
             Manual Override
           </span>
-          {canManage ? (
+          {canToggleManual ? (
             <button
               type="button"
               onClick={() => onToggleManualOverride?.(shift.id, false)}
@@ -82,7 +90,7 @@ export default function AssignedShiftItem({
             </button>
           ) : null}
         </div>
-      ) : canManage ? (
+      ) : canToggleManual ? (
         <button
           type="button"
           onClick={() => onToggleManualOverride?.(shift.id, true)}

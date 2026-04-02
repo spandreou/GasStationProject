@@ -136,6 +136,14 @@ function isDateInWeek(date, weekDays) {
   return new Set(weekDays).has(date);
 }
 
+function sortShiftsByDateAndStart(shifts = []) {
+  return [...shifts].sort((a, b) =>
+    `${a.date || ''}_${a.startTime || ''}_${a.employeeId || ''}`.localeCompare(
+      `${b.date || ''}_${b.startTime || ''}_${b.employeeId || ''}`,
+    ),
+  );
+}
+
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
 const defaultGeneratorRules = {
   weeklyRotationEnabled: true,
@@ -696,6 +704,12 @@ export const useSchedulerStore = create((set, get) => ({
         isManualOverride: Boolean(isManualOverride),
       });
 
+      if (createdShift?.id) {
+        set((state) => ({
+          shifts: sortShiftsByDateAndStart([...state.shifts, createdShift]),
+        }));
+      }
+
       if (trackUndo && createdShift?.id) {
         set({
           undoState: buildUndoState('add_shift', 'Η βάρδια ανατέθηκε.', { shiftId: createdShift.id }),
@@ -796,6 +810,11 @@ export const useSchedulerStore = create((set, get) => ({
 
       set({ isSaving: true });
       await updateShift(shiftId, payload);
+      set((state) => ({
+        shifts: sortShiftsByDateAndStart(
+          state.shifts.map((shift) => (shift.id === shiftId ? { ...shift, ...payload } : shift)),
+        ),
+      }));
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();
 
@@ -894,6 +913,11 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       await updateShift(shiftId, { isManualOverride: nextValue });
+      set((state) => ({
+        shifts: state.shifts.map((shift) =>
+          shift.id === shiftId ? { ...shift, isManualOverride: nextValue } : shift,
+        ),
+      }));
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();
       set({
@@ -908,14 +932,14 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   deleteShift: async (shiftId) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     const existingShift = get().shifts.find((item) => item.id === shiftId);
-    if (!existingShift) return;
+    if (!existingShift) return false;
 
     const weekDays = getWeekDays(get().weekStart);
     if (get().isWeekLocked && isDateInWeek(existingShift.date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
-      return;
+      return false;
     }
 
     set({ isSaving: true });
@@ -925,13 +949,15 @@ export const useSchedulerStore = create((set, get) => ({
     } finally {
       set({ isSaving: false });
     }
-    if (!removedShift) return;
+    if (!removedShift) return false;
 
-    set({
+    set((state) => ({
+      shifts: state.shifts.filter((item) => item.id !== shiftId),
       undoState: buildUndoState('delete_shift', 'Η βάρδια διαγράφηκε.', { shift: removedShift }),
-    });
+    }));
     await get().saveCurrentWeekSnapshot('manual_save');
     await get().loadWeekHistory();
+    return true;
   },
 
   finalizeCurrentWeek: async () => {

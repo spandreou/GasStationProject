@@ -16,7 +16,14 @@ function getTypeClass(type) {
   }
 }
 
-export default function AssignedShiftItem({ shift, employee, hasConflict, onDelete, canManage = true }) {
+export default function AssignedShiftItem({
+  shift,
+  employee,
+  hasConflict,
+  onDelete,
+  onToggleManualOverride,
+  canManage = true,
+}) {
   const type = shift.type || SHIFT_TYPES.WORK;
   const isWork = type === SHIFT_TYPES.WORK;
   const typeClass = getTypeClass(type);
@@ -47,6 +54,31 @@ export default function AssignedShiftItem({ shift, employee, hasConflict, onDele
       <div className="flex items-center justify-between gap-2 pr-6">
         <p className="font-semibold text-slate-900 dark:text-white">{employee?.fullName || 'Άγνωστος'}</p>
       </div>
+
+      {shift.isManualOverride ? (
+        <div className="mt-1 flex items-center gap-2">
+          <span className="inline-flex rounded-full border border-fuchsia-300/70 bg-fuchsia-100/80 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-900 dark:border-fuchsia-300/40 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
+            Manual Override
+          </span>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => onToggleManualOverride?.(shift.id, false)}
+              className="rounded border border-slate-300/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-white/70 dark:border-cyan-300/35 dark:text-slate-200 dark:hover:bg-slate-800/60"
+            >
+              Καθαρισμός
+            </button>
+          ) : null}
+        </div>
+      ) : canManage ? (
+        <button
+          type="button"
+          onClick={() => onToggleManualOverride?.(shift.id, true)}
+          className="mt-1 rounded border border-slate-300/70 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-white/70 dark:border-cyan-300/35 dark:text-slate-200 dark:hover:bg-slate-800/60"
+        >
+          Mark Manual
+        </button>
+      ) : null}
 
       <p className="text-slate-700 dark:text-slate-200">{getShiftTypeLabel(type)}</p>
       {isWork ? (

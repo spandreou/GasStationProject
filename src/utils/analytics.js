@@ -136,7 +136,7 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     const employeeId = employee.id;
     const employeeDayStatus = dayStatusByEmployee[employeeId] || {};
 
-    let restDays = 0;
+    let explicitRestNonSunday = 0;
     let leaveDays = 0;
     let sickDays = 0;
     let nonWorkingSundays = 0;
@@ -152,7 +152,9 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
         } else if (dayStatus.hasLeave) {
           leaveDays += 1;
         } else if (dayStatus.hasRest) {
-          restDays += 1;
+          if (!isSundayDate(date)) {
+            explicitRestNonSunday += 1;
+          }
         }
       }
 
@@ -162,10 +164,14 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     });
 
     let inferredRestDays = 0;
-    if (isWeeklyRange && restDays < 1) {
-      inferredRestDays = 1 - restDays;
-      restDays += inferredRestDays;
+    if (isWeeklyRange && explicitRestNonSunday < 1) {
+      inferredRestDays = 1 - explicitRestNonSunday;
     }
+
+    // Weekly business rule:
+    // - 1 regular rest day inside the week (explicit or inferred)
+    // - +1 additional rest if employee does not work on Sunday.
+    const restDays = explicitRestNonSunday + inferredRestDays + nonWorkingSundays;
 
     leaveDaysByEmployee[employeeId] = {
       restDays,

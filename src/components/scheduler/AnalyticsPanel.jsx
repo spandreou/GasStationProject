@@ -90,7 +90,8 @@ export default function AnalyticsPanel({
               </div>
               <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                 Βάρδιες: {shiftsCountByEmployee?.[employee.id] || 0} | Πρωινές: {breakdown.morning || 0} | Ενδιάμεσες:{' '}
-                {breakdown.intermediate || 0} | Απογευματινές: {breakdown.evening || 0}
+                {breakdown.intermediate || 0} | Απογευματινές: {breakdown.evening || 0} | Προσαρμοσμένες:{' '}
+                {breakdown.custom || 0}
               </p>
               <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                 Ρεπό: {leave.restDays} | Άδεια: {leave.leaveDays} | Ασθένεια: {leave.sickDays} | Κυριακές εκτός

@@ -133,8 +133,13 @@ function findEmployeeById(employees, id) {
   return employees.find((employee) => employee.id === id) || null;
 }
 
+function canParticipateInRotation(employee) {
+  return employee?.participatesInRotation !== false;
+}
+
 function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   const sorted = sortEmployeesByName(activeEmployees);
+  const rotationEligible = sorted.filter(canParticipateInRotation);
   const configuredCoreA = findEmployeeById(sorted, roleConfig.coreAId);
   const configuredCoreBInitial = findEmployeeById(sorted, roleConfig.coreBId);
   const configuredIntermediateInitial = findEmployeeById(sorted, roleConfig.intermediateId);
@@ -151,16 +156,20 @@ function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   const configuredUnique = [configuredCoreA, configuredCoreB, configuredIntermediate].filter(Boolean);
   const configuredSet = new Set(configuredUnique.map((employee) => employee.id));
 
-  const roleDetectedCore = sorted.filter((employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core');
+  const roleDetectedCore = rotationEligible.filter(
+    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core',
+  );
   const roleDetectedIntermediate = sorted.find(
     (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'intermediate',
   );
 
   const remaining = sorted.filter((employee) => !configuredSet.has(employee.id));
+  const rotationRemaining = remaining.filter(canParticipateInRotation);
 
   const coreA =
     configuredCoreA ||
     roleDetectedCore.find((employee) => employee.id !== configuredCoreB?.id) ||
+    rotationRemaining[0] ||
     remaining[0] ||
     sorted[0] ||
     null;
@@ -168,6 +177,7 @@ function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   const coreB =
     configuredCoreB ||
     roleDetectedCore.find((employee) => employee.id !== coreA?.id) ||
+    rotationRemaining.find((employee) => employee.id !== coreA?.id) ||
     remaining.find((employee) => employee.id !== coreA?.id) ||
     sorted.find((employee) => employee.id !== coreA?.id) ||
     null;
@@ -202,7 +212,27 @@ function getIntermediateShiftByWeek(weekIndex) {
   return weekIndex % 2 === 0 ? INTERMEDIATE_SHIFT_A : INTERMEDIATE_SHIFT_B;
 }
 
-function buildShiftFromTemplate({ employee, date, template, notes, isHoliday = false, isSpecialDay = false, specialDayLabel = '' }) {
+function getPreferredIntermediateShift(employee, weekIndex) {
+  const preference = `${employee?.defaultShiftPreference || ''}`.toLowerCase();
+  if (preference === 'morning') return MORNING_SHIFT;
+  if (preference === 'evening') return EVENING_SHIFT;
+  if (preference === 'intermediate_0900') return INTERMEDIATE_SHIFT_A;
+  if (preference === 'intermediate_1000') return INTERMEDIATE_SHIFT_B;
+  return getIntermediateShiftByWeek(weekIndex);
+}
+
+function buildSpecialDayLabel(specialDay) {
+  const label = specialDay?.label?.trim() || '';
+  const hasWindow = specialDay?.operatingStartTime && specialDay?.operatingEndTime;
+  const fallback = specialDay?.isHoliday ? 'Αργία' : 'Ειδικό Ωράριο';
+  if (label && hasWindow) return `${label} (${specialDay.operatingStartTime}-${specialDay.operatingEndTime})`;
+  if (label) return label;
+  if (hasWindow) return `${fallback} ${specialDay.operatingStartTime}-${specialDay.operatingEndTime}`;
+  return fallback;
+}
+
+function buildShiftFromTemplate({ employee, date, template, notes, specialDay = null }) {
+  const isSpecial = Boolean(specialDay?.isHoliday || specialDay?.isSpecialDay);
   return {
     employeeId: employee.id,
     date,
@@ -213,9 +243,9 @@ function buildShiftFromTemplate({ employee, date, template, notes, isHoliday = f
     shiftType: template.shiftType,
     customLabel: template.customLabel || '',
     notes: notes || '',
-    isHoliday,
-    isSpecialDay,
-    specialDayLabel,
+    isHoliday: Boolean(specialDay?.isHoliday),
+    isSpecialDay: isSpecial,
+    specialDayLabel: isSpecial ? buildSpecialDayLabel(specialDay) : '',
     isManualOverride: false,
   };
 }
@@ -302,9 +332,7 @@ function applySpecialDayTemplate({
       date,
       template,
       notes: 'Auto-generated from special-day template',
-      isHoliday: Boolean(specialDay.isHoliday),
-      isSpecialDay: true,
-      specialDayLabel: specialDay.label || 'Ειδικό Ωράριο',
+      specialDay: { ...specialDay, isSpecialDay: true },
     });
 
     const combined = [...existingEntries, ...generated];
@@ -534,6 +562,7 @@ export function generateSmartMonthSchedule({
         date,
         template: SUNDAY_SHIFT,
         notes: 'Auto-generated Sunday fairness',
+        specialDay,
       });
 
       if (!hasOverlap(existingForOverlap, sundayShift)) {
@@ -583,6 +612,7 @@ export function generateSmartMonthSchedule({
         date,
         template,
         notes: 'Auto-generated core rotation',
+        specialDay,
       });
 
       if (!hasOverlap(existingForOverlap, autoShift)) {
@@ -600,7 +630,7 @@ export function generateSmartMonthSchedule({
 
       if (!intermediateHasManual && !isOffDay) {
         const missingTemplate = missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
-        const template = missingTemplate || getIntermediateShiftByWeek(weekIndex);
+        const template = missingTemplate || getPreferredIntermediateShift(intermediate, weekIndex);
 
         const intermediateShift = buildShiftFromTemplate({
           employee: intermediate,
@@ -609,6 +639,7 @@ export function generateSmartMonthSchedule({
           notes: missingTemplate
             ? 'Auto-generated intermediate coverage for fixed day-off'
             : 'Auto-generated intermediate standard shift',
+          specialDay,
         });
 
         if (!hasOverlap(existingForOverlap, intermediateShift)) {

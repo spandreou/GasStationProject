@@ -26,7 +26,22 @@ const MONTH_OPTIONS = [
   'Δεκέμβριος',
 ];
 
-function getDaySpecialInfo(dayShifts) {
+function getDaySpecialInfo(dayShifts, specialDayConfig) {
+  if (specialDayConfig) {
+    if (specialDayConfig.label?.trim()) {
+      const hasWindow = specialDayConfig.operatingStartTime && specialDayConfig.operatingEndTime;
+      if (hasWindow) {
+        return `${specialDayConfig.label.trim()} (${specialDayConfig.operatingStartTime}-${specialDayConfig.operatingEndTime})`;
+      }
+      return specialDayConfig.label.trim();
+    }
+    if (specialDayConfig.operatingStartTime && specialDayConfig.operatingEndTime) {
+      return `Ειδικό Ωράριο ${specialDayConfig.operatingStartTime}-${specialDayConfig.operatingEndTime}`;
+    }
+    if (specialDayConfig.isHoliday) return 'Αργία';
+    if (specialDayConfig.isSpecialDay) return 'Ειδικό Ωράριο';
+  }
+
   const specialShift = (dayShifts || []).find((item) => item.isHoliday || item.isSpecialDay);
   if (!specialShift) return null;
   if (specialShift.specialDayLabel?.trim()) return specialShift.specialDayLabel.trim();
@@ -144,11 +159,13 @@ function DayBox({
   subtitle,
   dayShifts,
   dayTemplates,
+  specialDayConfig,
   canManage,
   getEmployeeById,
   getSundayViolationMessage,
   conflictShiftIds,
   onDeleteShift,
+  onToggleManualOverride,
   onDeleteShiftTemplate,
   onClearDay,
 }) {
@@ -158,7 +175,8 @@ function DayBox({
     disabled: !canManage,
   });
 
-  const specialInfo = getDaySpecialInfo(dayShifts);
+  const specialInfo = getDaySpecialInfo(dayShifts, specialDayConfig);
+  const manualCount = (dayShifts || []).filter((item) => item.isManualOverride).length;
 
   return (
     <section
@@ -194,6 +212,11 @@ function DayBox({
             {specialInfo === 'Αργία' ? 'Αργία' : `Ειδικό Ωράριο: ${specialInfo}`}
           </span>
         ) : null}
+        {manualCount > 0 ? (
+          <span className="mt-1 ml-2 inline-flex rounded-full border border-fuchsia-300/60 bg-fuchsia-200/20 px-2 py-0.5 text-[11px] font-semibold text-fuchsia-100">
+            Manual entries: {manualCount}
+          </span>
+        ) : null}
       </header>
 
       <div className="space-y-2">
@@ -215,6 +238,7 @@ function DayBox({
                 employee={getEmployeeById(shift.employeeId)}
                 hasConflict={conflictShiftIds.has(shift.id)}
                 onDelete={onDeleteShift}
+                onToggleManualOverride={onToggleManualOverride}
                 canManage={canManage}
               />
               {sundayWarning ? (
@@ -261,6 +285,7 @@ export default function WeeklyGrid({
   scheduleMode = 'week',
   monthlyRoleConfig = { coreAId: '', coreBId: '', intermediateId: '' },
   sundayRuleViolations = {},
+  specialDaysByDate = {},
   onChangeScheduleMode,
   onSelectMonth,
   onSelectYear,
@@ -274,6 +299,7 @@ export default function WeeklyGrid({
   onGenerateMonthlySchedule,
   onJumpToWeekDate,
   onDeleteShift,
+  onToggleManualOverride,
   onDeleteShiftTemplate,
   onClearDayShifts,
   canManage,
@@ -501,16 +527,18 @@ export default function WeeklyGrid({
                     day={day}
                     title={WEEKDAY_LABELS[index]}
                     subtitle={formatDateGreek(day)}
-                    dayShifts={dayShifts}
-                    dayTemplates={dayTemplates}
-                    canManage={canManage}
-                    getEmployeeById={getEmployeeById}
-                    getSundayViolationMessage={getSundayViolationMessage}
-                    conflictShiftIds={conflictShiftIds}
-                    onDeleteShift={onDeleteShift}
-                    onDeleteShiftTemplate={onDeleteShiftTemplate}
-                    onClearDay={clearDayWithConfirm}
-                  />
+                  dayShifts={dayShifts}
+                  dayTemplates={dayTemplates}
+                  specialDayConfig={specialDaysByDate?.[day]}
+                  canManage={canManage}
+                  getEmployeeById={getEmployeeById}
+                  getSundayViolationMessage={getSundayViolationMessage}
+                  conflictShiftIds={conflictShiftIds}
+                  onDeleteShift={onDeleteShift}
+                  onToggleManualOverride={onToggleManualOverride}
+                  onDeleteShiftTemplate={onDeleteShiftTemplate}
+                  onClearDay={clearDayWithConfirm}
+                />
                 </div>
               );
             })}
@@ -629,11 +657,13 @@ export default function WeeklyGrid({
                   subtitle={formatGreekDate(day)}
                   dayShifts={dayShifts}
                   dayTemplates={[]}
+                  specialDayConfig={specialDaysByDate?.[day]}
                   canManage={canManage}
                   getEmployeeById={getEmployeeById}
                   getSundayViolationMessage={getSundayViolationMessage}
                   conflictShiftIds={conflictShiftIds}
                   onDeleteShift={onDeleteShift}
+                  onToggleManualOverride={onToggleManualOverride}
                   onDeleteShiftTemplate={onDeleteShiftTemplate}
                   onClearDay={clearDayWithConfirm}
                 />

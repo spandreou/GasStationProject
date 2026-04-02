@@ -24,6 +24,8 @@ const WEEK_LOCKS_COLLECTION = 'week_locks';
 const ANNOUNCEMENTS_COLLECTION = 'announcements';
 const WEEK_HISTORY_COLLECTION = 'week_history';
 const WEEK_TEMPLATES_COLLECTION = 'week_templates';
+const SCHEDULER_SETTINGS_COLLECTION = 'scheduler_settings';
+const DEFAULT_SCHEDULER_SETTINGS_DOC = 'default';
 
 const MAX_IN_QUERY_VALUES = 10;
 
@@ -137,6 +139,22 @@ export function subscribeShiftTemplates(onData, onError) {
     (snapshot) => {
       const templates = toDataWithId(snapshot).sort((a, b) => (a.label || '').localeCompare(b.label || '', 'el'));
       onData(templates);
+    },
+    onError,
+  );
+}
+
+export function subscribeSchedulerSettings(onData, onError) {
+  if (!db) {
+    onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
+    return createLocalUnsubscribe();
+  }
+
+  const settingsDoc = doc(db, SCHEDULER_SETTINGS_COLLECTION, DEFAULT_SCHEDULER_SETTINGS_DOC);
+  return onSnapshot(
+    settingsDoc,
+    (snapshot) => {
+      onData(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null);
     },
     onError,
   );
@@ -556,6 +574,22 @@ export async function createManyShifts(shifts) {
           updatedAt: serverTimestamp(),
         }),
       ),
+    ),
+  );
+}
+
+export async function upsertSchedulerSettings(payload = {}) {
+  ensureFirestoreReady();
+
+  const settingsDoc = doc(db, SCHEDULER_SETTINGS_COLLECTION, DEFAULT_SCHEDULER_SETTINGS_DOC);
+  await withFirestoreWrite(() =>
+    setDoc(
+      settingsDoc,
+      {
+        ...payload,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
     ),
   );
 }

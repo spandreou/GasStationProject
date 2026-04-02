@@ -23,7 +23,10 @@ import EmployeeProfileModal from './EmployeeProfileModal';
 import EmployeeSidebar from './EmployeeSidebar';
 import HistoryView from './HistoryView';
 import ManualShiftForm from './ManualShiftForm';
+import SchedulingRulesPanel from './SchedulingRulesPanel';
+import SpecialDaysPanel from './SpecialDaysPanel';
 import UndoSnackbar from './UndoSnackbar';
+import WeekHistoryViewer from './WeekHistoryViewer';
 import WeekToolbar from './WeekToolbar';
 import WeeklyGrid from './WeeklyGrid';
 
@@ -61,6 +64,8 @@ export default function MainDashboard() {
     shiftTemplates,
     weekHistory,
     weekTemplates,
+    generatorRules,
+    specialDaysByDate,
     selectedHistoryWeekId,
     selectedTemplateId,
     sundayRuleViolations,
@@ -93,6 +98,10 @@ export default function MainDashboard() {
     setWeekFromDate,
     setWarningMessage,
     clearMessages,
+    saveGeneratorRules,
+    saveEmployeeSchedulingRules,
+    upsertSpecialDay,
+    removeSpecialDay,
     openLoginModal,
     closeLoginModal,
     loginAsAdmin,
@@ -115,6 +124,7 @@ export default function MainDashboard() {
     loadSelectedTemplateIntoCurrentWeek,
     generateMagicWeek,
     generateMagicMonth,
+    toggleShiftManualOverride,
     finalizeCurrentWeek,
   } = useSchedulerStore();
 
@@ -358,11 +368,14 @@ export default function MainDashboard() {
       year: selectedYear,
       roleConfig: monthlyRoleConfig,
       rules: {
-        weeklyRotationEnabled: true,
-        avoidConsecutiveSundays: true,
-        allowManualOverride: true,
+        ...generatorRules,
+        specialDaysByDate,
       },
     });
+  }
+
+  async function handleSaveSpecialDay(payload) {
+    await upsertSpecialDay(payload);
   }
 
   if (isLoading || isAuthLoading) {
@@ -457,6 +470,23 @@ export default function MainDashboard() {
               shiftsCountByEmployee={analytics.shiftsCountByEmployee}
               workBreakdownByEmployee={analytics.workBreakdownByEmployee}
             />
+
+            <SchedulingRulesPanel
+              isAdmin={isAdmin}
+              isSaving={isSaving}
+              employees={employees}
+              generatorRules={generatorRules}
+              onSaveRules={saveGeneratorRules}
+              onSaveEmployeeRules={saveEmployeeSchedulingRules}
+            />
+
+            <SpecialDaysPanel
+              isAdmin={isAdmin}
+              isSaving={isSaving}
+              specialDaysByDate={specialDaysByDate}
+              onSaveSpecialDay={handleSaveSpecialDay}
+              onRemoveSpecialDay={removeSpecialDay}
+            />
           </div>
 
           <div className="order-1 md:order-2">
@@ -476,6 +506,7 @@ export default function MainDashboard() {
                 scheduleMode={scheduleMode}
                 monthlyRoleConfig={monthlyRoleConfig}
                 sundayRuleViolations={sundayRuleViolations}
+                specialDaysByDate={specialDaysByDate}
                 onChangeScheduleMode={setScheduleMode}
                 onSelectMonth={setSelectedMonth}
                 onSelectYear={setSelectedYear}
@@ -489,6 +520,7 @@ export default function MainDashboard() {
                 onGenerateMonthlySchedule={handleGenerateMonthlySchedule}
                 onJumpToWeekDate={setWeekFromDate}
                 onDeleteShift={deleteShift}
+                onToggleManualOverride={(shiftId, value) => toggleShiftManualOverride({ shiftId, value })}
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onClearDayShifts={clearDayShifts}
                 canManage={isAdmin}
@@ -501,6 +533,7 @@ export default function MainDashboard() {
                 onAddAnnouncement={addAnnouncement}
                 onDeleteAnnouncement={deleteAnnouncement}
               />
+              <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
             </div>
           </div>
         </div>

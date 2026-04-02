@@ -54,6 +54,11 @@ service cloud.firestore {
       allow read, create, update, delete: if isAdmin();
     }
 
+    match /scheduler_settings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

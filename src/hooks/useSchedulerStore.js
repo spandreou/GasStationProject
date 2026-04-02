@@ -32,8 +32,10 @@ import {
   saveWeekTemplate,
   subscribeEmployees,
   subscribeAnnouncements,
+  subscribeSchedulerSettings,
   subscribeShifts,
   subscribeShiftTemplates,
+  upsertSchedulerSettings,
   updateEmployee,
   updateShift,
   updateShiftTemplate,
@@ -94,6 +96,19 @@ function isDateInWeek(date, weekDays) {
 }
 
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
+const defaultGeneratorRules = {
+  weeklyRotationEnabled: true,
+  avoidConsecutiveSundays: true,
+  allowManualOverride: true,
+  startWithCoreAMorning: true,
+};
+
+function normalizeGeneratorRules(value = {}) {
+  return {
+    ...defaultGeneratorRules,
+    ...(value || {}),
+  };
+}
 
 export const useSchedulerStore = create((set, get) => ({
   employees: [],
@@ -103,6 +118,8 @@ export const useSchedulerStore = create((set, get) => ({
   attendanceHistory: [],
   weekHistory: [],
   weekTemplates: [],
+  generatorRules: { ...defaultGeneratorRules },
+  specialDaysByDate: {},
   selectedHistoryWeekId: '',
   selectedTemplateId: '',
   sundayRuleViolations: {},
@@ -126,6 +143,7 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeShifts: null,
   _unsubscribeTemplates: null,
   _unsubscribeAnnouncements: null,
+  _unsubscribeSchedulerSettings: null,
   _unsubscribeAuth: null,
 
   initializeData: () => {
@@ -158,6 +176,18 @@ export const useSchedulerStore = create((set, get) => ({
       () => set({ errorMessage: 'Αποτυχία φόρτωσης ανακοινώσεων.' }),
     );
 
+    const unsubscribeSchedulerSettings = subscribeSchedulerSettings(
+      (settingsDoc) => {
+        const generatorRules = normalizeGeneratorRules(settingsDoc?.generatorRules);
+        const specialDaysByDate =
+          settingsDoc?.specialDaysByDate && typeof settingsDoc.specialDaysByDate === 'object'
+            ? settingsDoc.specialDaysByDate
+            : {};
+        set({ generatorRules, specialDaysByDate });
+      },
+      () => set({ warningMessage: 'Αποτυχία φόρτωσης ρυθμίσεων προγραμματισμού.' }),
+    );
+
     const unsubscribeAuth = subscribeAdminAuth(
       async (user) => {
         set({
@@ -184,16 +214,25 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeShifts: unsubscribeShifts,
       _unsubscribeTemplates: unsubscribeTemplates,
       _unsubscribeAnnouncements: unsubscribeAnnouncements,
+      _unsubscribeSchedulerSettings: unsubscribeSchedulerSettings,
       _unsubscribeAuth: unsubscribeAuth,
     });
   },
 
   cleanupData: () => {
-    const { _unsubscribeEmployees, _unsubscribeShifts, _unsubscribeTemplates, _unsubscribeAnnouncements, _unsubscribeAuth } = get();
+    const {
+      _unsubscribeEmployees,
+      _unsubscribeShifts,
+      _unsubscribeTemplates,
+      _unsubscribeAnnouncements,
+      _unsubscribeSchedulerSettings,
+      _unsubscribeAuth,
+    } = get();
     _unsubscribeEmployees?.();
     _unsubscribeShifts?.();
     _unsubscribeTemplates?.();
     _unsubscribeAnnouncements?.();
+    _unsubscribeSchedulerSettings?.();
     _unsubscribeAuth?.();
   },
 
@@ -289,6 +328,60 @@ export const useSchedulerStore = create((set, get) => ({
   setWarningMessage: (warningMessage) => set({ warningMessage }),
   clearMessages: () => set({ warningMessage: '', errorMessage: '' }),
 
+  saveGeneratorRules: async (partialRules = {}) => {
+    if (!requireAdmin(get, set)) return false;
+    const nextRules = normalizeGeneratorRules({ ...get().generatorRules, ...(partialRules || {}) });
+    set({ generatorRules: nextRules });
+    await upsertSchedulerSettings({ generatorRules: nextRules });
+    set({ warningMessage: 'Οι ρυθμίσεις generator αποθηκεύτηκαν.' });
+    return true;
+  },
+
+  upsertSpecialDay: async ({ date, isHoliday, isSpecialDay, label, operatingStartTime, operatingEndTime }) => {
+    if (!requireAdmin(get, set)) return false;
+    if (!date) {
+      set({ warningMessage: 'Επίλεξε ημερομηνία για ειδική ημέρα.' });
+      return false;
+    }
+    if (
+      operatingStartTime &&
+      operatingEndTime &&
+      timeToMinutes(operatingStartTime) >= timeToMinutes(operatingEndTime)
+    ) {
+      set({ warningMessage: 'Το ωράριο ειδικής ημέρας δεν είναι έγκυρο.' });
+      return false;
+    }
+
+    const nextSpecialDays = {
+      ...(get().specialDaysByDate || {}),
+      [date]: {
+        isHoliday: Boolean(isHoliday),
+        isSpecialDay: Boolean(isSpecialDay || isHoliday),
+        label: (label || '').trim(),
+        operatingStartTime: operatingStartTime || '',
+        operatingEndTime: operatingEndTime || '',
+      },
+    };
+
+    set({ specialDaysByDate: nextSpecialDays });
+    await upsertSchedulerSettings({ specialDaysByDate: nextSpecialDays });
+    set({ warningMessage: 'Η ειδική ημέρα αποθηκεύτηκε.' });
+    return true;
+  },
+
+  removeSpecialDay: async (date) => {
+    if (!requireAdmin(get, set)) return false;
+    if (!date) return false;
+
+    const nextSpecialDays = { ...(get().specialDaysByDate || {}) };
+    delete nextSpecialDays[date];
+
+    set({ specialDaysByDate: nextSpecialDays });
+    await upsertSchedulerSettings({ specialDaysByDate: nextSpecialDays });
+    set({ warningMessage: 'Η ειδική ημέρα αφαιρέθηκε.' });
+    return true;
+  },
+
   dismissUndo: () => set({ undoState: emptyUndoState }),
 
   undoLastAction: async () => {
@@ -349,6 +442,10 @@ export const useSchedulerStore = create((set, get) => ({
       email: email?.trim() || '',
       hireDate: hireDate || '',
       isActive: true,
+      scheduleRole: 'general',
+      fixedDayOff: null,
+      participatesInRotation: true,
+      defaultShiftPreference: 'auto',
     });
   },
 
@@ -368,6 +465,26 @@ export const useSchedulerStore = create((set, get) => ({
       email: email?.trim() || '',
       hireDate: hireDate || '',
     });
+  },
+
+  saveEmployeeSchedulingRules: async ({ employeeId, scheduleRole, fixedDayOff, participatesInRotation, defaultShiftPreference }) => {
+    if (!requireAdmin(get, set)) return false;
+    if (!employeeId) return false;
+
+    const parsedFixedDayOff =
+      fixedDayOff === '' || fixedDayOff === null || typeof fixedDayOff === 'undefined'
+        ? null
+        : Number(fixedDayOff);
+
+    await updateEmployee(employeeId, {
+      scheduleRole: scheduleRole || 'general',
+      fixedDayOff: Number.isInteger(parsedFixedDayOff) ? parsedFixedDayOff : null,
+      participatesInRotation: Boolean(participatesInRotation),
+      defaultShiftPreference: defaultShiftPreference || 'auto',
+    });
+
+    set({ warningMessage: 'Οι κανόνες εργαζομένου ενημερώθηκαν.' });
+    return true;
   },
 
   deleteEmployee: async (employeeId) => {
@@ -611,6 +728,36 @@ export const useSchedulerStore = create((set, get) => ({
         },
       }),
     });
+  },
+
+  toggleShiftManualOverride: async ({ shiftId, value }) => {
+    if (!requireAdmin(get, set)) return false;
+    if (!shiftId) return false;
+
+    const currentShift = get().shifts.find((shift) => shift.id === shiftId);
+    if (!currentShift) return false;
+
+    const nextValue = typeof value === 'boolean' ? value : !Boolean(currentShift.isManualOverride);
+    const weekDays = getWeekDays(get().weekStart);
+    if (get().isWeekLocked && isDateInWeek(currentShift.date, weekDays)) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται αλλαγή override.' });
+      return false;
+    }
+
+    set({ isSaving: true });
+    try {
+      await updateShift(shiftId, { isManualOverride: nextValue });
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
+      set({
+        warningMessage: nextValue
+          ? 'Η βάρδια επισημάνθηκε ως manual override.'
+          : 'Η βάρδια επέστρεψε σε auto-managed κατάσταση.',
+      });
+      return true;
+    } finally {
+      set({ isSaving: false });
+    }
   },
 
   deleteShift: async (shiftId) => {
@@ -980,8 +1127,13 @@ export const useSchedulerStore = create((set, get) => ({
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);
     const weekExistingShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
-    const manualWeekShifts = weekExistingShifts.filter((shift) => shift.isManualOverride);
-    const autoWeekShifts = weekExistingShifts.filter((shift) => !shift.isManualOverride);
+    const preserveManualOverrides = get().generatorRules?.allowManualOverride !== false;
+    const manualWeekShifts = preserveManualOverrides
+      ? weekExistingShifts.filter((shift) => shift.isManualOverride)
+      : [];
+    const autoWeekShifts = preserveManualOverrides
+      ? weekExistingShifts.filter((shift) => !shift.isManualOverride)
+      : weekExistingShifts;
 
     set({ isSaving: true });
     try {
@@ -1007,7 +1159,9 @@ export const useSchedulerStore = create((set, get) => ({
         set({ warningMessage: warnings.join(' | ') });
       } else {
         set({
-          warningMessage: `Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand. Διατηρήθηκαν ${manualWeekShifts.length} manual entries.`,
+          warningMessage: preserveManualOverrides
+            ? `Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand. Διατηρήθηκαν ${manualWeekShifts.length} manual entries.`
+            : 'Η εβδομάδα δημιουργήθηκε αυτόματα με Magic Wand και έγινε πλήρης ανανέωση auto schedule.',
         });
       }
     } finally {
@@ -1031,6 +1185,16 @@ export const useSchedulerStore = create((set, get) => ({
     const monthShifts = get().shifts.filter((shift) => monthDateSet.has(shift.date));
     const manualOverrides = monthShifts.filter((shift) => shift.isManualOverride);
     const autoGenerated = monthShifts.filter((shift) => !shift.isManualOverride);
+    const baseRules = normalizeGeneratorRules(get().generatorRules);
+    const mergedRules = {
+      ...baseRules,
+      ...(rules || {}),
+      fixedDaysOff: { ...(rules?.fixedDaysOff || {}) },
+      specialDaysByDate: {
+        ...(get().specialDaysByDate || {}),
+        ...(rules?.specialDaysByDate || {}),
+      },
+    };
 
     set({ isSaving: true });
     try {
@@ -1040,7 +1204,7 @@ export const useSchedulerStore = create((set, get) => ({
         employees: get().employees,
         allShifts: get().shifts,
         existingMonthShifts: monthShifts,
-        rules,
+        rules: mergedRules,
         roleConfig,
       });
 

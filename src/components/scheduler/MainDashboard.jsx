@@ -277,7 +277,7 @@ export default function MainDashboard() {
   }
 
   async function handleSaveProfile(profilePayload) {
-    await editEmployee(profilePayload);
+    return editEmployee(profilePayload);
   }
 
   async function handleQuickAssignSave(event) {
@@ -635,8 +635,10 @@ export default function MainDashboard() {
                 employees={employees}
                 weekDays={visibleDays}
                 onCreateShift={async (payload) => {
-                  await addShift(payload);
-                  setIsManualSheetOpen(false);
+                  const created = await addShift(payload);
+                  if (created?.id) {
+                    setIsManualSheetOpen(false);
+                  }
                 }}
                 canManage={isAdmin}
               />

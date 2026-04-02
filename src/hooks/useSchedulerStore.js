@@ -476,45 +476,59 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   addEmployee: async ({ fullName, role, color, afm, phone, email, hireDate }) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (!fullName?.trim()) {
       set({ warningMessage: 'Το όνομα υπαλλήλου είναι υποχρεωτικό.' });
-      return;
+      return false;
     }
 
-    await createEmployee({
-      fullName: fullName.trim(),
-      role: role?.trim() || 'Προσωπικό',
-      color: color || '#1D4ED8',
-      afm: afm?.trim() || '',
-      phone: phone?.trim() || '',
-      email: email?.trim() || '',
-      hireDate: hireDate || '',
-      isActive: true,
-      scheduleRole: 'general',
-      fixedDayOff: null,
-      participatesInRotation: true,
-      participatesInSundayRotation: true,
-      defaultShiftPreference: 'auto',
-    });
+    try {
+      await createEmployee({
+        fullName: fullName.trim(),
+        role: role?.trim() || 'Προσωπικό',
+        color: color || '#1D4ED8',
+        afm: afm?.trim() || '',
+        phone: phone?.trim() || '',
+        email: email?.trim() || '',
+        hireDate: hireDate || '',
+        isActive: true,
+        scheduleRole: 'general',
+        fixedDayOff: null,
+        participatesInRotation: true,
+        participatesInSundayRotation: true,
+        defaultShiftPreference: 'auto',
+      });
+      set({ warningMessage: 'Ο υπάλληλος προστέθηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία προσθήκης υπαλλήλου.' });
+      return false;
+    }
   },
 
   editEmployee: async ({ id, fullName, role, color, afm, phone, email, hireDate }) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (!id || !fullName?.trim()) {
       set({ warningMessage: 'Ανεπαρκή δεδομένα για ενημέρωση υπαλλήλου.' });
-      return;
+      return false;
     }
 
-    await updateEmployee(id, {
-      fullName: fullName.trim(),
-      role: role?.trim() || '',
-      color: color || '#1D4ED8',
-      afm: afm?.trim() || '',
-      phone: phone?.trim() || '',
-      email: email?.trim() || '',
-      hireDate: hireDate || '',
-    });
+    try {
+      await updateEmployee(id, {
+        fullName: fullName.trim(),
+        role: role?.trim() || '',
+        color: color || '#1D4ED8',
+        afm: afm?.trim() || '',
+        phone: phone?.trim() || '',
+        email: email?.trim() || '',
+        hireDate: hireDate || '',
+      });
+      set({ warningMessage: 'Το προφίλ ενημερώθηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία ενημέρωσης προφίλ.' });
+      return false;
+    }
   },
 
   saveEmployeeSchedulingRules: async ({
@@ -546,20 +560,28 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   deleteEmployee: async (employeeId) => {
-    if (!requireAdmin(get, set)) return;
-    await removeShiftsByEmployee(employeeId);
-    await removeEmployee(employeeId);
+    if (!requireAdmin(get, set)) return false;
+    if (!employeeId) return false;
+    try {
+      await removeShiftsByEmployee(employeeId);
+      await removeEmployee(employeeId);
+      set({ warningMessage: 'Ο υπάλληλος διαγράφηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία διαγραφής υπαλλήλου.' });
+      return false;
+    }
   },
 
   addShiftTemplate: async ({ label, date, startTime, endTime }) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (!label?.trim()) {
       set({ warningMessage: 'Το όνομα custom βάρδιας είναι υποχρεωτικό.' });
-      return;
+      return false;
     }
     if (!date) {
       set({ warningMessage: 'Επίλεξε ημερομηνία για την κάρτα βάρδιας.' });
-      return;
+      return false;
     }
 
     try {
@@ -572,8 +594,11 @@ export const useSchedulerStore = create((set, get) => ({
         isPlaced: false,
         type: SHIFT_TYPES.WORK,
       });
+      set({ warningMessage: 'Η custom κάρτα βάρδιας δημιουργήθηκε.' });
+      return true;
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία δημιουργίας custom βάρδιας.' });
+      return false;
     }
   },
 
@@ -627,13 +652,18 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   deleteShiftTemplate: async (templateId) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
+    if (!templateId) return false;
     set({ isSaving: true });
     try {
       await removeShiftTemplate(templateId);
       set({
         shiftTemplates: get().shiftTemplates.filter((item) => item.id !== templateId),
       });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία διαγραφής custom κάρτας.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
@@ -1017,10 +1047,10 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   clearWeekShifts: async () => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (get().isWeekLocked) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
-      return;
+      return false;
     }
 
     const weekDays = getWeekDays(get().weekStart);
@@ -1033,20 +1063,21 @@ export const useSchedulerStore = create((set, get) => ({
       set({ isSaving: false });
     }
 
-    set({
+    set((state) => ({
+      shifts: state.shifts.filter((shift) => !weekSet.has(shift.date)),
       warningMessage: 'Οι βάρδιες της εβδομάδας διαγράφηκαν.',
       undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
-    });
+    }));
     await get().saveCurrentWeekSnapshot('manual_save');
     await get().loadWeekHistory();
-
+    return true;
   },
 
   addAnnouncement: async ({ title, body }) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (!title?.trim() || !body?.trim()) {
       set({ warningMessage: 'Συμπλήρωσε τίτλο και περιεχόμενο ανακοίνωσης.' });
-      return;
+      return false;
     }
 
     set({ isSaving: true });
@@ -1057,8 +1088,10 @@ export const useSchedulerStore = create((set, get) => ({
         authorEmail: get().adminUser?.email || '',
       });
       set({ warningMessage: 'Η ανακοίνωση δημοσιεύτηκε.' });
+      return true;
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία δημοσίευσης ανακοίνωσης.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
@@ -1175,14 +1208,20 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   loadSelectedHistoryWeekToGrid: async () => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     const selectedWeekId = get().selectedHistoryWeekId;
-    if (!selectedWeekId) return;
+    if (!selectedWeekId) return false;
 
-    const snapshot = await fetchLatestWeekSnapshotByWeekId(selectedWeekId);
+    let snapshot = null;
+    try {
+      snapshot = await fetchLatestWeekSnapshotByWeekId(selectedWeekId);
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία ανάκτησης ιστορικής εβδομάδας.' });
+      return false;
+    }
     if (!snapshot?.weekStart || !Array.isArray(snapshot.shifts)) {
       set({ warningMessage: 'Δεν βρέθηκε αποθηκευμένη εβδομάδα για φόρτωση.' });
-      return;
+      return false;
     }
 
     const weekDays = getWeekDays(snapshot.weekStart);
@@ -1190,20 +1229,32 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       await removeWeekShifts(weekDays);
       await createManyShifts(snapshot.shifts);
+      const weekSet = new Set(weekDays);
+      set((state) => ({
+        shifts: sortShiftsByDateAndStart([
+          ...state.shifts.filter((shift) => !weekSet.has(shift.date)),
+          ...snapshot.shifts,
+        ]),
+      }));
       set({ warningMessage: 'Η εβδομάδα φορτώθηκε από το ιστορικό.' });
       await get().refreshWeekLockStatus();
       await get().saveCurrentWeekSnapshot('history_load');
+      await get().loadWeekHistory();
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία φόρτωσης ιστορικής εβδομάδας.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
   },
 
   saveCurrentWeekAsTemplate: async (name) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     const templateName = (name || '').trim();
     if (!templateName) {
       set({ warningMessage: 'Δώσε όνομα template.' });
-      return;
+      return false;
     }
 
     const weekDays = getWeekDays(get().weekStart);
@@ -1226,25 +1277,31 @@ export const useSchedulerStore = create((set, get) => ({
       }))
       .filter((shift) => shift.dateOffset >= 0);
 
-    await saveWeekTemplate({
-      name: templateName,
-      weekStart: get().weekStart,
-      shifts: weekShifts,
-      createdBy: get().adminUser?.email || '',
-    });
-    set({ warningMessage: 'Το template αποθηκεύτηκε.' });
-    await get().loadWeekTemplates();
+    try {
+      await saveWeekTemplate({
+        name: templateName,
+        weekStart: get().weekStart,
+        shifts: weekShifts,
+        createdBy: get().adminUser?.email || '',
+      });
+      set({ warningMessage: 'Το template αποθηκεύτηκε.' });
+      await get().loadWeekTemplates();
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης template.' });
+      return false;
+    }
   },
 
   loadSelectedTemplateIntoCurrentWeek: async () => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     const templateId = get().selectedTemplateId;
-    if (!templateId) return;
+    if (!templateId) return false;
 
     const template = get().weekTemplates.find((item) => item.id === templateId);
     if (!template) {
       set({ warningMessage: 'Δεν βρέθηκε template.' });
-      return;
+      return false;
     }
 
     const weekDays = getWeekDays(get().weekStart);
@@ -1268,23 +1325,37 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       await removeWeekShifts(weekDays);
       await createManyShifts(shiftsToCreate);
+      const weekSet = new Set(weekDays);
+      set((state) => ({
+        shifts: sortShiftsByDateAndStart([
+          ...state.shifts.filter((shift) => !weekSet.has(shift.date)),
+          ...shiftsToCreate,
+        ]),
+      }));
       set({ warningMessage: 'Το template εφαρμόστηκε στην εβδομάδα.' });
       await get().saveCurrentWeekSnapshot('template_load');
+      await get().loadWeekHistory();
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία φόρτωσης template.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
   },
 
   deleteAnnouncement: async (announcementId) => {
-    if (!requireAdmin(get, set)) return;
-    if (!announcementId) return;
+    if (!requireAdmin(get, set)) return false;
+    if (!announcementId) return false;
 
     set({ isSaving: true });
     try {
       await removeAnnouncement(announcementId);
       set({ warningMessage: 'Η ανακοίνωση διαγράφηκε.' });
+      return true;
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία διαγραφής ανακοίνωσης.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
@@ -1413,13 +1484,13 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   clearDayShifts: async (date) => {
-    if (!requireAdmin(get, set)) return;
-    if (!date) return;
+    if (!requireAdmin(get, set)) return false;
+    if (!date) return false;
 
     const weekDays = getWeekDays(get().weekStart);
     if (get().isWeekLocked && isDateInWeek(date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
-      return;
+      return false;
     }
 
     set({ isSaving: true });
@@ -1428,12 +1499,17 @@ export const useSchedulerStore = create((set, get) => ({
       const templatesToRemove = get().shiftTemplates.filter((template) => template.isPlaced && template.date === date);
       await Promise.all(templatesToRemove.map((template) => removeShiftTemplate(template.id)));
 
-      set({
+      set((state) => ({
+        shifts: state.shifts.filter((shift) => shift.date !== date),
         warningMessage: `Καθαρίστηκαν οι βάρδιες για ${date}.`,
-        shiftTemplates: get().shiftTemplates.filter((template) => !(template.isPlaced && template.date === date)),
-      });
+        shiftTemplates: state.shiftTemplates.filter((template) => !(template.isPlaced && template.date === date)),
+      }));
       await get().saveCurrentWeekSnapshot('manual_save');
       await get().loadWeekHistory();
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία καθαρισμού ημέρας.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }

@@ -653,7 +653,8 @@ export default function WeeklyGrid({
               <button
                 type="button"
                 onClick={onLoadSelectedHistoryWeek}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                disabled={!canManage || !selectedHistoryWeekId}
+                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
                 Φόρτωση Εβδομάδας
               </button>
@@ -674,26 +675,29 @@ export default function WeeklyGrid({
               </select>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const name = window.prompt('Όνομα προτύπου');
                   if (!name) return;
-                  onSaveAsTemplate?.(name);
+                  await onSaveAsTemplate?.(name);
                 }}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                disabled={!canManage}
+                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
                 Αποθήκευση ως Πρότυπο
               </button>
               <button
                 type="button"
                 onClick={onLoadSelectedTemplate}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                disabled={!canManage || !selectedTemplateId}
+                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
                 Φόρτωση Προτύπου
               </button>
               <button
                 type="button"
                 onClick={onMagicWand}
-                className="rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
+                disabled={!canManage}
+                className="rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Αυτόματη Δημιουργία
               </button>

@@ -69,8 +69,12 @@ export default function AdminLoginModal({
 
   async function handlePasswordReset() {
     setIsSendingReset(true);
+    setSubmitError('');
     try {
-      await onRequestPasswordReset(credentials.email);
+      const sent = await onRequestPasswordReset(credentials.email);
+      if (!sent) {
+        setSubmitError('Δεν έγινε αποστολή email επαναφοράς. Έλεγξε το email διαχειριστή.');
+      }
     } finally {
       setIsSendingReset(false);
     }

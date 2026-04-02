@@ -28,8 +28,10 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
 
   async function handleSubmit(event) {
     event.preventDefault();
-    await onAddAnnouncement(draft);
-    setDraft({ title: '', body: '' });
+    const saved = await onAddAnnouncement(draft);
+    if (saved) {
+      setDraft({ title: '', body: '' });
+    }
   }
 
   return (

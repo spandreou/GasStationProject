@@ -64,17 +64,21 @@ export default function EmployeeSidebar({
 
   async function handleEmployeeSubmit(event) {
     event.preventDefault();
-    await onAddEmployee(employeeForm);
-    setEmployeeForm(defaultEmployeeForm);
+    const created = await onAddEmployee(employeeForm);
+    if (created) {
+      setEmployeeForm(defaultEmployeeForm);
+    }
   }
 
   async function handleTemplateSubmit(event) {
     event.preventDefault();
-    await onAddShiftTemplate(templateForm);
-    setTemplateForm((prev) => ({
-      ...defaultTemplateForm,
-      date: prev.date,
-    }));
+    const created = await onAddShiftTemplate(templateForm);
+    if (created) {
+      setTemplateForm((prev) => ({
+        ...defaultTemplateForm,
+        date: prev.date,
+      }));
+    }
   }
 
   async function handleDeleteEmployee(employee) {

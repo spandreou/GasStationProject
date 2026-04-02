@@ -42,12 +42,19 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
 
   async function handleSubmit(event) {
     event.preventDefault();
-    await onCreateShift({
+    const created = await onCreateShift({
       ...form,
       label: form.shiftType === 'custom' ? form.customLabel || 'Προσαρμοσμένη' : shiftTypeLabel,
       shiftType: form.shiftType,
     });
-    setForm((prev) => ({ ...prev, notes: '', specialDayLabel: '', customLabel: prev.shiftType === 'custom' ? prev.customLabel : '' }));
+    if (created?.id) {
+      setForm((prev) => ({
+        ...prev,
+        notes: '',
+        specialDayLabel: '',
+        customLabel: prev.shiftType === 'custom' ? prev.customLabel : '',
+      }));
+    }
   }
 
   function applyPreset(preset) {

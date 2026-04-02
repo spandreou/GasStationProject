@@ -26,6 +26,17 @@ export default function SpecialDaysPanel({
   const [draft, setDraft] = useState(initialDraft);
   const entries = useMemo(() => toEntries(specialDaysByDate), [specialDaysByDate]);
 
+  async function handleSaveDraft() {
+    const saved = await onSaveSpecialDay?.(draft);
+    if (saved) {
+      setDraft(initialDraft);
+    }
+  }
+
+  async function handleRemoveEntry(date) {
+    await onRemoveSpecialDay?.(date);
+  }
+
   if (!isAdmin) return null;
 
   return (
@@ -100,7 +111,7 @@ export default function SpecialDaysPanel({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => onSaveSpecialDay?.(draft)}
+          onClick={handleSaveDraft}
           disabled={isSaving || !draft.date}
           className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -152,7 +163,7 @@ export default function SpecialDaysPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onRemoveSpecialDay?.(entry.date)}
+                    onClick={() => handleRemoveEntry(entry.date)}
                     className="rounded-lg border border-red-300 bg-red-50/70 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 dark:border-red-300/45 dark:bg-red-500/15 dark:text-red-200"
                   >
                     <span className="inline-flex items-center gap-1">

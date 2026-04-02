@@ -37,11 +37,13 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
     event.preventDefault();
     if (!isAdmin) return;
 
-    await onSave({
+    const saved = await onSave({
       id: employee.id,
       ...form,
     });
-    onClose();
+    if (saved) {
+      onClose();
+    }
   }
 
   return (

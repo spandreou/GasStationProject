@@ -20,11 +20,32 @@ function getEnvValue(name) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeStorageBucket(value) {
+  if (!value) return '';
+
+  // Accept inputs like:
+  // - gasstationproject-xxxx.appspot.com
+  // - gasstationproject-xxxx.firebasestorage.app (legacy/wrong host for direct DNS)
+  // - gs://gasstationproject-xxxx.appspot.com
+  // - https://gasstationproject-xxxx.appspot.com
+  const raw = value
+    .replace(/^gs:\/\//i, '')
+    .replace(/^https?:\/\//i, '')
+    .split('/')[0]
+    .trim();
+
+  if (raw.endsWith('.firebasestorage.app')) {
+    return raw.replace(/\.firebasestorage\.app$/i, '.appspot.com');
+  }
+
+  return raw;
+}
+
 const firebaseEnv = {
   apiKey: getEnvValue('VITE_FIREBASE_API_KEY'),
   authDomain: getEnvValue('VITE_FIREBASE_AUTH_DOMAIN'),
   projectId: getEnvValue('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: getEnvValue('VITE_FIREBASE_STORAGE_BUCKET'),
+  storageBucket: normalizeStorageBucket(getEnvValue('VITE_FIREBASE_STORAGE_BUCKET')),
   messagingSenderId: getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID'),
   appId: getEnvValue('VITE_FIREBASE_APP_ID'),
   measurementId: getEnvValue('VITE_FIREBASE_MEASUREMENT_ID'),

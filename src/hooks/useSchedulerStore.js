@@ -67,12 +67,53 @@ function getMonthDateSet(year, month) {
 
 function parseShiftInput(startTime, endTime) {
   if (!isValidTimeLabel(startTime) || !isValidTimeLabel(endTime)) {
-    throw new Error('Η ώρα πρέπει να είναι σε μορφή ΩΩ:ΛΛ.');
+    throw new Error('Ξ— ΟΟΞ± Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΟƒΞµ ΞΌΞΏΟΟ†Ξ® Ξ©Ξ©:Ξ›Ξ›.');
   }
 
   if (timeToMinutes(startTime) >= timeToMinutes(endTime)) {
-    throw new Error('Η ώρα λήξης πρέπει να είναι μετά την ώρα έναρξης.');
+    throw new Error('Ξ— ΟΟΞ± Ξ»Ξ®ΞΎΞ·Ο‚ Ο€ΟΞ­Ο€ΞµΞΉ Ξ½Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΟΟΞ± Ξ­Ξ½Ξ±ΟΞΎΞ·Ο‚.');
   }
+}
+
+function buildNormalizedShiftPayload({
+  employeeId,
+  date,
+  startTime,
+  endTime,
+  label,
+  shiftType,
+  customLabel,
+  type,
+  notes,
+  isHoliday,
+  isSpecialDay,
+  specialDayLabel,
+  isManualOverride,
+}) {
+  const normalizedShiftType = shiftType || inferShiftTypeFromTimes(startTime, endTime);
+  const normalizedLabel = label?.trim() || 'Ξ§ΞµΞΉΟΞΏΞΊΞ―Ξ½Ξ·Ο„Ξ·';
+
+  return {
+    employeeId,
+    date,
+    startTime,
+    endTime,
+    type: type || SHIFT_TYPES.WORK,
+    label: normalizedLabel,
+    notes: notes || '',
+    shiftType: normalizedShiftType,
+    customLabel:
+      normalizedShiftType === 'custom' ? customLabel?.trim() || normalizedLabel || 'Ξ ΟΞΏΟƒΞ±ΟΞΌΞΏΟƒΞΌΞ­Ξ½Ξ·' : '',
+    isHoliday: Boolean(isHoliday),
+    isSpecialDay: Boolean(isSpecialDay || isHoliday),
+    specialDayLabel: specialDayLabel?.trim() || '',
+    isManualOverride: Boolean(isManualOverride),
+  };
+}
+
+function isShiftInWeekRange(shift, weekDays) {
+  if (!shift?.date || !Array.isArray(weekDays)) return false;
+  return weekDays.includes(shift.date);
 }
 
 function requireAdmin(get, set) {
@@ -445,6 +486,7 @@ export const useSchedulerStore = create((set, get) => ({
       scheduleRole: 'general',
       fixedDayOff: null,
       participatesInRotation: true,
+      participatesInSundayRotation: true,
       defaultShiftPreference: 'auto',
     });
   },
@@ -467,7 +509,14 @@ export const useSchedulerStore = create((set, get) => ({
     });
   },
 
-  saveEmployeeSchedulingRules: async ({ employeeId, scheduleRole, fixedDayOff, participatesInRotation, defaultShiftPreference }) => {
+  saveEmployeeSchedulingRules: async ({
+    employeeId,
+    scheduleRole,
+    fixedDayOff,
+    participatesInRotation,
+    participatesInSundayRotation,
+    defaultShiftPreference,
+  }) => {
     if (!requireAdmin(get, set)) return false;
     if (!employeeId) return false;
 
@@ -480,6 +529,7 @@ export const useSchedulerStore = create((set, get) => ({
       scheduleRole: scheduleRole || 'general',
       fixedDayOff: Number.isInteger(parsedFixedDayOff) ? parsedFixedDayOff : null,
       participatesInRotation: Boolean(participatesInRotation),
+      participatesInSundayRotation: participatesInSundayRotation !== false,
       defaultShiftPreference: defaultShiftPreference || 'auto',
     });
 
@@ -669,6 +719,103 @@ export const useSchedulerStore = create((set, get) => ({
     } catch (error) {
       set({ warningMessage: error.message || 'Αποτυχία δημιουργίας βάρδιας.' });
       return null;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  updateShiftDetails: async ({
+    shiftId,
+    employeeId,
+    date,
+    startTime,
+    endTime,
+    label,
+    shiftType = '',
+    customLabel = '',
+    type = SHIFT_TYPES.WORK,
+    notes = '',
+    isHoliday = false,
+    isSpecialDay = false,
+    specialDayLabel = '',
+    isManualOverride = true,
+  }) => {
+    if (!requireAdmin(get, set)) return false;
+    if (!shiftId || !employeeId || !date) return false;
+
+    const currentShift = get().shifts.find((shift) => shift.id === shiftId);
+    if (!currentShift) return false;
+
+    const weekDays = getWeekDays(get().weekStart);
+    if (
+      get().isWeekLocked &&
+      (isShiftInWeekRange(currentShift, weekDays) || isDateInWeek(date, weekDays))
+    ) {
+      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      return false;
+    }
+
+    try {
+      parseShiftInput(startTime, endTime);
+
+      const isWork = type === SHIFT_TYPES.WORK;
+      const conflict = isWork
+        ? hasTimeOverlap(get().shifts, { id: shiftId, employeeId, date, startTime, endTime })
+        : false;
+      if (conflict) {
+        set({
+          warningMessage:
+            'Αποτυχία ενημέρωσης: υπάρχει επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
+        });
+        return false;
+      }
+
+      const sundayViolation = await evaluateSundayRuleViolation({
+        employeeId,
+        date,
+        startTime,
+        endTime,
+        hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+      });
+
+      const payload = buildNormalizedShiftPayload({
+        employeeId,
+        date,
+        startTime,
+        endTime,
+        label,
+        shiftType,
+        customLabel,
+        type,
+        notes,
+        isHoliday,
+        isSpecialDay,
+        specialDayLabel,
+        isManualOverride,
+      });
+
+      set({ isSaving: true });
+      await updateShift(shiftId, payload);
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
+
+      set((state) => {
+        const nextViolations = { ...state.sundayRuleViolations };
+        delete nextViolations[shiftId];
+        if (sundayViolation.violated) {
+          nextViolations[shiftId] = sundayViolation.message;
+        }
+
+        return {
+          sundayRuleViolations: nextViolations,
+          warningMessage: sundayViolation.violated ? sundayViolation.message : 'Η βάρδια ενημερώθηκε.',
+        };
+      });
+
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία ενημέρωσης βάρδιας.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }

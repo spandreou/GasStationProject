@@ -1,4 +1,4 @@
-﻿import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import { getShiftDurationHours, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { getDurationLabel, getShiftTypeLabel as getScheduleShiftTypeLabel } from '../../utils/scheduleUtils';
 
@@ -21,6 +21,7 @@ export default function AssignedShiftItem({
   employee,
   hasConflict,
   onDelete,
+  onEdit,
   onToggleManualOverride,
   canManage = true,
 }) {
@@ -40,18 +41,29 @@ export default function AssignedShiftItem({
       }`}
     >
       {canManage ? (
-        <button
-          type="button"
-          onClick={() => onDelete(shift.id)}
-          className="absolute right-1 top-1 rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
-          title="Αφαίρεση βάρδιας"
-          aria-label="Αφαίρεση βάρδιας"
-        >
-          <X size={14} />
-        </button>
+        <div className="absolute right-1 top-1 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onEdit?.(shift)}
+            className="rounded p-1 text-slate-500 hover:bg-sky-100 hover:text-sky-700 dark:text-slate-300 dark:hover:bg-sky-500/30 dark:hover:text-sky-200"
+            title="Επεξεργασία βάρδιας"
+            aria-label="Επεξεργασία βάρδιας"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(shift.id)}
+            className="rounded p-1 text-slate-500 hover:bg-red-100 hover:text-red-600 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
+            title="Αφαίρεση βάρδιας"
+            aria-label="Αφαίρεση βάρδιας"
+          >
+            <X size={14} />
+          </button>
+        </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-2 pr-6">
+      <div className="flex items-center justify-between gap-2 pr-10">
         <p className="font-semibold text-slate-900 dark:text-white">{employee?.fullName || 'Άγνωστος'}</p>
       </div>
 
@@ -113,4 +125,3 @@ export default function AssignedShiftItem({
     </article>
   );
 }
-

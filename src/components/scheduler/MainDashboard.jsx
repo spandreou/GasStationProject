@@ -89,6 +89,7 @@ export default function MainDashboard() {
     editEmployee,
     deleteEmployee,
     addShift,
+    updateShiftDetails,
     deleteShift,
     clearDayShifts,
     clearWeekShifts,
@@ -519,6 +520,8 @@ export default function MainDashboard() {
                 onMagicWand={generateMagicWeek}
                 onGenerateMonthlySchedule={handleGenerateMonthlySchedule}
                 onJumpToWeekDate={setWeekFromDate}
+                onCreateShift={addShift}
+                onUpdateShift={updateShiftDetails}
                 onDeleteShift={deleteShift}
                 onToggleManualOverride={(shiftId, value) => toggleShiftManualOverride({ shiftId, value })}
                 onDeleteShiftTemplate={deleteShiftTemplate}

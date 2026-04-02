@@ -1,12 +1,13 @@
 ﻿import { useDroppable } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight, Loader2, Trash2, UserRound, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
-import { WEEKDAY_LABELS } from '../../data/constants';
+import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
 import {
   formatGreekDate,
   getDurationLabel,
   groupAndSortShiftsByDay,
+  inferShiftTypeFromTimes,
 } from '../../utils/scheduleUtils';
 import { formatDateGreek, normalizeTimeLabel, timeToMinutes } from '../../utils/time';
 import AssignedShiftItem from './AssignedShiftItem';
@@ -25,6 +26,59 @@ const MONTH_OPTIONS = [
   'Νοέμβριος',
   'Δεκέμβριος',
 ];
+
+const SHIFT_TYPE_LABEL_MAP = SHIFT_TYPE_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {});
+
+function getShiftLabelForDraft(draft) {
+  if ((draft.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) {
+    return draft.label?.trim() || 'Μη εργάσιμη ημέρα';
+  }
+  if (draft.shiftType === 'custom') {
+    return draft.customLabel?.trim() || draft.label?.trim() || 'Προσαρμοσμένη';
+  }
+  return SHIFT_TYPE_LABEL_MAP[draft.shiftType] || draft.label?.trim() || 'Προσαρμοσμένη';
+}
+
+function buildDraftFromShift(shift) {
+  const normalizedType = shift?.type || SHIFT_TYPES.WORK;
+  const normalizedShiftType = shift?.shiftType || inferShiftTypeFromTimes(shift?.startTime, shift?.endTime);
+  return {
+    employeeId: shift?.employeeId || '',
+    date: shift?.date || '',
+    startTime: shift?.startTime || '06:00',
+    endTime: shift?.endTime || '14:00',
+    type: normalizedType,
+    shiftType: normalizedShiftType,
+    customLabel: shift?.customLabel || '',
+    label: shift?.label || '',
+    notes: shift?.notes || '',
+    isHoliday: Boolean(shift?.isHoliday),
+    isSpecialDay: Boolean(shift?.isSpecialDay),
+    specialDayLabel: shift?.specialDayLabel || '',
+    isManualOverride: shift?.isManualOverride !== false,
+  };
+}
+
+function buildNewDraft({ date, employeeId = '' }) {
+  return {
+    employeeId,
+    date,
+    startTime: '06:00',
+    endTime: '14:00',
+    type: SHIFT_TYPES.WORK,
+    shiftType: 'morning',
+    customLabel: '',
+    label: '',
+    notes: '',
+    isHoliday: false,
+    isSpecialDay: false,
+    specialDayLabel: '',
+    isManualOverride: true,
+  };
+}
 
 function getDaySpecialInfo(dayShifts, specialDayConfig) {
   if (specialDayConfig) {
@@ -167,6 +221,7 @@ function DayBox({
   onDeleteShift,
   onToggleManualOverride,
   onDeleteShiftTemplate,
+  onOpenDayEditor,
   onClearDay,
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -196,15 +251,26 @@ function DayBox({
             {title} ({subtitle})
           </span>
           {canManage ? (
-            <button
-              type="button"
-              onClick={() => onClearDay(day)}
-              className="rounded p-1 text-white/85 hover:bg-red-500/20 hover:text-red-200"
-              title="Καθαρισμός ημέρας"
-              aria-label="Καθαρισμός ημέρας"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onOpenDayEditor?.(day, title, subtitle)}
+                className="rounded p-1 text-white/85 hover:bg-sky-500/20 hover:text-sky-100"
+                title="Επεξεργασία ημέρας"
+                aria-label="Επεξεργασία ημέρας"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onClearDay(day)}
+                className="rounded p-1 text-white/85 hover:bg-red-500/20 hover:text-red-200"
+                title="Καθαρισμός ημέρας"
+                aria-label="Καθαρισμός ημέρας"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ) : null}
         </div>
         {specialInfo ? (
@@ -238,6 +304,7 @@ function DayBox({
                 employee={getEmployeeById(shift.employeeId)}
                 hasConflict={conflictShiftIds.has(shift.id)}
                 onDelete={onDeleteShift}
+                onEdit={() => onOpenDayEditor?.(day, title, subtitle, shift)}
                 onToggleManualOverride={onToggleManualOverride}
                 canManage={canManage}
               />
@@ -298,6 +365,8 @@ export default function WeeklyGrid({
   onMagicWand,
   onGenerateMonthlySchedule,
   onJumpToWeekDate,
+  onCreateShift,
+  onUpdateShift,
   onDeleteShift,
   onToggleManualOverride,
   onDeleteShiftTemplate,
@@ -344,6 +413,138 @@ export default function WeeklyGrid({
     () => (employees || []).filter((employee) => employee?.isActive !== false),
     [employees],
   );
+  const visibleDayOptions = scheduleMode === 'month' ? monthDays : weekDays;
+
+  const [dayEditor, setDayEditor] = useState({
+    open: false,
+    date: '',
+    title: '',
+    subtitle: '',
+    editingShiftId: '',
+  });
+  const [dayEditorDraft, setDayEditorDraft] = useState(() =>
+    buildNewDraft({
+      date: weekDays[0] || monthDays[0] || '',
+      employeeId: employees?.[0]?.id || '',
+    }),
+  );
+  const [isEditorSaving, setIsEditorSaving] = useState(false);
+
+  const dayEditorShifts = useMemo(() => {
+    if (!dayEditor?.date) return [];
+    return grouped[dayEditor.date] || [];
+  }, [dayEditor?.date, grouped]);
+
+  useEffect(() => {
+    if (!dayEditor.open) return;
+    const fallbackDate = dayEditor.date || visibleDayOptions[0] || '';
+    const fallbackEmployeeId = activeEmployees[0]?.id || '';
+
+    setDayEditorDraft((prev) => {
+      const nextDate = visibleDayOptions.includes(prev.date) ? prev.date : fallbackDate;
+      const nextEmployeeId = activeEmployees.some((employee) => employee.id === prev.employeeId)
+        ? prev.employeeId
+        : fallbackEmployeeId;
+      return {
+        ...prev,
+        date: nextDate,
+        employeeId: nextEmployeeId,
+      };
+    });
+  }, [activeEmployees, dayEditor.date, dayEditor.open, visibleDayOptions]);
+
+  function openDayEditor(date, title, subtitle, shift = null) {
+    if (!canManage) return;
+    const defaultEmployeeId = activeEmployees[0]?.id || '';
+    setDayEditor({
+      open: true,
+      date,
+      title,
+      subtitle,
+      editingShiftId: shift?.id || '',
+    });
+    setDayEditorDraft(
+      shift
+        ? buildDraftFromShift(shift)
+        : buildNewDraft({
+            date,
+            employeeId: defaultEmployeeId,
+          }),
+    );
+  }
+
+  function closeDayEditor() {
+    setDayEditor({
+      open: false,
+      date: '',
+      title: '',
+      subtitle: '',
+      editingShiftId: '',
+    });
+  }
+
+  function setEditorToCreateMode() {
+    setDayEditor((prev) => ({ ...prev, editingShiftId: '' }));
+    setDayEditorDraft(
+      buildNewDraft({
+        date: dayEditor.date || visibleDayOptions[0] || '',
+        employeeId: activeEmployees[0]?.id || '',
+      }),
+    );
+  }
+
+  function setEditorToExistingShift(shift) {
+    if (!shift) return;
+    setDayEditor((prev) => ({ ...prev, editingShiftId: shift.id }));
+    setDayEditorDraft(buildDraftFromShift(shift));
+  }
+
+  async function handleDayEditorSave(event) {
+    event.preventDefault();
+    if (!canManage) return;
+
+    const payload = {
+      employeeId: dayEditorDraft.employeeId,
+      date: dayEditorDraft.date,
+      startTime: dayEditorDraft.startTime,
+      endTime: dayEditorDraft.endTime,
+      type: dayEditorDraft.type,
+      shiftType: dayEditorDraft.shiftType,
+      customLabel: dayEditorDraft.customLabel || '',
+      notes: dayEditorDraft.notes || '',
+      isHoliday: Boolean(dayEditorDraft.isHoliday),
+      isSpecialDay: Boolean(dayEditorDraft.isSpecialDay),
+      specialDayLabel: dayEditorDraft.specialDayLabel || '',
+      isManualOverride: dayEditorDraft.isManualOverride !== false,
+      label: getShiftLabelForDraft(dayEditorDraft),
+    };
+
+    setIsEditorSaving(true);
+    try {
+      if (dayEditor.editingShiftId) {
+        const updated = await onUpdateShift?.({
+          shiftId: dayEditor.editingShiftId,
+          ...payload,
+        });
+        if (updated) {
+          const refreshed = (grouped[payload.date] || []).find((item) => item.id === dayEditor.editingShiftId);
+          if (refreshed) {
+            setEditorToExistingShift(refreshed);
+          } else {
+            setEditorToCreateMode();
+          }
+        }
+        return;
+      }
+
+      const created = await onCreateShift?.(payload);
+      if (created?.id) {
+        setEditorToCreateMode();
+      }
+    } finally {
+      setIsEditorSaving(false);
+    }
+  }
 
   function getEmployeeById(employeeId) {
     return employeeById.get(employeeId);
@@ -537,6 +738,7 @@ export default function WeeklyGrid({
                   onDeleteShift={onDeleteShift}
                   onToggleManualOverride={onToggleManualOverride}
                   onDeleteShiftTemplate={onDeleteShiftTemplate}
+                  onOpenDayEditor={openDayEditor}
                   onClearDay={clearDayWithConfirm}
                 />
                 </div>
@@ -665,6 +867,7 @@ export default function WeeklyGrid({
                   onDeleteShift={onDeleteShift}
                   onToggleManualOverride={onToggleManualOverride}
                   onDeleteShiftTemplate={onDeleteShiftTemplate}
+                  onOpenDayEditor={openDayEditor}
                   onClearDay={clearDayWithConfirm}
                 />
               );
@@ -678,6 +881,302 @@ export default function WeeklyGrid({
           ) : null}
         </>
       )}
+
+      {dayEditor.open ? (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/55 p-3 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Κλείσιμο επεξεργασίας ημέρας"
+            className="absolute inset-0 bg-transparent"
+            onClick={closeDayEditor}
+          />
+
+          <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
+            <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-cyan-300/20">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 sm:text-base dark:text-white">
+                  Επεξεργασία Ημέρας: {dayEditor.title} ({dayEditor.subtitle})
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  Πλήρης διαχείριση βαρδιών (προσθήκη, αλλαγή, διαγραφή).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDayEditor}
+                className="rounded-md border border-slate-300/70 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-cyan-300/35 dark:text-slate-100 dark:hover:bg-slate-800/70"
+              >
+                Κλείσιμο
+              </button>
+            </div>
+
+            <div className="grid max-h-[80vh] gap-4 overflow-y-auto p-4 lg:grid-cols-[1.1fr,1.4fr]">
+              <aside className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                    Βάρδιες ημέρας ({dayEditorShifts.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={setEditorToCreateMode}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-600"
+                    disabled={!canManage}
+                  >
+                    <Plus size={12} />
+                    Νέα Βάρδια
+                  </button>
+                </div>
+
+                {!dayEditorShifts.length ? (
+                  <p className="rounded-lg border border-dashed border-slate-300/80 p-3 text-xs text-slate-600 dark:border-cyan-300/30 dark:text-slate-300">
+                    Δεν υπάρχουν βάρδιες για την επιλεγμένη ημέρα.
+                  </p>
+                ) : null}
+
+                {dayEditorShifts.map((shift) => {
+                  const employee = getEmployeeById(shift.employeeId);
+                  const isEditing = dayEditor.editingShiftId === shift.id;
+                  return (
+                    <div
+                      key={shift.id}
+                      className={`rounded-lg border p-2 text-xs ${
+                        isEditing
+                          ? 'border-brand-300 bg-brand-50/80 dark:border-cyan-300/50 dark:bg-cyan-500/15'
+                          : 'border-slate-200/80 bg-white/70 dark:border-cyan-300/25 dark:bg-slate-900/50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900 dark:text-white">
+                            {employee?.fullName || 'Άγνωστος'}
+                          </p>
+                          <p className="text-slate-700 dark:text-slate-300">
+                            {shift.startTime} - {shift.endTime}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditorToExistingShift(shift)}
+                            className="rounded p-1 text-slate-600 hover:bg-sky-100 hover:text-sky-700 dark:text-slate-300 dark:hover:bg-sky-500/30 dark:hover:text-sky-200"
+                            title="Επεξεργασία βάρδιας"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await onDeleteShift?.(shift.id);
+                              if (dayEditor.editingShiftId === shift.id) {
+                                setEditorToCreateMode();
+                              }
+                            }}
+                            className="rounded p-1 text-slate-600 hover:bg-red-100 hover:text-red-700 dark:text-slate-300 dark:hover:bg-red-500/30 dark:hover:text-red-200"
+                            title="Διαγραφή βάρδιας"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                      {shift.isManualOverride ? (
+                        <span className="mt-1 inline-flex rounded-full border border-fuchsia-300/70 bg-fuchsia-100/80 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-900 dark:border-fuchsia-300/40 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
+                          Manual Override
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </aside>
+
+              <form onSubmit={handleDayEditorSave} className="grid gap-2 sm:grid-cols-2">
+                <h4 className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
+                  {dayEditor.editingShiftId ? 'Επεξεργασία Βάρδιας' : 'Προσθήκη Βάρδιας'}
+                </h4>
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Υπάλληλος
+                  <select
+                    value={dayEditorDraft.employeeId}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, employeeId: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                    disabled={!canManage}
+                  >
+                    {activeEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Ημερομηνία
+                  <select
+                    value={dayEditorDraft.date}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, date: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                    disabled={!canManage}
+                  >
+                    {visibleDayOptions.map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Κατηγορία
+                  <select
+                    value={dayEditorDraft.type}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, type: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    disabled={!canManage}
+                  >
+                    <option value={SHIFT_TYPES.WORK}>Εργασία</option>
+                    <option value={SHIFT_TYPES.REST}>Ρεπό</option>
+                    <option value={SHIFT_TYPES.LEAVE}>Άδεια</option>
+                    <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Τύπος Βάρδιας
+                  <select
+                    value={dayEditorDraft.shiftType}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, shiftType: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    disabled={!canManage || dayEditorDraft.type !== SHIFT_TYPES.WORK}
+                  >
+                    {SHIFT_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {dayEditorDraft.type === SHIFT_TYPES.WORK && dayEditorDraft.shiftType === 'custom' ? (
+                  <label className="sm:col-span-2 text-xs font-medium text-slate-800 dark:text-slate-200">
+                    Ετικέτα Προσαρμοσμένης Βάρδιας
+                    <input
+                      value={dayEditorDraft.customLabel}
+                      onChange={(event) =>
+                        setDayEditorDraft((prev) => ({ ...prev, customLabel: event.target.value }))
+                      }
+                      className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                      placeholder="π.χ. Εκπαίδευση"
+                      disabled={!canManage}
+                      required
+                    />
+                  </label>
+                ) : null}
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Ώρα Έναρξης
+                  <input
+                    type="time"
+                    value={dayEditorDraft.startTime}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, startTime: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                    disabled={!canManage}
+                  />
+                </label>
+
+                <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Ώρα Λήξης
+                  <input
+                    type="time"
+                    value={dayEditorDraft.endTime}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, endTime: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    required
+                    disabled={!canManage}
+                  />
+                </label>
+
+                <label className="sm:col-span-2 inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/50 px-3 py-2 text-xs text-slate-800 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(dayEditorDraft.isManualOverride)}
+                    onChange={(event) =>
+                      setDayEditorDraft((prev) => ({ ...prev, isManualOverride: event.target.checked }))
+                    }
+                    disabled={!canManage}
+                  />
+                  Διατήρηση ως manual override
+                </label>
+
+                <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/50 px-3 py-2 text-xs text-slate-800 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(dayEditorDraft.isHoliday)}
+                    onChange={(event) =>
+                      setDayEditorDraft((prev) => ({
+                        ...prev,
+                        isHoliday: event.target.checked,
+                        isSpecialDay: event.target.checked ? true : prev.isSpecialDay,
+                      }))
+                    }
+                    disabled={!canManage}
+                  />
+                  Αργία
+                </label>
+
+                <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/50 px-3 py-2 text-xs text-slate-800 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(dayEditorDraft.isSpecialDay)}
+                    onChange={(event) =>
+                      setDayEditorDraft((prev) => ({ ...prev, isSpecialDay: event.target.checked }))
+                    }
+                    disabled={!canManage}
+                  />
+                  Ειδικό Ωράριο
+                </label>
+
+                {dayEditorDraft.isHoliday || dayEditorDraft.isSpecialDay ? (
+                  <label className="sm:col-span-2 text-xs font-medium text-slate-800 dark:text-slate-200">
+                    Περιγραφή ειδικής ημέρας
+                    <input
+                      value={dayEditorDraft.specialDayLabel}
+                      onChange={(event) =>
+                        setDayEditorDraft((prev) => ({ ...prev, specialDayLabel: event.target.value }))
+                      }
+                      className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                      placeholder="π.χ. Ειδικό Ωράριο 08:00-20:00"
+                      disabled={!canManage}
+                    />
+                  </label>
+                ) : null}
+
+                <label className="sm:col-span-2 text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Σημειώσεις
+                  <input
+                    value={dayEditorDraft.notes}
+                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, notes: event.target.value }))}
+                    className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    placeholder="Προαιρετικό"
+                    disabled={!canManage}
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={!canManage || isEditorSaving || isSaving || !dayEditorDraft.employeeId || !dayEditorDraft.date}
+                  className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={13} />
+                  {dayEditor.editingShiftId ? 'Αποθήκευση Αλλαγών' : 'Προσθήκη Βάρδιας'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

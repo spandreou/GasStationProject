@@ -137,6 +137,10 @@ function canParticipateInRotation(employee) {
   return employee?.participatesInRotation !== false;
 }
 
+function canParticipateInSundayRotation(employee) {
+  return employee?.participatesInSundayRotation !== false;
+}
+
 function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   const sorted = sortEmployeesByName(activeEmployees);
   const rotationEligible = sorted.filter(canParticipateInRotation);
@@ -219,6 +223,25 @@ function getPreferredIntermediateShift(employee, weekIndex) {
   if (preference === 'intermediate_0900') return INTERMEDIATE_SHIFT_A;
   if (preference === 'intermediate_1000') return INTERMEDIATE_SHIFT_B;
   return getIntermediateShiftByWeek(weekIndex);
+}
+
+function getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex) {
+  const role = normalizeRole(employee?.scheduleRole || employee?.roleType);
+  if (role === 'intermediate') {
+    return getPreferredIntermediateShift(employee, weekIndex);
+  }
+  if (role === 'core') {
+    return (weekIndex + slotIndex) % 2 === 0 ? MORNING_SHIFT : EVENING_SHIFT;
+  }
+
+  const preference = `${employee?.defaultShiftPreference || ''}`.toLowerCase();
+  if (preference === 'morning') return MORNING_SHIFT;
+  if (preference === 'evening') return EVENING_SHIFT;
+  if (preference === 'intermediate_0900') return INTERMEDIATE_SHIFT_A;
+  if (preference === 'intermediate_1000') return INTERMEDIATE_SHIFT_B;
+
+  const cycle = [MORNING_SHIFT, INTERMEDIATE_SHIFT_A, EVENING_SHIFT];
+  return cycle[(weekIndex + slotIndex) % cycle.length];
 }
 
 function buildSpecialDayLabel(specialDay) {
@@ -484,15 +507,18 @@ export function generateSmartMonthSchedule({
     warnings.push('Δεν βρέθηκαν 3 εργαζόμενοι για πλήρες pattern (core A/B + intermediate). Εφαρμόστηκε best-effort fallback.');
   }
 
-  const coreAOff = getFixedDayOff(coreA, DEFAULT_FIXED_DAYS_OFF.coreA, normalizedRules);
-  const coreBOff = getFixedDayOff(coreB, DEFAULT_FIXED_DAYS_OFF.coreB, normalizedRules);
-  const intermediateOff = getFixedDayOff(intermediate, DEFAULT_FIXED_DAYS_OFF.intermediate, normalizedRules);
+  const fixedOffById = {};
+  activeEmployees.forEach((employee) => {
+    let fallbackValue = null;
+    if (employee.id === coreA?.id) fallbackValue = DEFAULT_FIXED_DAYS_OFF.coreA;
+    if (employee.id === coreB?.id) fallbackValue = DEFAULT_FIXED_DAYS_OFF.coreB;
+    if (employee.id === intermediate?.id) fallbackValue = DEFAULT_FIXED_DAYS_OFF.intermediate;
 
-  const fixedOffById = {
-    ...(coreA?.id ? { [coreA.id]: coreAOff } : {}),
-    ...(coreB?.id ? { [coreB.id]: coreBOff } : {}),
-    ...(intermediate?.id ? { [intermediate.id]: intermediateOff } : {}),
-  };
+    const resolved = getFixedDayOff(employee, fallbackValue, normalizedRules);
+    if (typeof resolved === 'number' && resolved >= 0 && resolved <= 6) {
+      fixedOffById[employee.id] = resolved;
+    }
+  });
 
   const weekKeys = buildWeekRotationIndex(monthDays);
   const weekIndexByKey = Object.fromEntries(weekKeys.map((key, index) => [key, index]));
@@ -538,14 +564,15 @@ export function generateSmartMonthSchedule({
       }
 
       const manualEmployeeIds = new Set(manualDayEntries.map((entry) => entry.employeeId));
-      const candidates = activeEmployees.filter((employee) => {
+      const sundayEligibleEmployees = activeEmployees.filter(canParticipateInSundayRotation);
+      const candidates = sundayEligibleEmployees.filter((employee) => {
         if (manualEmployeeIds.has(employee.id)) return false;
         const dayOff = fixedOffById[employee.id];
         return dayOff !== 0;
       });
 
       const picked = pickSundayEmployee({
-        candidates: candidates.length ? candidates : activeEmployees,
+        candidates: candidates.length ? candidates : sundayEligibleEmployees.length ? sundayEligibleEmployees : activeEmployees,
         previousSundayDate,
         sundayCounts,
         historicalShifts: [...historicalForSunday, ...generated],
@@ -649,6 +676,35 @@ export function generateSmartMonthSchedule({
         }
       }
     }
+
+    const scheduledEmployeeIds = new Set([
+      ...manualDayEntries.map((entry) => entry.employeeId).filter(Boolean),
+      ...generated.filter((entry) => entry.date === date).map((entry) => entry.employeeId).filter(Boolean),
+    ]);
+
+    const additionalEmployees = activeEmployees.filter((employee) => {
+      if (!employee?.id) return false;
+      if (scheduledEmployeeIds.has(employee.id)) return false;
+      const fixedOff = fixedOffById[employee.id];
+      return !(typeof fixedOff === 'number' && fixedOff === weekday);
+    });
+
+    additionalEmployees.forEach((employee, slotIndex) => {
+      const template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+      const candidate = buildShiftFromTemplate({
+        employee,
+        date,
+        template,
+        notes: 'Auto-generated additional employee coverage',
+        specialDay,
+      });
+
+      if (!hasOverlap([...manualDayEntries, ...generated], candidate)) {
+        generated.push(candidate);
+      } else {
+        warnings.push(`Overlap για επιπλέον υπάλληλο ${employee.fullName} (${date}).`);
+      }
+    });
 
     if (missingCoreTypes.length > 1 && !intermediate) {
       warnings.push(`Πολλαπλές κενές core βάρδιες στις ${date} χωρίς διαθέσιμο intermediate.`);

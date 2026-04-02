@@ -32,6 +32,7 @@ function buildEmployeeRuleDraft(employee) {
     fixedDayOff:
       typeof employee.fixedDayOff === 'number' && Number.isInteger(employee.fixedDayOff) ? employee.fixedDayOff : '',
     participatesInRotation: employee.participatesInRotation !== false,
+    participatesInSundayRotation: employee.participatesInSundayRotation !== false,
     defaultShiftPreference: employee.defaultShiftPreference || 'auto',
   };
 }
@@ -230,6 +231,20 @@ export default function SchedulingRulesPanel({
                     }
                   />
                   Συμμετέχει στο weekly rotation
+                </label>
+
+                <label className="inline-flex items-center gap-2 self-end rounded-lg border border-slate-300/70 bg-white/40 px-3 py-2 text-[11px] text-slate-800 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.participatesInSundayRotation)}
+                    onChange={(event) =>
+                      setEmployeeDraftMap((prev) => ({
+                        ...prev,
+                        [employee.id]: { ...draft, participatesInSundayRotation: event.target.checked },
+                      }))
+                    }
+                  />
+                  Sunday rotation
                 </label>
               </div>
             </article>

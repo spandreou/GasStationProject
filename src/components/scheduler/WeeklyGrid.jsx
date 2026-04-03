@@ -539,7 +539,7 @@ export default function WeeklyGrid({
       }
 
       const created = await onCreateShift?.(payload);
-      if (created?.id) {
+      if (created) {
         closeDayEditor();
       }
     } finally {

@@ -675,7 +675,7 @@ export const useSchedulerStore = create((set, get) => ({
       });
       return true;
     } catch (error) {
-      set({ warningMessage: error?.message || 'Αποτυχία διαγραφής custom κάρτας.' });
+      set({ warningMessage: error?.message || 'Failed to update shift.' });
       return false;
     } finally {
       set({ isSaving: false });
@@ -700,7 +700,7 @@ export const useSchedulerStore = create((set, get) => ({
   }) => {
     if (!requireAdmin(get, set)) return null;
     if (!employeeId || !date) {
-      set({ warningMessage: 'Επίλεξε υπάλληλο και ημερομηνία για τη βάρδια.' });
+      set({ warningMessage: 'Select employee and date for the shift.' });
       return null;
     }
 
@@ -709,7 +709,7 @@ export const useSchedulerStore = create((set, get) => ({
       set({ isWeekLocked: false });
     }
     if (isWeekEditingLocked(get(), weekDays) && isDateInWeek(date, weekDays)) {
-      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      set({ warningMessage: 'This week is locked after finalize.' });
       return null;
     }
 
@@ -727,7 +727,7 @@ export const useSchedulerStore = create((set, get) => ({
       const conflict = isWork ? hasTimeOverlap(get().shifts, { employeeId, date, startTime, endTime }) : false;
       if (conflict) {
         set({
-          warningMessage: 'Αποτυχία αποθήκευσης: Υπάρχει επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
+          warningMessage: 'Save failed: overlapping shift for the same employee.',
         });
         return null;
       }
@@ -740,10 +740,10 @@ export const useSchedulerStore = create((set, get) => ({
         startTime,
         endTime,
         type,
-        label: label || 'Χειροκίνητη',
+        label: label || 'Manual',
         notes,
         shiftType: normalizedShiftType,
-        customLabel: normalizedShiftType === 'custom' ? customLabel || label || 'Προσαρμοσμένη' : '',
+        customLabel: normalizedShiftType === 'custom' ? customLabel || label || 'Custom' : '',
         isHoliday: Boolean(isHoliday),
         isSpecialDay: Boolean(isSpecialDay || isHoliday),
         specialDayLabel: specialDayLabel?.trim() || '',
@@ -758,12 +758,17 @@ export const useSchedulerStore = create((set, get) => ({
 
       if (trackUndo && createdShift?.id) {
         set({
-          undoState: buildUndoState('add_shift', 'Η βάρδια ανατέθηκε.', { shiftId: createdShift.id }),
+          undoState: buildUndoState('add_shift', 'Shift assigned.', { shiftId: createdShift.id }),
         });
       }
 
-      await get().saveCurrentWeekSnapshot('manual_save');
-      await get().loadWeekHistory();
+      let snapshotWarning = '';
+      try {
+        await get().saveCurrentWeekSnapshot('manual_save');
+        await get().loadWeekHistory();
+      } catch {
+        snapshotWarning = 'Shift was saved, but history refresh failed.';
+      }
 
       if (sundayViolation.violated && createdShift?.id) {
         set((state) => ({
@@ -773,11 +778,13 @@ export const useSchedulerStore = create((set, get) => ({
           },
           warningMessage: sundayViolation.message,
         }));
+      } else if (snapshotWarning) {
+        set({ warningMessage: snapshotWarning });
       }
 
       return createdShift;
     } catch (error) {
-      set({ warningMessage: error.message || 'Αποτυχία δημιουργίας βάρδιας.' });
+      set({ warningMessage: error.message || 'Failed to create shift.' });
       return null;
     } finally {
       set({ isSaving: false });
@@ -811,7 +818,7 @@ export const useSchedulerStore = create((set, get) => ({
       isWeekEditingLocked(get(), weekDays) &&
       (isShiftInWeekRange(currentShift, weekDays) || isDateInWeek(date, weekDays))
     ) {
-      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      set({ warningMessage: 'This week is locked after finalize.' });
       return false;
     }
 
@@ -825,7 +832,7 @@ export const useSchedulerStore = create((set, get) => ({
       if (conflict) {
         set({
           warningMessage:
-            'Αποτυχία ενημέρωσης: υπάρχει επικάλυψη με άλλη βάρδια του ίδιου υπαλλήλου.',
+            'Update failed: overlapping shift for the same employee.',
         });
         return false;
       }
@@ -861,8 +868,14 @@ export const useSchedulerStore = create((set, get) => ({
           state.shifts.map((shift) => (shift.id === shiftId ? { ...shift, ...payload } : shift)),
         ),
       }));
-      await get().saveCurrentWeekSnapshot('manual_save');
-      await get().loadWeekHistory();
+
+      let snapshotWarning = '';
+      try {
+        await get().saveCurrentWeekSnapshot('manual_save');
+        await get().loadWeekHistory();
+      } catch {
+        snapshotWarning = 'Shift was updated, but history refresh failed.';
+      }
 
       set((state) => {
         const nextViolations = { ...state.sundayRuleViolations };
@@ -873,13 +886,15 @@ export const useSchedulerStore = create((set, get) => ({
 
         return {
           sundayRuleViolations: nextViolations,
-          warningMessage: sundayViolation.violated ? sundayViolation.message : 'Η βάρδια ενημερώθηκε.',
+          warningMessage: sundayViolation.violated
+            ? sundayViolation.message
+            : snapshotWarning || 'Shift updated.',
         };
       });
 
       return true;
     } catch (error) {
-      set({ warningMessage: error?.message || 'Αποτυχία ενημέρωσης βάρδιας.' });
+      set({ warningMessage: error?.message || 'Failed to delete custom template card.' });
       return false;
     } finally {
       set({ isSaving: false });
@@ -1065,27 +1080,68 @@ export const useSchedulerStore = create((set, get) => ({
   clearWeekShifts: async () => {
     if (!requireAdmin(get, set)) return false;
     if (isWeekEditingLocked(get(), getWeekDays(get().weekStart))) {
-      set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
+      set({ warningMessage: 'This week is locked after finalize.' });
       return false;
     }
 
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);
     set({ isSaving: true });
-    let removedShifts = [];
+    const removedById = new Map();
+
     try {
-      removedShifts = await removeShiftsByDates(weekDays);
+      const removedShifts = await removeShiftsByDates(weekDays);
+      removedShifts.forEach((shift) => {
+        if (shift?.id) removedById.set(shift.id, shift);
+      });
+
+      let remainingWeekShifts = await fetchShiftsByDates(weekDays);
+      let pass = 0;
+
+      while (remainingWeekShifts.length > 0 && pass < 3) {
+        await Promise.all(
+          remainingWeekShifts.map(async (shift) => {
+            if (!shift?.id) return;
+            try {
+              const removed = await removeShift(shift.id);
+              if (removed?.id) removedById.set(removed.id, removed);
+            } catch {
+              // Retry in next pass
+            }
+          }),
+        );
+
+        remainingWeekShifts = await fetchShiftsByDates(weekDays);
+        pass += 1;
+      }
+
+      if (remainingWeekShifts.length > 0) {
+        set({
+          warningMessage: 'Week clear failed: residual shifts remain. Try again.',
+        });
+        return false;
+      }
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Failed to clear week.' });
+      return false;
     } finally {
       set({ isSaving: false });
     }
 
     set((state) => ({
       shifts: state.shifts.filter((shift) => !weekSet.has(shift.date)),
-      warningMessage: 'Οι βάρδιες της εβδομάδας διαγράφηκαν.',
-      undoState: buildUndoState('clear_week', 'Καθαρίστηκε η εβδομάδα.', { shifts: removedShifts }),
+      warningMessage: 'Week shifts were cleared.',
+      undoState: buildUndoState('clear_week', 'Week cleared.', { shifts: [...removedById.values()] }),
     }));
-    await get().saveCurrentWeekSnapshot('manual_save');
-    await get().loadWeekHistory();
+
+    await get().refreshWeekLockStatus();
+    try {
+      await get().saveCurrentWeekSnapshot('manual_save');
+      await get().loadWeekHistory();
+    } catch {
+      set({ warningMessage: 'Week cleared, but history refresh failed.' });
+    }
+
     return true;
   },
 

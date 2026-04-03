@@ -160,12 +160,18 @@ const defaultGeneratorRules = {
   avoidConsecutiveSundays: true,
   allowManualOverride: true,
   startWithCoreAMorning: true,
+  generationMode: 'balanced',
 };
 
 function normalizeGeneratorRules(value = {}) {
+  const mode = value?.generationMode;
+  const generationMode = mode === 'strict' || mode === 'manual_assist' || mode === 'balanced'
+    ? mode
+    : defaultGeneratorRules.generationMode;
   return {
     ...defaultGeneratorRules,
     ...(value || {}),
+    generationMode,
   };
 }
 
@@ -1443,7 +1449,8 @@ export const useSchedulerStore = create((set, get) => ({
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);
     const weekExistingShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
-    const preserveManualOverrides = get().generatorRules?.allowManualOverride !== false;
+    const weeklyRules = normalizeGeneratorRules(get().generatorRules);
+    const preserveManualOverrides = weeklyRules.allowManualOverride !== false;
     const manualWeekShifts = preserveManualOverrides
       ? weekExistingShifts.filter((shift) => shift.isManualOverride)
       : [];
@@ -1458,6 +1465,7 @@ export const useSchedulerStore = create((set, get) => ({
         employees: get().employees,
         allShifts: get().shifts,
         hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+        rules: weeklyRules,
       });
 
       const manualKey = new Set(manualWeekShifts.map((shift) => `${shift.employeeId}_${shift.date}`));

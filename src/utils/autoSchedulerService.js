@@ -28,6 +28,17 @@ const DEFAULT_MONTH_RULES = {
   specialDaysByDate: {},
   startWithCoreAMorning: true,
 };
+const DEFAULT_WEEK_RULES = {
+  weeklyRotationEnabled: true,
+  avoidConsecutiveSundays: true,
+  allowManualOverride: true,
+  startWithCoreAMorning: true,
+  generationMode: 'balanced', // strict | balanced | manual_assist
+  fixedDaysOff: {},
+};
+const INTERMEDIATE_EXTRA_WEEKDAYS = new Set([1, 5, 6]); // Mon, Fri, Sat
+const CORE_FIXED_OFF_WEEKDAYS = { coreA: 2, coreB: 3, intermediate: 4 }; // Tue/Wed/Thu
+const PRIMARY_ROLE_OFF_WEEKDAYS = new Set([2, 3, 4]); // Tue/Wed/Thu only
 
 function shiftKey(shift) {
   return `${shift.date}_${shift.employeeId}_${shift.startTime}_${shift.endTime}_${shift.type || SHIFT_TYPES.WORK}`;
@@ -375,66 +386,71 @@ export async function generateSmartWeekSchedule({
   employees,
   allShifts,
   hasConsecutiveSundayAssignmentFn,
+  rules = {},
 }) {
   if (!Array.isArray(weekDays) || weekDays.length !== 7) {
     throw new Error('Μη έγκυρες ημέρες εβδομάδας για Magic Wand.');
   }
 
-  const activeEmployees = (employees || []).filter((employee) => employee?.isActive !== false);
+  const normalizedRules = {
+    ...DEFAULT_WEEK_RULES,
+    ...(rules || {}),
+    fixedDaysOff: { ...(rules?.fixedDaysOff || {}) },
+  };
+  const generationMode = ['strict', 'balanced', 'manual_assist'].includes(normalizedRules.generationMode)
+    ? normalizedRules.generationMode
+    : 'balanced';
+
+  const activeEmployees = sortEmployeesByName((employees || []).filter((employee) => employee?.isActive !== false));
   if (!activeEmployees.length) {
     return { shifts: [], warnings: ['Δεν βρέθηκαν ενεργοί υπάλληλοι.'] };
   }
 
-  const previousWeekDays = getPreviousWeekDays(weekDays);
-  const previousWeekSet = new Set(previousWeekDays);
-  const previousWeekShifts = (allShifts || []).filter((shift) => previousWeekSet.has(shift.date));
-  const rotationMap = buildRotationMap(previousWeekShifts);
-
   const generated = [];
   const warnings = [];
 
-  weekDays.slice(0, 6).forEach((date, dayIndex) => {
-    const previousDate = previousWeekDays[dayIndex];
+  const { coreA, coreB, intermediate } = resolveMonthlyEmployees(activeEmployees, {});
+  if (!coreA || !coreB) {
+    warnings.push('Δεν εντοπίστηκαν 2 core εργαζόμενοι. Εφαρμόστηκε best-effort fallback.');
+  }
 
-    activeEmployees.forEach((employee) => {
-      const staticSchedule = getStaticSchedule(employee);
-      if (staticSchedule.enabled) {
-        generated.push({
-          employeeId: employee.id,
-          date,
-          startTime: staticSchedule.startTime,
-          endTime: staticSchedule.endTime,
-          label: 'Σταθερό Ωράριο',
-          notes: 'Auto-generated static role',
-          type: SHIFT_TYPES.WORK,
-          shiftType: inferShiftTypeFromTimes(staticSchedule.startTime, staticSchedule.endTime),
-          isManualOverride: false,
-        });
-        return;
-      }
+  const fixedOffById = {};
+  const roleDefaultOffById = new Map();
+  if (coreA?.id) roleDefaultOffById.set(coreA.id, CORE_FIXED_OFF_WEEKDAYS.coreA);
+  if (coreB?.id) roleDefaultOffById.set(coreB.id, CORE_FIXED_OFF_WEEKDAYS.coreB);
+  if (intermediate?.id) roleDefaultOffById.set(intermediate.id, CORE_FIXED_OFF_WEEKDAYS.intermediate);
+  activeEmployees.forEach((employee) => {
+    const roleFallback = roleDefaultOffById.has(employee.id) ? roleDefaultOffById.get(employee.id) : null;
+    let resolved = getFixedDayOff(employee, roleFallback, normalizedRules);
 
-      const prevShift = rotationMap.get(`${employee.id}_${previousDate}`);
-      const rotationShift = getAlternatingShift(prevShift);
+    if (
+      roleDefaultOffById.has(employee.id) &&
+      typeof resolved === 'number' &&
+      !PRIMARY_ROLE_OFF_WEEKDAYS.has(resolved)
+    ) {
+      resolved = roleFallback;
+      warnings.push(
+        `Το ρεπό για ${employee.fullName} ευθυγραμμίστηκε σε Τρίτη/Τετάρτη/Πέμπτη για το weekly auto mode.`,
+      );
+    }
 
-      generated.push({
-        employeeId: employee.id,
-        date,
-        startTime: rotationShift.startTime,
-        endTime: rotationShift.endTime,
-        label: rotationShift.label,
-        notes: 'Auto-generated with rotation',
-        type: SHIFT_TYPES.WORK,
-        shiftType: rotationShift.shiftType,
-        isManualOverride: false,
-      });
-    });
+    if (typeof resolved === 'number' && resolved >= 0 && resolved <= 6) {
+      fixedOffById[employee.id] = resolved;
+    }
   });
 
   const sundayDate = getSundayDate(weekDays);
   const previousSundayDate = getPreviousSundayDate(weekDays);
+  const sundayCounts = (allShifts || []).reduce((acc, shift) => {
+    if ((shift.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) return acc;
+    if (toDate(shift.date).getDay() !== 0) return acc;
+    acc[shift.employeeId] = (acc[shift.employeeId] || 0) + 1;
+    return acc;
+  }, {});
 
-  let sundayCandidates = [...activeEmployees];
-  if (typeof hasConsecutiveSundayAssignmentFn === 'function') {
+  let sundayCandidates = activeEmployees.filter(canParticipateInSundayRotation);
+  if (!sundayCandidates.length) sundayCandidates = [...activeEmployees];
+  if (normalizedRules.avoidConsecutiveSundays && typeof hasConsecutiveSundayAssignmentFn === 'function') {
     const checks = await Promise.all(
       sundayCandidates.map(async (employee) => ({
         employee,
@@ -453,22 +469,200 @@ export async function generateSmartWeekSchedule({
     }
   }
 
-  sundayCandidates.sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', 'el'));
+  sundayCandidates.sort((a, b) => {
+    const countDiff = (sundayCounts[a.id] || 0) - (sundayCounts[b.id] || 0);
+    if (countDiff !== 0) return countDiff;
+    return (a.fullName || '').localeCompare(b.fullName || '', 'el');
+  });
   const sundayEmployee = sundayCandidates[0] || activeEmployees[0];
+  if (sundayEmployee && fixedOffById[sundayEmployee.id] === 0) {
+    // Keep Sunday assignment valid when a Sunday fixed-off is accidentally configured.
+    delete fixedOffById[sundayEmployee.id];
+  }
+
+  const assignedCountByEmployee = Object.fromEntries(activeEmployees.map((employee) => [employee.id, 0]));
+  const targetWorkDaysByEmployee = Object.fromEntries(
+    activeEmployees.map((employee) => [employee.id, employee.id === sundayEmployee?.id ? 6 : 5]),
+  );
+
+  const weekStartDate = toDate(weekDays[0]);
+  const weekIndex = Math.floor(weekStartDate.getTime() / (7 * 24 * 60 * 60 * 1000));
+  const coreAMorningThisWeek = normalizedRules.weeklyRotationEnabled
+    ? (normalizedRules.startWithCoreAMorning ? weekIndex % 2 === 0 : weekIndex % 2 !== 0)
+    : Boolean(normalizedRules.startWithCoreAMorning);
+
+  const morningPrimary = coreAMorningThisWeek ? coreA : coreB;
+  const eveningPrimary = coreAMorningThisWeek ? coreB : coreA;
+
+  function isOffDay(employee, weekday) {
+    if (!employee?.id) return false;
+    return fixedOffById[employee.id] === weekday;
+  }
+
+  function isUnderTarget(employee) {
+    const assigned = assignedCountByEmployee[employee?.id] || 0;
+    const target = targetWorkDaysByEmployee[employee?.id] || 99;
+    return assigned < target;
+  }
+
+  function canAssignForDay(employee, weekday, assignedToday, allowOverTarget = false) {
+    if (!employee?.id) return false;
+    if (assignedToday.has(employee.id)) return false;
+    if (isOffDay(employee, weekday)) return false;
+    if (!allowOverTarget && !isUnderTarget(employee)) return false;
+    return true;
+  }
+
+  function candidateScore(employee, shiftType) {
+    const assigned = assignedCountByEmployee[employee.id] || 0;
+    const target = targetWorkDaysByEmployee[employee.id] || 99;
+    let score = assigned - target;
+    if (employee.id === sundayEmployee?.id && assigned < target) score -= 0.5;
+    if (assigned >= target) score += 50;
+    const preference = `${employee.defaultShiftPreference || ''}`.toLowerCase();
+    if (shiftType === 'morning' && preference === 'morning') score -= 0.15;
+    if (shiftType === 'evening' && preference === 'evening') score -= 0.15;
+    if (shiftType === 'intermediate' && (preference === 'intermediate_0900' || preference === 'intermediate_1000')) {
+      score -= 0.15;
+    }
+    return score;
+  }
+
+  function addShiftForDay({ employee, date, template, notes }) {
+    if (!employee?.id) return false;
+    const candidate = buildShiftFromTemplate({
+      employee,
+      date,
+      template,
+      notes,
+    });
+    if (hasOverlap(generated, candidate)) return false;
+    generated.push(candidate);
+    assignedCountByEmployee[employee.id] = (assignedCountByEmployee[employee.id] || 0) + 1;
+    return true;
+  }
+
+  function getPreferredRank(employee, preferred) {
+    const index = preferred.findIndex((item) => item?.id === employee?.id);
+    if (index >= 0) return index;
+    return preferred.length + 1;
+  }
+
+  function pickSlotCandidate({
+    slotTemplate,
+    preferred,
+    weekday,
+    assignedToday,
+    allowOverTarget = false,
+  }) {
+    if (generationMode === 'manual_assist') {
+      return preferred.find((employee) => canAssignForDay(employee, weekday, assignedToday, allowOverTarget)) || null;
+    }
+
+    const available = activeEmployees.filter((employee) =>
+      canAssignForDay(employee, weekday, assignedToday, allowOverTarget),
+    );
+
+    available.sort((a, b) => {
+      const scoreDiff = candidateScore(a, slotTemplate.shiftType) - candidateScore(b, slotTemplate.shiftType);
+      if (scoreDiff !== 0) return scoreDiff;
+      const rankDiff = getPreferredRank(a, preferred) - getPreferredRank(b, preferred);
+      if (rankDiff !== 0) return rankDiff;
+      return (a.fullName || '').localeCompare(b.fullName || '', 'el');
+    });
+
+    return available[0] || null;
+  }
+
+  weekDays.slice(0, 6).forEach((date) => {
+    const weekday = toDate(date).getDay();
+    const assignedToday = new Set(
+      generated
+        .filter((shift) => shift.date === date && (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK)
+        .map((shift) => shift.employeeId),
+    );
+
+    const slotTemplates = [
+      { ...MORNING_SHIFT, slot: 'morning' },
+      { ...EVENING_SHIFT, slot: 'evening' },
+    ];
+
+    slotTemplates.forEach((slotTemplate) => {
+      const preferred = slotTemplate.slot === 'morning'
+        ? [morningPrimary, eveningPrimary, intermediate]
+        : [eveningPrimary, morningPrimary, intermediate];
+
+      let selected = pickSlotCandidate({
+        slotTemplate,
+        preferred,
+        weekday,
+        assignedToday,
+        allowOverTarget: false,
+      });
+
+      if (!selected && generationMode !== 'manual_assist') {
+        selected = pickSlotCandidate({
+          slotTemplate,
+          preferred,
+          weekday,
+          assignedToday,
+          allowOverTarget: true,
+        });
+      }
+
+      if (!selected) {
+        warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${date}.`);
+        return;
+      }
+
+      const inserted = addShiftForDay({
+        employee: selected,
+        date,
+        template: slotTemplate,
+        notes: 'Auto-generated weekly coverage',
+      });
+      if (inserted) assignedToday.add(selected.id);
+    });
+
+    if (
+      generationMode !== 'manual_assist' &&
+      intermediate &&
+      INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday) &&
+      canAssignForDay(intermediate, weekday, assignedToday, false)
+    ) {
+      const inserted = addShiftForDay({
+        employee: intermediate,
+        date,
+        template: getPreferredIntermediateShift(intermediate, weekIndex),
+        notes: 'Auto-generated intermediate pattern',
+      });
+      if (inserted) assignedToday.add(intermediate.id);
+    }
+  });
 
   if (sundayEmployee) {
-    generated.push({
-      employeeId: sundayEmployee.id,
+    const inserted = addShiftForDay({
+      employee: sundayEmployee,
       date: sundayDate,
-      startTime: SUNDAY_SHIFT.startTime,
-      endTime: SUNDAY_SHIFT.endTime,
-      label: SUNDAY_SHIFT.label,
-      customLabel: SUNDAY_SHIFT.customLabel,
-      notes: 'Auto-generated Sunday coverage',
-      type: SHIFT_TYPES.WORK,
-      shiftType: SUNDAY_SHIFT.shiftType,
-      isManualOverride: false,
+      template: SUNDAY_SHIFT,
+      notes: 'Auto-generated Sunday fairness',
     });
+    if (!inserted) {
+      warnings.push(`Δεν μπόρεσε να γίνει ανάθεση Κυριακής στις ${sundayDate}.`);
+    }
+  }
+
+  activeEmployees.forEach((employee) => {
+    const worked = assignedCountByEmployee[employee.id] || 0;
+    const restDays = 7 - worked;
+    const minimumExpectedRest = employee.id === sundayEmployee?.id ? 1 : 2;
+    if (restDays < minimumExpectedRest) {
+      warnings.push(`Περιορισμένα ρεπό για ${employee.fullName}: ${restDays} (στόχος ${minimumExpectedRest}).`);
+    }
+  });
+
+  if (generationMode === 'strict' && warnings.length) {
+    warnings.unshift('Strict mode: εντοπίστηκαν αποκλίσεις από τους κανόνες.');
   }
 
   return {

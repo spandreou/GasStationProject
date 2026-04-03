@@ -152,6 +152,7 @@ export default function MainDashboard() {
     () => shifts.filter((shift) => weekSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, weekSet],
   );
+  const isWeekEffectivelyLocked = isWeekLocked && weekShifts.length > 0;
   const monthShifts = useMemo(
     () => shifts.filter((shift) => monthSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, monthSet],
@@ -284,7 +285,7 @@ export default function MainDashboard() {
     event.preventDefault();
     const { employeeId, date, startTime, endTime, type } = quickAssignDraft;
     if (!employeeId || !date) return;
-    if (isWeekLocked) {
+    if (isWeekEffectivelyLocked) {
       setWarningMessage('Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται νέα ανάθεση.');
       return;
     }
@@ -426,7 +427,7 @@ export default function MainDashboard() {
           onExportMonthPdf={handleExportMonthPdf}
           onExportExcel={handleExportExcel}
           onExportWord={handleExportWord}
-          isWeekLocked={isWeekLocked}
+          isWeekLocked={isWeekEffectivelyLocked}
         />
 
         {!isFirebaseConfigured ? (
@@ -761,9 +762,9 @@ export default function MainDashboard() {
               <button
                 type="submit"
                 className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-                disabled={isSaving || isWeekLocked}
+                disabled={isSaving || isWeekEffectivelyLocked}
               >
-                {isWeekLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
+                {isWeekEffectivelyLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
               </button>
             </form>
           </div>

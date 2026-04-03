@@ -144,6 +144,16 @@ function sortShiftsByDateAndStart(shifts = []) {
   );
 }
 
+function hasWeekShiftData(shifts = [], weekDays = []) {
+  if (!Array.isArray(shifts) || !Array.isArray(weekDays) || !weekDays.length) return false;
+  const weekSet = new Set(weekDays);
+  return shifts.some((shift) => shift?.date && weekSet.has(shift.date));
+}
+
+function isWeekEditingLocked(state, weekDays = getWeekDays(state.weekStart)) {
+  return Boolean(state.isWeekLocked && hasWeekShiftData(state.shifts, weekDays));
+}
+
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
 const defaultGeneratorRules = {
   weeklyRotationEnabled: true,
@@ -347,8 +357,11 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   refreshWeekLockStatus: async () => {
-    const locked = await isWeekFinalized(get().weekStart);
-    set({ isWeekLocked: locked });
+    const weekStart = get().weekStart;
+    const weekDays = getWeekDays(weekStart);
+    const finalizedInFirestore = await isWeekFinalized(weekStart);
+    const hasWeekData = hasWeekShiftData(get().shifts, weekDays);
+    set({ isWeekLocked: finalizedInFirestore && hasWeekData });
   },
 
   setHistoryFilters: async (partial) => {
@@ -692,7 +705,10 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const weekDays = getWeekDays(get().weekStart);
-    if (get().isWeekLocked && isDateInWeek(date, weekDays)) {
+    if (get().isWeekLocked && !hasWeekShiftData(get().shifts, weekDays)) {
+      set({ isWeekLocked: false });
+    }
+    if (isWeekEditingLocked(get(), weekDays) && isDateInWeek(date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return null;
     }
@@ -792,7 +808,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     const weekDays = getWeekDays(get().weekStart);
     if (
-      get().isWeekLocked &&
+      isWeekEditingLocked(get(), weekDays) &&
       (isShiftInWeekRange(currentShift, weekDays) || isDateInWeek(date, weekDays))
     ) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
@@ -877,7 +893,7 @@ export const useSchedulerStore = create((set, get) => ({
     if (!currentShift) return;
 
     const weekDays = getWeekDays(get().weekStart);
-    if (get().isWeekLocked && (isDateInWeek(currentShift.date, weekDays) || isDateInWeek(date, weekDays))) {
+    if (isWeekEditingLocked(get(), weekDays) && (isDateInWeek(currentShift.date, weekDays) || isDateInWeek(date, weekDays))) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return;
     }
@@ -935,7 +951,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     const nextValue = typeof value === 'boolean' ? value : !Boolean(currentShift.isManualOverride);
     const weekDays = getWeekDays(get().weekStart);
-    if (get().isWeekLocked && isDateInWeek(currentShift.date, weekDays)) {
+    if (isWeekEditingLocked(get(), weekDays) && isDateInWeek(currentShift.date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται αλλαγή override.' });
       return false;
     }
@@ -967,7 +983,7 @@ export const useSchedulerStore = create((set, get) => ({
     if (!existingShift) return false;
 
     const weekDays = getWeekDays(get().weekStart);
-    if (get().isWeekLocked && isDateInWeek(existingShift.date, weekDays)) {
+    if (isWeekEditingLocked(get(), weekDays) && isDateInWeek(existingShift.date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return false;
     }
@@ -996,7 +1012,7 @@ export const useSchedulerStore = create((set, get) => ({
     const weekStart = get().weekStart;
     if (!weekStart) return;
 
-    if (get().isWeekLocked) {
+    if (isWeekEditingLocked(get(), getWeekDays(weekStart))) {
       set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί.' });
       return;
     }
@@ -1048,7 +1064,7 @@ export const useSchedulerStore = create((set, get) => ({
 
   clearWeekShifts: async () => {
     if (!requireAdmin(get, set)) return false;
-    if (get().isWeekLocked) {
+    if (isWeekEditingLocked(get(), getWeekDays(get().weekStart))) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return false;
     }
@@ -1363,7 +1379,7 @@ export const useSchedulerStore = create((set, get) => ({
 
   generateMagicWeek: async () => {
     if (!requireAdmin(get, set)) return;
-    if (get().isWeekLocked) {
+    if (isWeekEditingLocked(get(), getWeekDays(get().weekStart))) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return;
     }
@@ -1488,7 +1504,7 @@ export const useSchedulerStore = create((set, get) => ({
     if (!date) return false;
 
     const weekDays = getWeekDays(get().weekStart);
-    if (get().isWeekLocked && isDateInWeek(date, weekDays)) {
+    if (isWeekEditingLocked(get(), weekDays) && isDateInWeek(date, weekDays)) {
       set({ warningMessage: 'Η εβδομάδα είναι κλειδωμένη μετά από οριστικοποίηση.' });
       return false;
     }

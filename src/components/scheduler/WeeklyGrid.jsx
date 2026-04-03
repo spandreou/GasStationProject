@@ -1,4 +1,4 @@
-﻿import { useDroppable } from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
@@ -425,7 +425,7 @@ export default function WeeklyGrid({
   const [dayEditorDraft, setDayEditorDraft] = useState(() =>
     buildNewDraft({
       date: weekDays[0] || monthDays[0] || '',
-      employeeId: employees?.[0]?.id || '',
+      employeeId: '',
     }),
   );
   const [isEditorSaving, setIsEditorSaving] = useState(false);
@@ -438,7 +438,7 @@ export default function WeeklyGrid({
   useEffect(() => {
     if (!dayEditor.open) return;
     const fallbackDate = dayEditor.date || visibleDayOptions[0] || '';
-    const fallbackEmployeeId = activeEmployees[0]?.id || '';
+    const fallbackEmployeeId = dayEditor.editingShiftId ? activeEmployees[0]?.id || '' : '';
 
     setDayEditorDraft((prev) => {
       const nextDate = visibleDayOptions.includes(prev.date) ? prev.date : fallbackDate;
@@ -455,7 +455,6 @@ export default function WeeklyGrid({
 
   function openDayEditor(date, title, subtitle, shift = null) {
     if (!canManage) return;
-    const defaultEmployeeId = activeEmployees[0]?.id || '';
     setDayEditor({
       open: true,
       date,
@@ -468,7 +467,7 @@ export default function WeeklyGrid({
         ? buildDraftFromShift(shift)
         : buildNewDraft({
             date,
-            employeeId: defaultEmployeeId,
+            employeeId: '',
           }),
     );
   }
@@ -481,6 +480,12 @@ export default function WeeklyGrid({
       subtitle: '',
       editingShiftId: '',
     });
+    setDayEditorDraft(
+      buildNewDraft({
+        date: visibleDayOptions[0] || '',
+        employeeId: '',
+      }),
+    );
   }
 
   function setEditorToCreateMode() {
@@ -488,7 +493,7 @@ export default function WeeklyGrid({
     setDayEditorDraft(
       buildNewDraft({
         date: dayEditor.date || visibleDayOptions[0] || '',
-        employeeId: activeEmployees[0]?.id || '',
+        employeeId: '',
       }),
     );
   }
@@ -497,23 +502,6 @@ export default function WeeklyGrid({
     if (!shift) return;
     setDayEditor((prev) => ({ ...prev, editingShiftId: shift.id }));
     setDayEditorDraft(buildDraftFromShift(shift));
-  }
-
-  function setEditorToSavedShift({ shiftId, payload }) {
-    if (!shiftId || !payload?.date) return;
-    setDayEditor((prev) => ({
-      ...prev,
-      date: payload.date,
-      title: getDayLabel(payload.date),
-      subtitle: formatGreekDate(payload.date),
-      editingShiftId: shiftId,
-    }));
-    setDayEditorDraft(
-      buildDraftFromShift({
-        id: shiftId,
-        ...payload,
-      }),
-    );
   }
 
   async function handleDayEditorSave(event) {
@@ -545,26 +533,14 @@ export default function WeeklyGrid({
           ...payload,
         });
         if (updated) {
-          setEditorToSavedShift({ shiftId: targetShiftId, payload });
+          closeDayEditor();
         }
         return;
       }
 
       const created = await onCreateShift?.(payload);
       if (created?.id) {
-        setDayEditor((prev) => ({
-          ...prev,
-          date: payload.date,
-          title: getDayLabel(payload.date),
-          subtitle: formatGreekDate(payload.date),
-          editingShiftId: '',
-        }));
-        setDayEditorDraft(
-          buildNewDraft({
-            date: payload.date,
-            employeeId: payload.employeeId || activeEmployees[0]?.id || '',
-          }),
-        );
+        closeDayEditor();
       }
     } finally {
       setIsEditorSaving(false);
@@ -912,7 +888,7 @@ export default function WeeklyGrid({
       )}
 
       {dayEditor.open ? (
-        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/55 p-3 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-2 sm:p-4" role="dialog" aria-modal="true">
           <button
             type="button"
             aria-label="Κλείσιμο επεξεργασίας ημέρας"
@@ -920,7 +896,7 @@ export default function WeeklyGrid({
             onClick={closeDayEditor}
           />
 
-          <div className="relative z-10 w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
+          <div className="relative z-10 w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
             <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-cyan-300/20">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 sm:text-base dark:text-white">
@@ -952,7 +928,7 @@ export default function WeeklyGrid({
                     disabled={!canManage}
                   >
                     <Plus size={12} />
-                    Νέα Βάρδια
+                    Προσθήκη Υπαλλήλου
                   </button>
                 </div>
 
@@ -1019,7 +995,7 @@ export default function WeeklyGrid({
 
               <form onSubmit={handleDayEditorSave} className="grid gap-2 sm:grid-cols-2">
                 <h4 className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                  {dayEditor.editingShiftId ? 'Επεξεργασία Βάρδιας' : 'Προσθήκη Βάρδιας'}
+                  {dayEditor.editingShiftId ? 'Επεξεργασία Βάρδιας' : 'Προσθήκη Υπαλλήλου'}
                 </h4>
 
                 <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
@@ -1031,6 +1007,9 @@ export default function WeeklyGrid({
                     required
                     disabled={!canManage}
                   >
+                    <option value="" disabled>
+                      Επιλογή υπαλλήλου
+                    </option>
                     {activeEmployees.map((employee) => (
                       <option key={employee.id} value={employee.id}>
                         {employee.fullName}
@@ -1199,7 +1178,7 @@ export default function WeeklyGrid({
                   className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save size={13} />
-                  {dayEditor.editingShiftId ? 'Αποθήκευση Αλλαγών' : 'Προσθήκη Βάρδιας'}
+                  Αποθήκευση Βάρδιας
                 </button>
               </form>
             </div>

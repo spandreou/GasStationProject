@@ -84,7 +84,7 @@ function createFileName(prefix, weekDays, extension) {
 }
 
 function buildWeekRangeLabel(weekDays) {
-  return `Πρόγραμμα: ${formatDateGreek(weekDays[0])} - ${formatDateGreek(weekDays[weekDays.length - 1])}`;
+  return `\u03A0\u03C1\u03CC\u03B3\u03C1\u03B1\u03BC\u03BC\u03B1: ${formatDateGreek(weekDays[0])} - ${formatDateGreek(weekDays[weekDays.length - 1])}`;
 }
 
 function formatDateWithWeekday(dateValue) {
@@ -122,14 +122,18 @@ function getScheduleWorkLabel(shiftList = []) {
     });
 
   if (workShifts.length > 0) {
-    return workShifts.map((item) => formatShiftTime(item.startTime, item.endTime)).join(' | ');
+    return {
+      schedule: workShifts.map((item) => formatShiftTime(item.startTime, item.endTime)).join(' | '),
+      workRest: '\u0395\u03A1\u0393',
+    };
   }
 
-  if (shiftList.some((item) => item.type === 'sick')) return 'Ασθένεια';
-  if (shiftList.some((item) => item.type === 'leave')) return 'Άδεια';
-  if (shiftList.some((item) => item.type === 'rest')) return 'Ρεπό';
-  return 'Ρεπό';
+  return {
+    schedule: '-',
+    workRest: '\u0391\u039D',
+  };
 }
+
 
 function buildScheduleRows({ days, employees, shifts }) {
   const shiftMap = new Map();
@@ -147,20 +151,24 @@ function buildScheduleRows({ days, employees, shifts }) {
 
   const rows = [];
   (days || []).forEach((day) => {
-    const dateLabel = formatDateWithWeekday(day);
+    const dateLabel = formatDateGreek(day);
     normalizedEmployees.forEach((employee) => {
       const key = `${day}__${employee.id}`;
       const dayShifts = shiftMap.get(key) || [];
+      const { schedule, workRest } = getScheduleWorkLabel(dayShifts);
       rows.push({
         date: dateLabel,
-        employee: employee.fullName || 'Άγνωστος υπάλληλος',
-        work: getScheduleWorkLabel(dayShifts),
+        afm: employee.afm?.trim() || '-',
+        fullName: employee.fullName || '\u0386\u03B3\u03BD\u03C9\u03C3\u03C4\u03BF\u03C2 \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03C2',
+        schedule,
+        workRest,
       });
     });
   });
 
   return rows;
 }
+
 
 function drawPdfTable({
   doc,
@@ -172,9 +180,11 @@ function drawPdfTable({
   rows,
 }) {
   const columnDefs = [
-    { key: 'date', title: 'Ημερομηνία', widthRatio: 0.32 },
-    { key: 'employee', title: 'Υπάλληλος', widthRatio: 0.28 },
-    { key: 'work', title: 'Εργασία', widthRatio: 0.4 },
+    { key: 'date', title: '\u0397\u03BC\u03B5\u03C1\u03BF\u03BC\u03B7\u03BD\u03AF\u03B1', widthRatio: 0.2 },
+    { key: 'afm', title: '\u0391\u03A6\u039C', widthRatio: 0.15 },
+    { key: 'fullName', title: '\u039F\u03BD\u03BF\u03BC\u03B1\u03C4\u03B5\u03C0\u03CE\u03BD\u03C5\u03BC\u03BF', widthRatio: 0.29 },
+    { key: 'schedule', title: '\u03A9\u03C1\u03AC\u03C1\u03B9\u03BF', widthRatio: 0.2 },
+    { key: 'workRest', title: '\u0395\u03C1\u03B3\u03B1\u03C3\u03AF\u03B1/\u03A1\u03B5\u03C0\u03CC', widthRatio: 0.16 },
   ];
 
   const tableWidth = pageWidth - margin * 2;
@@ -235,6 +245,7 @@ function drawPdfTable({
   });
 }
 
+
 function buildPdfFileName({ mode, days, month, year }) {
   if (mode === 'month') {
     const resolvedYear =
@@ -249,13 +260,13 @@ function buildPdfFileName({ mode, days, month, year }) {
 
 function buildPdfTitle({ mode, days, month, year }) {
   if (mode === 'month') {
-    return `Πρόγραμμα Μήνα: ${formatMonthYearLabel(month, year, days)}`;
+    return `\u03A0\u03C1\u03CC\u03B3\u03C1\u03B1\u03BC\u03BC\u03B1 \u039C\u03AE\u03BD\u03B1: ${formatMonthYearLabel(month, year, days)}`;
   }
-  return `Πρόγραμμα Εβδομάδας: ${formatDateGreek(days[0])} - ${formatDateGreek(days[days.length - 1])}`;
+  return `\u03A0\u03C1\u03CC\u03B3\u03C1\u03B1\u03BC\u03BC\u03B1 \u0395\u03B2\u03B4\u03BF\u03BC\u03AC\u03B4\u03B1\u03C2: ${formatDateGreek(days[0])} - ${formatDateGreek(days[days.length - 1])}`;
 }
 
 function buildPdfSubtitle(days) {
-  return `Σύνολο ημερών: ${days.length}`;
+  return `\u03A3\u03CD\u03BD\u03BF\u03BB\u03BF \u03B7\u03BC\u03B5\u03C1\u03CE\u03BD: ${days.length}`;
 }
 
 function downloadBlob(blob, fileName) {
@@ -289,10 +300,10 @@ export async function exportScheduleToPdf({
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
   if (!targetDays.length) {
-    throw new Error('Δεν βρέθηκαν ημέρες για εξαγωγή PDF.');
+    throw new Error('\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03B7\u03BC\u03AD\u03C1\u03B5\u03C2 \u03B3\u03B9\u03B1 \u03B5\u03BE\u03B1\u03B3\u03C9\u03B3\u03AE PDF.');
   }
   if (!employees.length) {
-    throw new Error('Δεν βρέθηκαν υπάλληλοι για εξαγωγή PDF.');
+    throw new Error('\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03B9 \u03B3\u03B9\u03B1 \u03B5\u03BE\u03B1\u03B3\u03C9\u03B3\u03AE PDF.');
   }
 
   const rows = buildScheduleRows({ days: targetDays, employees, shifts });

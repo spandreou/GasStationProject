@@ -1085,10 +1085,6 @@ export const useSchedulerStore = create((set, get) => ({
 
   clearWeekShifts: async () => {
     if (!requireAdmin(get, set)) return false;
-    if (isWeekEditingLocked(get(), getWeekDays(get().weekStart))) {
-      set({ warningMessage: 'This week is locked after finalize.' });
-      return false;
-    }
 
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);

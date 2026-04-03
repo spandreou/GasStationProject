@@ -180,11 +180,11 @@ function drawPdfTable({
   rows,
 }) {
   const columnDefs = [
-    { key: 'date', title: 'Ημερομηνία', widthRatio: 0.2 },
-    { key: 'afm', title: 'ΑΦΜ', widthRatio: 0.15 },
-    { key: 'fullName', title: 'Ονοματεπώνυμο', widthRatio: 0.29 },
-    { key: 'schedule', title: 'Ωράριο', widthRatio: 0.2 },
-    { key: 'workRest', title: 'Εργασία/Ρεπό', widthRatio: 0.16 },
+    { key: 'date', title: '\u0397\u03BC\u03B5\u03C1\u03BF\u03BC\u03B7\u03BD\u03AF\u03B1', widthRatio: 0.2 },
+    { key: 'afm', title: '\u0391\u03A6\u039C', widthRatio: 0.15 },
+    { key: 'fullName', title: '\u039F\u03BD\u03BF\u03BC\u03B1\u03C4\u03B5\u03C0\u03CE\u03BD\u03C5\u03BC\u03BF', widthRatio: 0.29 },
+    { key: 'schedule', title: '\u03A9\u03C1\u03AC\u03C1\u03B9\u03BF', widthRatio: 0.2 },
+    { key: 'workRest', title: '\u0395\u03C1\u03B3\u03B1\u03C3\u03AF\u03B1/\u03A1\u03B5\u03C0\u03CC', widthRatio: 0.16 },
   ];
 
   const tableWidth = pageWidth - margin * 2;
@@ -198,15 +198,15 @@ function drawPdfTable({
   const drawHeader = (y) => {
     doc.setFont('Roboto-Regular', 'normal');
     doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.setFillColor(226, 232, 240);
+    doc.setTextColor(248, 250, 252);
+    doc.setDrawColor(30, 41, 59);
 
     let x = startX;
     columnDefs.forEach((column, index) => {
       const width = columnWidths[index];
+      doc.setFillColor(30, 41, 59);
       doc.rect(x, y, width, headerHeight, 'FD');
-      const headerLines = doc.splitTextToSize(column.title, width - cellPaddingX * 2);
-      doc.text(headerLines, x + cellPaddingX, y + 15);
+      doc.text(String(column.title), x + cellPaddingX, y + 15);
       x += width;
     });
   };
@@ -246,7 +246,6 @@ function drawPdfTable({
     cursorY += rowHeight;
   });
 }
-
 
 function buildPdfFileName({ mode, days, month, year }) {
   if (mode === 'month') {

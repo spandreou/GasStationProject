@@ -1,34 +1,37 @@
-import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { AlertTriangle, Plus, ShieldCheck, WifiOff } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { adminEmail, firebaseConfigErrorMessage, isDemoMode, isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
-import {
-  exportPayrollReportToExcel,
-  exportPayrollReportToPdf,
-  exportScheduleToExcel,
-  exportScheduleToPdf,
-  exportScheduleToWord,
-} from '../../utils/exportService';
 import { getMonthDays } from '../../utils/scheduleUtils';
 import { getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
-import AdminLoginModal from './AdminLoginModal';
 import AnnouncementBoard from './AnnouncementBoard';
 import AnalyticsPanel from './AnalyticsPanel';
-import EmployeeProfileModal from './EmployeeProfileModal';
 import EmployeeSidebar from './EmployeeSidebar';
 import HistoryView from './HistoryView';
 import ManualShiftForm from './ManualShiftForm';
 import SchedulingRulesPanel from './SchedulingRulesPanel';
 import SpecialDaysPanel from './SpecialDaysPanel';
 import UndoSnackbar from './UndoSnackbar';
-import WeekHistoryViewer from './WeekHistoryViewer';
 import WeekToolbar from './WeekToolbar';
 import WeeklyGrid from './WeeklyGrid';
+
+const AdminLoginModal = lazy(() => import('./AdminLoginModal'));
+const AdminDndShell = lazy(() => import('./AdminDndShell'));
+const EmployeeProfileModal = lazy(() => import('./EmployeeProfileModal'));
+const WeekHistoryViewer = lazy(() => import('./WeekHistoryViewer'));
+
+let exportServicePromise;
+
+function loadExportService() {
+  if (!exportServicePromise) {
+    exportServicePromise = import('../../utils/exportService');
+  }
+  return exportServicePromise;
+}
 
 export default function MainDashboard() {
   const [activeDragItem, setActiveDragItem] = useState(null);
@@ -55,8 +58,6 @@ export default function MainDashboard() {
   });
 
   const { isDark, toggleTheme } = useThemeMode();
-  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 6 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } });
 
   const {
     employees,
@@ -129,8 +130,6 @@ export default function MainDashboard() {
     finalizeCurrentWeek,
   } = useSchedulerStore();
 
-  const sensors = useSensors(...(isAdmin ? [pointerSensor, touchSensor] : []));
-
   useEffect(() => {
     initializeData();
     return () => cleanupData();
@@ -194,9 +193,30 @@ export default function MainDashboard() {
         activeEmployees.find((item) => item.id !== coreAId && item.id !== coreBId)?.id ||
         '';
 
+      if (coreAId === prev.coreAId && coreBId === prev.coreBId && intermediateId === prev.intermediateId) {
+        return prev;
+      }
+
       return { coreAId, coreBId, intermediateId };
     });
   }, [employees]);
+
+  const handleToggleManualOverride = useCallback(
+    (shiftId, value) => toggleShiftManualOverride({ shiftId, value }),
+    [toggleShiftManualOverride],
+  );
+
+  const handleCloseProfileModal = useCallback(() => setProfileEmployee(null), []);
+
+  const handleMobileManualShiftCreate = useCallback(
+    async (payload) => {
+      const created = await addShift(payload);
+      if (created?.id) {
+        setIsManualSheetOpen(false);
+      }
+    },
+    [addShift],
+  );
 
   async function handleDragEnd(event) {
     const { active, over } = event;
@@ -321,6 +341,7 @@ export default function MainDashboard() {
   async function handleExportPayrollExcel() {
     const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
     try {
+      const { exportPayrollReportToExcel } = await loadExportService();
       await exportPayrollReportToExcel({
         employeeName: selectedEmployee?.fullName || 'Όλοι',
         yearMonth: historyFilters.yearMonth,
@@ -333,15 +354,18 @@ export default function MainDashboard() {
 
   function handleExportPayrollPdf() {
     const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
-    exportPayrollReportToPdf({
-      employeeName: selectedEmployee?.fullName || 'Όλοι',
-      yearMonth: historyFilters.yearMonth,
-      historyRows: attendanceHistory,
+    loadExportService().then(({ exportPayrollReportToPdf }) => {
+      exportPayrollReportToPdf({
+        employeeName: selectedEmployee?.fullName || 'Όλοι',
+        yearMonth: historyFilters.yearMonth,
+        historyRows: attendanceHistory,
+      });
     });
   }
 
   async function handleExportWeekPdf() {
     try {
+      const { exportScheduleToPdf } = await loadExportService();
       await exportScheduleToPdf({
         mode: 'week',
         days: weekDays,
@@ -355,6 +379,7 @@ export default function MainDashboard() {
 
   async function handleExportMonthPdf() {
     try {
+      const { exportScheduleToPdf } = await loadExportService();
       await exportScheduleToPdf({
         mode: 'month',
         days: monthDays,
@@ -370,6 +395,7 @@ export default function MainDashboard() {
 
   async function handleExportExcel() {
     try {
+      const { exportScheduleToExcel } = await loadExportService();
       await exportScheduleToExcel(getExportPayload());
     } catch {
       setWarningMessage('Αποτυχία εξαγωγής Excel.');
@@ -378,11 +404,13 @@ export default function MainDashboard() {
 
   async function handleExportWord() {
     try {
+      const { exportScheduleToWord } = await loadExportService();
       await exportScheduleToWord(getExportPayload());
     } catch {
       setWarningMessage('Αποτυχία εξαγωγής Word.');
     }
   }
+
 
   async function handleGenerateMonthlySchedule() {
     await generateMagicMonth({
@@ -404,8 +432,8 @@ export default function MainDashboard() {
     return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
 
-  return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+  const dashboardContent = (
+    <>
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-4 text-slate-900 sm:gap-4 md:p-6 dark:text-slate-100">
         <WeekToolbar
           weekDays={weekDays}
@@ -545,7 +573,7 @@ export default function MainDashboard() {
                 onCreateShift={addShift}
                 onUpdateShift={updateShiftDetails}
                 onDeleteShift={deleteShift}
-                onToggleManualOverride={(shiftId, value) => toggleShiftManualOverride({ shiftId, value })}
+                onToggleManualOverride={handleToggleManualOverride}
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onClearDayShifts={clearDayShifts}
                 canManage={isAdmin}
@@ -558,7 +586,9 @@ export default function MainDashboard() {
                 onAddAnnouncement={addAnnouncement}
                 onDeleteAnnouncement={deleteAnnouncement}
               />
-              <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
+              <Suspense fallback={null}>
+                <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -635,12 +665,7 @@ export default function MainDashboard() {
               <ManualShiftForm
                 employees={employees}
                 weekDays={visibleDays}
-                onCreateShift={async (payload) => {
-                  const created = await addShift(payload);
-                  if (created?.id) {
-                    setIsManualSheetOpen(false);
-                  }
-                }}
+                onCreateShift={handleMobileManualShiftCreate}
                 canManage={isAdmin}
               />
             </div>
@@ -677,31 +702,27 @@ export default function MainDashboard() {
         </div>
       ) : null}
 
-      <DragOverlay>
-        {activeDragItem ? (
-          <div className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-lg dark:border dark:border-cyan-300/35">
-            {activeDragItem.label}
-          </div>
-        ) : null}
-      </DragOverlay>
+      <Suspense fallback={null}>
+        <AdminLoginModal
+          open={isLoginModalOpen}
+          onClose={closeLoginModal}
+          onLogin={loginAsAdmin}
+          onRequestPasswordReset={requestPasswordReset}
+          isFirebaseConfigured={isFirebaseConfigured}
+          defaultEmail={adminEmail}
+          isDemoMode={isDemoMode}
+        />
+      </Suspense>
 
-      <AdminLoginModal
-        open={isLoginModalOpen}
-        onClose={closeLoginModal}
-        onLogin={loginAsAdmin}
-        onRequestPasswordReset={requestPasswordReset}
-        isFirebaseConfigured={isFirebaseConfigured}
-        defaultEmail={adminEmail}
-        isDemoMode={isDemoMode}
-      />
-
-      <EmployeeProfileModal
-        open={Boolean(profileEmployee)}
-        employee={profileEmployee}
-        isAdmin={isAdmin}
-        onClose={() => setProfileEmployee(null)}
-        onSave={handleSaveProfile}
-      />
+      <Suspense fallback={null}>
+        <EmployeeProfileModal
+          open={Boolean(profileEmployee)}
+          employee={profileEmployee}
+          isAdmin={isAdmin}
+          onClose={handleCloseProfileModal}
+          onSave={handleSaveProfile}
+        />
+      </Suspense>
 
       {quickAssignDraft.open ? (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" role="dialog" aria-modal="true">
@@ -772,7 +793,19 @@ export default function MainDashboard() {
       ) : null}
 
       <UndoSnackbar undoState={undoState} onUndo={undoLastAction} onDismiss={dismissUndo} isAdmin={isAdmin} />
-    </DndContext>
+    </>
+  );
+
+  if (!isAdmin) {
+    return dashboardContent;
+  }
+
+  return (
+    <Suspense fallback={dashboardContent}>
+      <AdminDndShell onDragStart={handleDragStart} onDragEnd={handleDragEnd} activeDragItem={activeDragItem}>
+        {dashboardContent}
+      </AdminDndShell>
+    </Suspense>
   );
 }
 

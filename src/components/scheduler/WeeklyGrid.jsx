@@ -1,6 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
 import {
@@ -163,7 +163,7 @@ function buildConflictShiftIdSet(shifts) {
   return conflictIds;
 }
 
-function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
+const TemplateAssignmentCard = memo(function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `template-assignment-${template.id}`,
     data: { type: 'template-assignment', template },
@@ -205,9 +205,9 @@ function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
       </div>
     </article>
   );
-}
+});
 
-function DayBox({
+const DayBox = memo(function DayBox({
   day,
   title,
   subtitle,
@@ -319,7 +319,7 @@ function DayBox({
       </div>
     </section>
   );
-}
+});
 
 function ScheduleModeSelector({ scheduleMode, onChange }) {
   return (
@@ -453,7 +453,7 @@ export default function WeeklyGrid({
     });
   }, [activeEmployees, dayEditor.date, dayEditor.open, visibleDayOptions]);
 
-  function openDayEditor(date, title, subtitle, shift = null) {
+  const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
     if (!canManage) return;
     setDayEditor({
       open: true,
@@ -470,7 +470,7 @@ export default function WeeklyGrid({
             employeeId: '',
           }),
     );
-  }
+  }, [canManage]);
 
   function closeDayEditor() {
     setDayEditor({
@@ -547,19 +547,18 @@ export default function WeeklyGrid({
     }
   }
 
-  function getEmployeeById(employeeId) {
-    return employeeById.get(employeeId);
-  }
+  const getEmployeeById = useCallback((employeeId) => employeeById.get(employeeId), [employeeById]);
 
-  function getSundayViolationMessage(shiftId) {
-    return sundayRuleViolations?.[shiftId] || '';
-  }
+  const getSundayViolationMessage = useCallback(
+    (shiftId) => sundayRuleViolations?.[shiftId] || '',
+    [sundayRuleViolations],
+  );
 
-  function clearDayWithConfirm(date) {
+  const clearDayWithConfirm = useCallback((date) => {
     const shouldClear = window.confirm(`Να διαγραφούν όλες οι βάρδιες για ${formatDateGreek(date)};`);
     if (!shouldClear) return;
     onClearDayShifts(date);
-  }
+  }, [onClearDayShifts]);
 
   function getScrollStep() {
     const container = scrollRef.current;

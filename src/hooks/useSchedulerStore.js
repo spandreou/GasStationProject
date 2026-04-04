@@ -162,6 +162,9 @@ const defaultGeneratorRules = {
   startWithCoreAMorning: true,
   generationMode: 'balanced',
 };
+const ATTENDANCE_HISTORY_TTL_MS = 60 * 1000;
+const WEEK_HISTORY_TTL_MS = 60 * 1000;
+const WEEK_TEMPLATES_TTL_MS = 5 * 60 * 1000;
 
 function normalizeGeneratorRules(value = {}) {
   const mode = value?.generationMode;
@@ -210,6 +213,12 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeAnnouncements: null,
   _unsubscribeSchedulerSettings: null,
   _unsubscribeAuth: null,
+  _attendanceHistoryCacheKey: '',
+  _attendanceHistoryFetchedAt: 0,
+  _attendanceHistoryInflightKey: '',
+  _attendanceHistoryInflightPromise: null,
+  _weekHistoryFetchedAt: 0,
+  _weekTemplatesFetchedAt: 0,
 
   initializeData: () => {
     if (!isFirebaseConfigured) {
@@ -264,11 +273,23 @@ export const useSchedulerStore = create((set, get) => ({
 
         if (user) {
           await get().refreshWeekLockStatus();
-          await get().loadAttendanceHistory();
-          await get().loadWeekHistory();
-          await get().loadWeekTemplates();
+          await Promise.all([
+            get().loadAttendanceHistory({ force: false }),
+            get().loadWeekHistory({ force: false }),
+            get().loadWeekTemplates({ force: false }),
+          ]);
         } else {
-          set({ attendanceHistory: [], weekHistory: [], weekTemplates: [] });
+          set({
+            attendanceHistory: [],
+            weekHistory: [],
+            weekTemplates: [],
+            _attendanceHistoryCacheKey: '',
+            _attendanceHistoryFetchedAt: 0,
+            _attendanceHistoryInflightKey: '',
+            _attendanceHistoryInflightPromise: null,
+            _weekHistoryFetchedAt: 0,
+            _weekTemplatesFetchedAt: 0,
+          });
         }
       },
       () => set({ warningMessage: 'Αποτυχία ελέγχου σύνδεσης διαχειριστή.', isAuthLoading: false }),
@@ -371,25 +392,74 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   setHistoryFilters: async (partial) => {
-    const nextFilters = { ...get().historyFilters, ...partial };
+    if (!partial || typeof partial !== 'object') return;
+    const currentFilters = get().historyFilters;
+    const nextFilters = { ...currentFilters, ...partial };
+    if (
+      nextFilters.employeeId === currentFilters.employeeId &&
+      nextFilters.yearMonth === currentFilters.yearMonth
+    ) {
+      return;
+    }
     set({ historyFilters: nextFilters });
     await get().loadAttendanceHistory();
   },
 
-  loadAttendanceHistory: async () => {
+  loadAttendanceHistory: async ({ force = false } = {}) => {
     if (!get().isAdmin) return;
 
     const { employeeId, yearMonth } = get().historyFilters;
+    const requestKey = `${yearMonth || ''}::${employeeId || ''}`;
+    const now = Date.now();
+    const {
+      _attendanceHistoryCacheKey,
+      _attendanceHistoryFetchedAt,
+      _attendanceHistoryInflightKey,
+      _attendanceHistoryInflightPromise,
+    } = get();
+
+    if (
+      !force &&
+      _attendanceHistoryCacheKey === requestKey &&
+      now - _attendanceHistoryFetchedAt < ATTENDANCE_HISTORY_TTL_MS
+    ) {
+      return;
+    }
+
+    if (_attendanceHistoryInflightPromise && _attendanceHistoryInflightKey === requestKey) {
+      await _attendanceHistoryInflightPromise;
+      return;
+    }
+
     set({ isHistoryLoading: true });
+    const requestPromise = fetchAttendanceHistoryByMonth({
+      yearMonth,
+      employeeId,
+    });
+    set({
+      _attendanceHistoryInflightKey: requestKey,
+      _attendanceHistoryInflightPromise: requestPromise,
+    });
 
     try {
-      const attendanceHistory = await fetchAttendanceHistoryByMonth({
-        yearMonth,
-        employeeId,
+      const attendanceHistory = await requestPromise;
+      set({
+        attendanceHistory,
+        _attendanceHistoryCacheKey: requestKey,
+        _attendanceHistoryFetchedAt: Date.now(),
       });
-      set({ attendanceHistory, isHistoryLoading: false });
     } catch {
       set({ warningMessage: 'Αποτυχία φόρτωσης ιστορικού.', isHistoryLoading: false });
+    }
+
+    if (get()._attendanceHistoryInflightPromise === requestPromise) {
+      set({
+        isHistoryLoading: false,
+        _attendanceHistoryInflightKey: '',
+        _attendanceHistoryInflightPromise: null,
+      });
+    } else {
+      set({ isHistoryLoading: false });
     }
   },
 
@@ -1171,21 +1241,31 @@ export const useSchedulerStore = create((set, get) => ({
     }
   },
 
-  loadWeekHistory: async () => {
+  loadWeekHistory: async ({ force = true } = {}) => {
     if (!get().isAdmin) return;
+    const now = Date.now();
+    const { _weekHistoryFetchedAt } = get();
+    if (!force && _weekHistoryFetchedAt && now - _weekHistoryFetchedAt < WEEK_HISTORY_TTL_MS) {
+      return;
+    }
     try {
       const weekHistory = await fetchWeekHistoryList(60);
-      set({ weekHistory });
+      set({ weekHistory, _weekHistoryFetchedAt: Date.now() });
     } catch {
       set({ warningMessage: 'Αποτυχία φόρτωσης ιστορικού εβδομάδων.' });
     }
   },
 
-  loadWeekTemplates: async () => {
+  loadWeekTemplates: async ({ force = true } = {}) => {
     if (!get().isAdmin) return;
+    const now = Date.now();
+    const { _weekTemplatesFetchedAt } = get();
+    if (!force && _weekTemplatesFetchedAt && now - _weekTemplatesFetchedAt < WEEK_TEMPLATES_TTL_MS) {
+      return;
+    }
     try {
       const weekTemplates = await fetchWeekTemplates();
-      set({ weekTemplates });
+      set({ weekTemplates, _weekTemplatesFetchedAt: Date.now() });
     } catch {
       set({ warningMessage: 'Αποτυχία φόρτωσης templates.' });
     }

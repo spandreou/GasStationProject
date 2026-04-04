@@ -469,10 +469,20 @@ export const useSchedulerStore = create((set, get) => ({
   saveGeneratorRules: async (partialRules = {}) => {
     if (!requireAdmin(get, set)) return false;
     const nextRules = normalizeGeneratorRules({ ...get().generatorRules, ...(partialRules || {}) });
-    set({ generatorRules: nextRules });
-    await upsertSchedulerSettings({ generatorRules: nextRules });
-    set({ warningMessage: 'Οι ρυθμίσεις generator αποθηκεύτηκαν.' });
-    return true;
+    set({ isSaving: true });
+    try {
+      await upsertSchedulerSettings({ generatorRules: nextRules });
+      set({
+        generatorRules: nextRules,
+        warningMessage: 'Οι ρυθμίσεις generator αποθηκεύτηκαν.',
+      });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης ρυθμίσεων generator.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
   },
 
   upsertSpecialDay: async ({ date, isHoliday, isSpecialDay, label, operatingStartTime, operatingEndTime }) => {
@@ -539,7 +549,8 @@ export const useSchedulerStore = create((set, get) => ({
           await updateShift(shiftId, previousValues);
           break;
         }
-        case 'clear_week': {
+        case 'clear_week':
+        case 'clear_month': {
           const shiftsToRestore = undoState.payload.shifts || [];
           await Promise.all(shiftsToRestore.map((shift) => restoreShift(shift)));
           break;
@@ -636,16 +647,24 @@ export const useSchedulerStore = create((set, get) => ({
         ? null
         : Number(fixedDayOff);
 
-    await updateEmployee(employeeId, {
-      scheduleRole: scheduleRole || 'general',
-      fixedDayOff: Number.isInteger(parsedFixedDayOff) ? parsedFixedDayOff : null,
-      participatesInRotation: Boolean(participatesInRotation),
-      participatesInSundayRotation: participatesInSundayRotation !== false,
-      defaultShiftPreference: defaultShiftPreference || 'auto',
-    });
+    set({ isSaving: true });
+    try {
+      await updateEmployee(employeeId, {
+        scheduleRole: scheduleRole || 'general',
+        fixedDayOff: Number.isInteger(parsedFixedDayOff) ? parsedFixedDayOff : null,
+        participatesInRotation: Boolean(participatesInRotation),
+        participatesInSundayRotation: participatesInSundayRotation !== false,
+        defaultShiftPreference: defaultShiftPreference || 'auto',
+      });
 
-    set({ warningMessage: 'Οι κανόνες εργαζομένου ενημερώθηκαν.' });
-    return true;
+      set({ warningMessage: 'Οι κανόνες εργαζομένου ενημερώθηκαν.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης κανόνων εργαζομένου.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
   },
 
   deleteEmployee: async (employeeId) => {
@@ -1214,6 +1233,74 @@ export const useSchedulerStore = create((set, get) => ({
       set({ warningMessage: 'Week cleared, but history refresh failed.' });
     }
 
+    return true;
+  },
+
+  clearMonthShifts: async ({ year, month }) => {
+    if (!requireAdmin(get, set)) return false;
+
+    const numericYear = Number(year);
+    const numericMonth = Number(month);
+    if (!Number.isInteger(numericYear) || !Number.isInteger(numericMonth) || numericMonth < 0 || numericMonth > 11) {
+      set({ warningMessage: 'Μη έγκυρος μήνας για καθαρισμό.' });
+      return false;
+    }
+
+    const { days: monthDays } = getMonthDays(numericYear, numericMonth);
+    if (!monthDays.length) {
+      set({ warningMessage: 'Δεν βρέθηκαν ημέρες για τον επιλεγμένο μήνα.' });
+      return false;
+    }
+
+    const monthSet = new Set(monthDays);
+    set({ isSaving: true });
+    const removedById = new Map();
+
+    try {
+      const removedShifts = await removeShiftsByDates(monthDays);
+      removedShifts.forEach((shift) => {
+        if (shift?.id) removedById.set(shift.id, shift);
+      });
+
+      let remainingMonthShifts = await fetchShiftsByDates(monthDays);
+      let pass = 0;
+
+      while (remainingMonthShifts.length > 0 && pass < 3) {
+        await Promise.all(
+          remainingMonthShifts.map(async (shift) => {
+            if (!shift?.id) return;
+            try {
+              const removed = await removeShift(shift.id);
+              if (removed?.id) removedById.set(removed.id, removed);
+            } catch {
+              // Retry in next pass
+            }
+          }),
+        );
+
+        remainingMonthShifts = await fetchShiftsByDates(monthDays);
+        pass += 1;
+      }
+
+      if (remainingMonthShifts.length > 0) {
+        set({ warningMessage: 'Ο καθαρισμός μήνα απέτυχε. Υπάρχουν υπόλοιπες βάρδιες.' });
+        return false;
+      }
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία καθαρισμού μήνα.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+
+    const monthLabel = String(numericMonth + 1).padStart(2, '0');
+    set((state) => ({
+      shifts: state.shifts.filter((shift) => !monthSet.has(shift.date)),
+      warningMessage: `Οι βάρδιες για ${monthLabel}/${numericYear} καθαρίστηκαν.`,
+      undoState: buildUndoState('clear_month', 'Ο μήνας καθαρίστηκε.', { shifts: [...removedById.values()] }),
+    }));
+
+    await get().refreshWeekLockStatus();
     return true;
   },
 

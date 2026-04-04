@@ -52,6 +52,8 @@ export default function SchedulingRulesPanel({
     startWithCoreAMorning: true,
   });
   const [employeeDraftMap, setEmployeeDraftMap] = useState({});
+  const [isSavingGenerator, setIsSavingGenerator] = useState(false);
+  const [savingEmployeeId, setSavingEmployeeId] = useState('');
 
   const activeEmployees = useMemo(
     () => (employees || []).filter((employee) => employee?.isActive !== false),
@@ -73,6 +75,28 @@ export default function SchedulingRulesPanel({
     setEmployeeDraftMap(next);
   }, [activeEmployees]);
 
+  const isBusy = isSaving || isSavingGenerator || Boolean(savingEmployeeId);
+
+  async function handleSaveGeneratorRules() {
+    if (typeof onSaveRules !== 'function') return;
+    setIsSavingGenerator(true);
+    try {
+      await onSaveRules(rulesDraft);
+    } finally {
+      setIsSavingGenerator(false);
+    }
+  }
+
+  async function handleSaveEmployeeRules(employeeId, draft) {
+    if (typeof onSaveEmployeeRules !== 'function' || !employeeId) return;
+    setSavingEmployeeId(employeeId);
+    try {
+      await onSaveEmployeeRules(draft);
+    } finally {
+      setSavingEmployeeId((current) => (current === employeeId ? '' : current));
+    }
+  }
+
   if (!isAdmin) return null;
 
   return (
@@ -92,7 +116,7 @@ export default function SchedulingRulesPanel({
             onChange={(event) =>
               setRulesDraft((prev) => ({ ...prev, weeklyRotationEnabled: event.target.checked }))
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
           Εβδομαδιαία εναλλαγή core εργαζομένων
         </label>
@@ -103,7 +127,7 @@ export default function SchedulingRulesPanel({
             onChange={(event) =>
               setRulesDraft((prev) => ({ ...prev, avoidConsecutiveSundays: event.target.checked }))
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
           Αποφυγή συνεχόμενων Κυριακών
         </label>
@@ -112,7 +136,7 @@ export default function SchedulingRulesPanel({
             type="checkbox"
             checked={Boolean(rulesDraft.allowManualOverride)}
             onChange={(event) => setRulesDraft((prev) => ({ ...prev, allowManualOverride: event.target.checked }))}
-            disabled={isSaving}
+            disabled={isBusy}
           />
           Διατήρηση manual overrides στον generator
         </label>
@@ -123,7 +147,7 @@ export default function SchedulingRulesPanel({
             onChange={(event) =>
               setRulesDraft((prev) => ({ ...prev, startWithCoreAMorning: event.target.checked }))
             }
-            disabled={isSaving}
+            disabled={isBusy}
           />
           Εκκίνηση μήνα με Core A πρωινό
         </label>
@@ -131,11 +155,11 @@ export default function SchedulingRulesPanel({
 
       <button
         type="button"
-        onClick={() => onSaveRules?.(rulesDraft)}
-        disabled={isSaving}
+        onClick={handleSaveGeneratorRules}
+        disabled={isBusy}
         className="mb-4 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Αποθήκευση κανόνων generator
+        {isSavingGenerator ? 'Αποθήκευση...' : 'Αποθήκευση κανόνων generator'}
       </button>
 
       <div className="space-y-2">
@@ -147,11 +171,11 @@ export default function SchedulingRulesPanel({
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">{employee.fullName}</p>
                 <button
                   type="button"
-                  onClick={() => onSaveEmployeeRules?.(draft)}
-                  disabled={isSaving}
+                  onClick={() => handleSaveEmployeeRules(employee.id, draft)}
+                  disabled={isBusy}
                   className="rounded-lg border border-slate-300 bg-white/60 px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
                 >
-                  Αποθήκευση
+                  {savingEmployeeId === employee.id ? 'Αποθήκευση...' : 'Αποθήκευση'}
                 </button>
               </div>
 
@@ -166,6 +190,7 @@ export default function SchedulingRulesPanel({
                         [employee.id]: { ...draft, scheduleRole: event.target.value },
                       }))
                     }
+                    disabled={isBusy}
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                   >
                     {ROLE_OPTIONS.map((option) => (
@@ -189,6 +214,7 @@ export default function SchedulingRulesPanel({
                         },
                       }))
                     }
+                    disabled={isBusy}
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                   >
                     {DAY_OFF_OPTIONS.map((option) => (
@@ -209,6 +235,7 @@ export default function SchedulingRulesPanel({
                         [employee.id]: { ...draft, defaultShiftPreference: event.target.value },
                       }))
                     }
+                    disabled={isBusy}
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                   >
                     {SHIFT_PREFERENCE_OPTIONS.map((option) => (
@@ -229,6 +256,7 @@ export default function SchedulingRulesPanel({
                         [employee.id]: { ...draft, participatesInRotation: event.target.checked },
                       }))
                     }
+                    disabled={isBusy}
                   />
                   Συμμετέχει στο weekly rotation
                 </label>
@@ -243,6 +271,7 @@ export default function SchedulingRulesPanel({
                         [employee.id]: { ...draft, participatesInSundayRotation: event.target.checked },
                       }))
                     }
+                    disabled={isBusy}
                   />
                   Sunday rotation
                 </label>

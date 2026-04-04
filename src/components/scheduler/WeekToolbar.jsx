@@ -85,6 +85,8 @@ function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onEx
 
 export default function WeekToolbar({
   weekDays,
+  selectedMonth,
+  selectedYear,
   isAdmin,
   isDark,
   onOpenAdminLogin,
@@ -96,6 +98,7 @@ export default function WeekToolbar({
   onSaveWeek,
   onCopyWhatsapp,
   onClearWeek,
+  onClearMonth,
   onFinalizeWeek,
   onMagicWand,
   onJumpToWeekDate,
@@ -113,6 +116,18 @@ export default function WeekToolbar({
     );
     if (!confirmed) return;
     await onClearWeek();
+  }
+
+  async function handleClearMonth() {
+    if (typeof onClearMonth !== 'function') return;
+    const monthDate = new Date(selectedYear, selectedMonth, 1);
+    const monthLabel =
+      Number.isFinite(monthDate.getTime())
+        ? new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(monthDate)
+        : 'τον επιλεγμένο μήνα';
+    const confirmed = window.confirm(`Να διαγραφούν όλες οι βάρδιες για ${monthLabel};`);
+    if (!confirmed) return;
+    await onClearMonth();
   }
 
   async function handleFinalizeWeek() {
@@ -278,6 +293,16 @@ export default function WeekToolbar({
 
           <button
             type="button"
+            onClick={handleClearMonth}
+            disabled={!isAdmin || typeof onClearMonth !== 'function'}
+            className="inline-flex items-center gap-1 rounded-lg bg-amber-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-amber-700 dark:bg-amber-500/85 dark:hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 size={16} />
+            Καθαρισμός Μήνα
+          </button>
+
+          <button
+            type="button"
             onClick={handleFinalizeWeek}
             disabled={!isAdmin || isWeekLocked}
             className="inline-flex items-center gap-1 rounded-lg bg-indigo-600/90 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md hover:bg-indigo-700 dark:bg-indigo-500/80 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
@@ -416,6 +441,16 @@ export default function WeekToolbar({
               >
                 <Trash2 size={15} />
                 Καθαρισμός Εβδομάδας
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleMoreAction(handleClearMonth)}
+                disabled={!isAdmin || typeof onClearMonth !== 'function'}
+                className="flex min-h-12 w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-left text-sm font-semibold text-amber-700 shadow-sm transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-300/40 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
+              >
+                <Trash2 size={15} />
+                Καθαρισμός Μήνα
               </button>
 
               <button

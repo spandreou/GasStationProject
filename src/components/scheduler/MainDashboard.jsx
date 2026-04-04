@@ -94,6 +94,7 @@ export default function MainDashboard() {
     deleteShift,
     clearDayShifts,
     clearWeekShifts,
+    clearMonthShifts,
     goToPreviousWeek,
     goToNextWeek,
     goToCurrentWeek,
@@ -412,6 +413,8 @@ export default function MainDashboard() {
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-4 text-slate-900 sm:gap-4 md:p-6 dark:text-slate-100">
         <WeekToolbar
           weekDays={weekDays}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
           isAdmin={isAdmin}
           isDark={isDark}
           onOpenAdminLogin={openLoginModal}
@@ -423,6 +426,7 @@ export default function MainDashboard() {
           onSaveWeek={saveCurrentWeekManually}
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
+          onClearMonth={() => clearMonthShifts({ year: selectedYear, month: selectedMonth })}
           onFinalizeWeek={finalizeCurrentWeek}
           onMagicWand={generateMagicWeek}
           onJumpToWeekDate={setWeekFromDate}
@@ -781,4 +785,3 @@ export default function MainDashboard() {
     </Suspense>
   );
 }
-

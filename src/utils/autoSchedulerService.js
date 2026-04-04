@@ -1,4 +1,4 @@
-﻿import { SHIFT_TYPES } from './analytics';
+import { SHIFT_TYPES } from './analytics';
 import { getMonthDays, getWeekStartFromDate, inferShiftTypeFromTimes } from './scheduleUtils';
 import { getIsoDate } from './time';
 

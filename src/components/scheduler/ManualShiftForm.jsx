@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SHIFT_PRESETS, SHIFT_TYPE_OPTIONS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
 

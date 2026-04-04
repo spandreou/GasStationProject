@@ -11,14 +11,14 @@ export const SHIFT_TYPES = {
 export function getShiftTypeLabel(type) {
   switch (type) {
     case SHIFT_TYPES.REST:
-      return 'Ξ΅ΞµΟ€Ο';
+      return 'Ρεπό';
     case SHIFT_TYPES.LEAVE:
-      return 'Ξ†Ξ΄ΞµΞΉΞ±';
+      return 'Άδεια';
     case SHIFT_TYPES.SICK:
-      return 'Ξ‘ΟƒΞΈΞ­Ξ½ΞµΞΉΞ±';
+      return 'Ασθένεια';
     case SHIFT_TYPES.WORK:
     default:
-      return 'Ξ•ΟΞ³Ξ±ΟƒΞ―Ξ±';
+      return 'Εργασία';
   }
 }
 

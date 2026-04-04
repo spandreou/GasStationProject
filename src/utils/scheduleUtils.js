@@ -1,4 +1,4 @@
-﻿import { SHIFT_TYPE_OPTIONS } from '../data/constants';
+import { SHIFT_TYPE_OPTIONS } from '../data/constants';
 import { getIsoDate } from './time';
 
 /**

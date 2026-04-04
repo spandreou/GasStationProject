@@ -1,4 +1,4 @@
-﻿import { useDroppable } from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
 import AssignedShiftItem from './AssignedShiftItem';
 
 export default function DropShiftSlot({

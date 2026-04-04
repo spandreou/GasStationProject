@@ -1,4 +1,4 @@
-﻿import { Megaphone, Plus, Trash2 } from 'lucide-react';
+import { Megaphone, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 function formatAnnouncementDate(value) {

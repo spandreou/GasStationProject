@@ -1,4 +1,4 @@
-﻿export const sampleEmployees = [
+export const sampleEmployees = [
   {
     id: 'emp-demo-1',
     fullName: 'Demo Υπάλληλος Α',

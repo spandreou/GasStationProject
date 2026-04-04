@@ -1,4 +1,4 @@
-﻿import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
+import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function AdminLoginModal({

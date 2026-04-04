@@ -352,7 +352,7 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   XLSX.utils.sheet_add_aoa(worksheet, [[weekRangeLabel], []], { origin: 'A1' });
   XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A3' });
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Ξ ΟΟΞ³ΟΞ±ΞΌΞΌΞ±');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
@@ -365,7 +365,7 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
     children: [
       new TableCell({
         width: { size: 18, type: WidthType.PERCENTAGE },
-        children: [new Paragraph('Ξ¥Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚')],
+        children: [new Paragraph('Υπάλληλος')],
       }),
       ...headers.map(
         (header) =>

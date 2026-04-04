@@ -1,4 +1,4 @@
-﻿import { Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateGreek } from '../../utils/time';
 import ShiftCard from './ShiftCard';

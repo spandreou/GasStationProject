@@ -1,4 +1,4 @@
-﻿import { Clock3 } from 'lucide-react';
+import { Clock3 } from 'lucide-react';
 
 export default function AnalyticsPanel({
   employees,

@@ -1,4 +1,4 @@
-﻿import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } from 'docx';
+import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } from 'docx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';

@@ -41,8 +41,8 @@ VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 
 VITE_APP_MODE=demo
-VITE_ADMIN_EMAIL=admin@example.com
-VITE_ADMIN_PASSWORD=admin123
+VITE_ADMIN_EMAIL=
+VITE_ADMIN_PASSWORD=
 ```
 
 ## Demo Auth Model
@@ -50,7 +50,6 @@ VITE_ADMIN_PASSWORD=admin123
 - Υποστηρίζεται μόνο **admin login**.
 - Το `VITE_ADMIN_EMAIL` είναι allowlist email για demo admin.
 - Το `VITE_ADMIN_PASSWORD` είναι ο demo κωδικός.
-- Αν λείπουν, γίνεται fallback σε `admin@example.com / admin123` (demo-only behavior).
 - Δεν υπάρχει employee login flow στο τρέχον scope.
 
 ## Demo-only Σημεία

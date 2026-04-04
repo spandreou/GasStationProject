@@ -1,4 +1,4 @@
-﻿import { FileSpreadsheet, FileText, History } from 'lucide-react';
+import { History } from 'lucide-react';
 import { getShiftTypeLabel } from '../../utils/analytics';
 
 function buildMonthOptions() {
@@ -22,8 +22,6 @@ export default function HistoryView({
   filters,
   isLoading,
   onFilterChange,
-  onExportPayrollPdf,
-  onExportPayrollExcel,
 }) {
   if (!isAdmin) return null;
 
@@ -35,24 +33,7 @@ export default function HistoryView({
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">Ιστορικό Παρουσιών</h2>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onExportPayrollPdf}
-            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-sm hover:bg-white/70 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70"
-          >
-            <FileText size={14} />
-            Μισθοδοσία PDF
-          </button>
-          <button
-            type="button"
-            onClick={onExportPayrollExcel}
-            className="inline-flex items-center gap-1 rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-sm hover:bg-white/70 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70"
-          >
-            <FileSpreadsheet size={14} />
-            Μισθοδοσία Excel
-          </button>
-        </div>
+        <div />
       </div>
 
       <div className="mb-4 grid gap-2 md:grid-cols-2">

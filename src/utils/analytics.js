@@ -11,14 +11,14 @@ export const SHIFT_TYPES = {
 export function getShiftTypeLabel(type) {
   switch (type) {
     case SHIFT_TYPES.REST:
-      return 'Ρεπό';
+      return 'Ξ΅ΞµΟ€Ο';
     case SHIFT_TYPES.LEAVE:
-      return 'Άδεια';
+      return 'Ξ†Ξ΄ΞµΞΉΞ±';
     case SHIFT_TYPES.SICK:
-      return 'Ασθένεια';
+      return 'Ξ‘ΟƒΞΈΞ­Ξ½ΞµΞΉΞ±';
     case SHIFT_TYPES.WORK:
     default:
-      return 'Εργασία';
+      return 'Ξ•ΟΞ³Ξ±ΟƒΞ―Ξ±';
   }
 }
 
@@ -202,23 +202,3 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
   };
 }
 
-export function calculatePayrollSummary(historyRows) {
-  return historyRows.reduce(
-    (acc, row) => {
-      const type = row.type || SHIFT_TYPES.WORK;
-
-      if (type === SHIFT_TYPES.WORK) {
-        acc.totalWorkHours += Number(row.totalHours || 0);
-      } else if (type === SHIFT_TYPES.REST) {
-        acc.totalRestDays += 1;
-      } else if (type === SHIFT_TYPES.LEAVE) {
-        acc.totalLeaveDays += 1;
-      } else if (type === SHIFT_TYPES.SICK) {
-        acc.totalSickDays += 1;
-      }
-
-      return acc;
-    },
-    { totalWorkHours: 0, totalRestDays: 0, totalLeaveDays: 0, totalSickDays: 0 },
-  );
-}

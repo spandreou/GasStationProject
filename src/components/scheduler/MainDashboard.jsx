@@ -290,10 +290,10 @@ export default function MainDashboard() {
       });
 
       await navigator.clipboard.writeText(text);
-      setWarningMessage('Το πρόγραμμα αντιγράφηκε στο clipboard για WhatsApp.');
+      setWarningMessage('Ξ¤ΞΏ Ο€ΟΟΞ³ΟΞ±ΞΌΞΌΞ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ¬Ο†Ξ·ΞΊΞµ ΟƒΟ„ΞΏ clipboard Ξ³ΞΉΞ± WhatsApp.');
       setTimeout(() => clearMessages(), 2500);
     } catch {
-      setWarningMessage('Αποτυχία αντιγραφής. Επιβεβαίωσε άδεια clipboard στον browser.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± Ξ±Ξ½Ο„ΞΉΞ³ΟΞ±Ο†Ξ®Ο‚. Ξ•Ο€ΞΉΞ²ΞµΞ²Ξ±Ξ―Ο‰ΟƒΞµ Ξ¬Ξ΄ΞµΞΉΞ± clipboard ΟƒΟ„ΞΏΞ½ browser.');
     }
   }
 
@@ -306,7 +306,7 @@ export default function MainDashboard() {
     const { employeeId, date, startTime, endTime, type } = quickAssignDraft;
     if (!employeeId || !date) return;
     if (isWeekEffectivelyLocked) {
-      setWarningMessage('Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται νέα ανάθεση.');
+      setWarningMessage('Ξ— ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ·. Ξ”ΞµΞ½ ΞµΟ€ΞΉΟ„ΟΞ­Ο€ΞµΟ„Ξ±ΞΉ Ξ½Ξ­Ξ± Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ·.');
       return;
     }
 
@@ -325,7 +325,7 @@ export default function MainDashboard() {
       if (!saved) return;
       setQuickAssignDraft((prev) => ({ ...prev, open: false }));
     } catch (error) {
-      setWarningMessage(error?.message || 'Αποτυχία αποθήκευσης ανάθεσης.');
+      setWarningMessage(error?.message || 'Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± Ξ±Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·Ο‚ Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ·Ο‚.');
     }
   }
 
@@ -338,31 +338,6 @@ export default function MainDashboard() {
     };
   }
 
-  async function handleExportPayrollExcel() {
-    const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
-    try {
-      const { exportPayrollReportToExcel } = await loadExportService();
-      await exportPayrollReportToExcel({
-        employeeName: selectedEmployee?.fullName || 'Όλοι',
-        yearMonth: historyFilters.yearMonth,
-        historyRows: attendanceHistory,
-      });
-    } catch {
-      setWarningMessage('Αποτυχία εξαγωγής payroll Excel.');
-    }
-  }
-
-  function handleExportPayrollPdf() {
-    const selectedEmployee = employees.find((employee) => employee.id === historyFilters.employeeId);
-    loadExportService().then(({ exportPayrollReportToPdf }) => {
-      exportPayrollReportToPdf({
-        employeeName: selectedEmployee?.fullName || 'Όλοι',
-        yearMonth: historyFilters.yearMonth,
-        historyRows: attendanceHistory,
-      });
-    });
-  }
-
   async function handleExportWeekPdf() {
     try {
       const { exportScheduleToPdf } = await loadExportService();
@@ -373,7 +348,7 @@ export default function MainDashboard() {
         employees,
       });
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής PDF εβδομάδας.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ PDF ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±Ο‚.');
     }
   }
 
@@ -389,7 +364,7 @@ export default function MainDashboard() {
         year: selectedYear,
       });
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής PDF μήνα.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ PDF ΞΌΞ®Ξ½Ξ±.');
     }
   }
 
@@ -398,7 +373,7 @@ export default function MainDashboard() {
       const { exportScheduleToExcel } = await loadExportService();
       await exportScheduleToExcel(getExportPayload());
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής Excel.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Excel.');
     }
   }
 
@@ -407,7 +382,7 @@ export default function MainDashboard() {
       const { exportScheduleToWord } = await loadExportService();
       await exportScheduleToWord(getExportPayload());
     } catch {
-      setWarningMessage('Αποτυχία εξαγωγής Word.');
+      setWarningMessage('Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚ Word.');
     }
   }
 
@@ -429,7 +404,7 @@ export default function MainDashboard() {
   }
 
   if (isLoading || isAuthLoading) {
-    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
+    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ο€ΟΞΏΞ³ΟΞ¬ΞΌΞΌΞ±Ο„ΞΏΟ‚...</p>;
   }
 
   const dashboardContent = (
@@ -461,7 +436,7 @@ export default function MainDashboard() {
         {!isFirebaseConfigured ? (
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/70 p-3 text-sm text-amber-900 dark:text-amber-200">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
-            {firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Έλεγξε τα env vars στο Vercel/τοπικό περιβάλλον.'}
+            {firebaseConfigErrorMessage || 'Ξ¤ΞΏ Firebase Ξ΄ΞµΞ½ ΞµΞ―Ξ½Ξ±ΞΉ ΟΟ…ΞΈΞΌΞΉΟƒΞΌΞ­Ξ½ΞΏ. ΞΞ»ΞµΞ³ΞΎΞµ Ο„Ξ± env vars ΟƒΟ„ΞΏ Vercel/Ο„ΞΏΟ€ΞΉΞΊΟ Ο€ΞµΟΞΉΞ²Ξ¬Ξ»Ξ»ΞΏΞ½.'}
           </div>
         ) : null}
 
@@ -469,7 +444,7 @@ export default function MainDashboard() {
           <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-[10px] text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
             <ShieldCheck size={18} className="mt-0.5 shrink-0" />
             <p className="line-clamp-2 sm:line-clamp-none">
-              Λειτουργία μόνο ανάγνωσης: μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
+              Ξ›ΞµΞΉΟ„ΞΏΟ…ΟΞ³Ξ―Ξ± ΞΌΟΞ½ΞΏ Ξ±Ξ½Ξ¬Ξ³Ξ½Ο‰ΟƒΞ·Ο‚: ΞΌΟΞ½ΞΏ ΞΏ ΟƒΟ…Ξ½Ξ΄ΞµΞ΄ΞµΞΌΞ­Ξ½ΞΏΟ‚ Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®Ο‚ Ξ²Ξ»Ξ­Ο€ΞµΞΉ Ξ‘Ξ¦Ξ ΞΊΞ±ΞΉ ΞΊΞ¬Ξ½ΞµΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚.
             </p>
           </div>
         ) : null}
@@ -600,8 +575,6 @@ export default function MainDashboard() {
           filters={historyFilters}
           isLoading={isHistoryLoading}
           onFilterChange={setHistoryFilters}
-          onExportPayrollPdf={handleExportPayrollPdf}
-          onExportPayrollExcel={handleExportPayrollExcel}
         />
       </main>
 
@@ -618,13 +591,13 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="Κλείσιμο"
+            aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ"
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsQuickActionsOpen(false)}
           />
           <div className="absolute inset-x-0 bottom-0 rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-4 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
-            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Γρήγορες Ενέργειες</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Ξ“ΟΞ®Ξ³ΞΏΟΞµΟ‚ Ξ•Ξ½Ξ­ΟΞ³ΞµΞΉΞµΟ‚</h3>
             <div className="space-y-2">
               <button
                 type="button"
@@ -634,7 +607,7 @@ export default function MainDashboard() {
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               >
-                Νέος Υπάλληλος
+                ΞΞ­ΞΏΟ‚ Ξ¥Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚
               </button>
               <button
                 type="button"
@@ -644,7 +617,7 @@ export default function MainDashboard() {
                 }}
                 className="w-full rounded-xl border border-brand-300/70 bg-brand-500/90 px-4 py-3 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600"
               >
-                Νέα Custom Βάρδια
+                ΞΞ­Ξ± Custom Ξ’Ξ¬ΟΞ΄ΞΉΞ±
               </button>
             </div>
           </div>
@@ -655,7 +628,7 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="Κλείσιμο"
+            aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ"
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsManualSheetOpen(false)}
           />
@@ -677,7 +650,7 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="Κλείσιμο"
+            aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ"
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -728,13 +701,13 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" role="dialog" aria-modal="true">
           <div className="glass-panel w-full max-w-md rounded-2xl p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Γρήγορη Ανάθεση</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Ξ“ΟΞ®Ξ³ΞΏΟΞ· Ξ‘Ξ½Ξ¬ΞΈΞµΟƒΞ·</h3>
               <button
                 type="button"
                 onClick={() => setQuickAssignDraft((prev) => ({ ...prev, open: false }))}
                 className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Κλείσιμο
+                ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ
               </button>
             </div>
 
@@ -745,7 +718,7 @@ export default function MainDashboard() {
             <form onSubmit={handleQuickAssignSave} className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Ώρα Έναρξης
+                  ΞΟΞ± ΞΞ½Ξ±ΟΞΎΞ·Ο‚
                   <input
                     type="time"
                     value={quickAssignDraft.startTime}
@@ -755,7 +728,7 @@ export default function MainDashboard() {
                   />
                 </label>
                 <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  Ώρα Λήξης
+                  ΞΟΞ± Ξ›Ξ®ΞΎΞ·Ο‚
                   <input
                     type="time"
                     value={quickAssignDraft.endTime}
@@ -767,16 +740,16 @@ export default function MainDashboard() {
               </div>
 
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
-                Τύπος
+                Ξ¤ΟΟ€ΞΏΟ‚
                 <select
                   value={quickAssignDraft.type}
                   onChange={(event) => setQuickAssignDraft((prev) => ({ ...prev, type: event.target.value }))}
                   className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-cyan-300/45 dark:text-white"
                 >
-                  <option value={SHIFT_TYPES.WORK}>Εργασία</option>
-                  <option value={SHIFT_TYPES.REST}>Ρεπό</option>
-                  <option value={SHIFT_TYPES.LEAVE}>Άδεια</option>
-                  <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
+                  <option value={SHIFT_TYPES.WORK}>Ξ•ΟΞ³Ξ±ΟƒΞ―Ξ±</option>
+                  <option value={SHIFT_TYPES.REST}>Ξ΅ΞµΟ€Ο</option>
+                  <option value={SHIFT_TYPES.LEAVE}>Ξ†Ξ΄ΞµΞΉΞ±</option>
+                  <option value={SHIFT_TYPES.SICK}>Ξ‘ΟƒΞΈΞ­Ξ½ΞµΞΉΞ±</option>
                 </select>
               </label>
 
@@ -785,7 +758,7 @@ export default function MainDashboard() {
                 className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
                 disabled={isSaving || isWeekEffectivelyLocked}
               >
-                {isWeekEffectivelyLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
+                {isWeekEffectivelyLocked ? 'Ξ— ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ·' : isSaving ? 'Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·...' : 'Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·'}
               </button>
             </form>
           </div>

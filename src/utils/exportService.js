@@ -1,4 +1,3 @@
-import { calculatePayrollSummary, getShiftTypeLabel } from './analytics';
 import { formatDateGreek, formatShiftTime } from './time';
 
 let xlsxModulePromise;
@@ -342,7 +341,7 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   const weekRangeLabel = buildWeekRangeLabel(weekDays);
 
   const rows = matrix.map((row) => {
-    const entry = { Υπάλληλος: row.employeeName };
+    const entry = { Employee: row.employeeName };
     headers.forEach((header, index) => {
       entry[header] = row.dayValues[index];
     });
@@ -353,7 +352,7 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   XLSX.utils.sheet_add_aoa(worksheet, [[weekRangeLabel], []], { origin: 'A1' });
   XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A3' });
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Ξ ΟΟΞ³ΟΞ±ΞΌΞΌΞ±');
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
@@ -366,7 +365,7 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
     children: [
       new TableCell({
         width: { size: 18, type: WidthType.PERCENTAGE },
-        children: [new Paragraph('Υπάλληλος')],
+        children: [new Paragraph('Ξ¥Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚')],
       }),
       ...headers.map(
         (header) =>
@@ -409,78 +408,4 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
 }
 
-export async function exportPayrollReportToExcel({ employeeName, yearMonth, historyRows }) {
-  const XLSX = await loadXlsx();
-  const summary = calculatePayrollSummary(historyRows);
 
-  const detailRows = historyRows.map((item) => ({
-    Ημερομηνία: item.date,
-    Τύπος: getShiftTypeLabel(item.type),
-    Ώρες: item.totalHours || 0,
-    Σχόλια: item.notes || '',
-  }));
-
-  const summaryRows = [
-    { Μετρική: 'Σύνολο Ωρών Εργασίας', Τιμή: summary.totalWorkHours },
-    { Μετρική: 'Σύνολο Ημερών Αδείας', Τιμή: summary.totalLeaveDays },
-    { Μετρική: 'Σύνολο Ρεπό', Τιμή: summary.totalRestDays },
-    { Μετρική: 'Σύνολο Ημερών Ασθενείας', Τιμή: summary.totalSickDays },
-  ];
-
-  const workbook = XLSX.utils.book_new();
-  const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
-  const detailSheet = XLSX.utils.json_to_sheet(detailRows);
-
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Payroll Summary');
-  XLSX.utils.book_append_sheet(workbook, detailSheet, 'Attendance Detail');
-
-  const safeMonth = yearMonth.replace('-', '_');
-  const safeEmployee = (employeeName || 'all').replaceAll(' ', '_');
-  XLSX.writeFile(workbook, `payroll_report_${safeEmployee}_${safeMonth}.xlsx`, { compression: true });
-}
-
-export async function exportPayrollReportToPdf({ employeeName, yearMonth, historyRows }) {
-  const { default: jsPDFCtor } = await loadJsPdf();
-  const summary = calculatePayrollSummary(historyRows);
-  const doc = new jsPDFCtor({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-  await setupGreekFont(doc);
-
-  let y = 50;
-  doc.setFontSize(15);
-  doc.text('Payroll Report', 40, y);
-  y += 24;
-
-  doc.setFontSize(11);
-  doc.text(`Υπάλληλος: ${employeeName || 'Όλοι'}`, 40, y);
-  y += 18;
-  doc.text(`Μήνας: ${yearMonth}`, 40, y);
-  y += 24;
-
-  doc.setFontSize(12);
-  doc.text(`Σύνολο Ωρών Εργασίας: ${summary.totalWorkHours}`, 40, y);
-  y += 18;
-  doc.text(`Σύνολο Ημερών Αδείας: ${summary.totalLeaveDays}`, 40, y);
-  y += 18;
-  doc.text(`Σύνολο Ρεπό: ${summary.totalRestDays}`, 40, y);
-  y += 18;
-  doc.text(`Σύνολο Ημερών Ασθενείας: ${summary.totalSickDays}`, 40, y);
-  y += 24;
-
-  doc.setFontSize(10);
-  doc.text('Ημερομηνία | Τύπος | Ώρες | Σχόλια', 40, y);
-  y += 14;
-
-  historyRows.forEach((row) => {
-    const line = `${row.date} | ${getShiftTypeLabel(row.type)} | ${row.totalHours || 0} | ${row.notes || '-'}`;
-    if (y > 790) {
-      doc.addPage();
-      y = 50;
-    }
-    doc.text(line, 40, y);
-    y += 14;
-  });
-
-  const safeMonth = yearMonth.replace('-', '_');
-  const safeEmployee = (employeeName || 'all').replaceAll(' ', '_');
-  doc.save(`payroll_report_${safeEmployee}_${safeMonth}.pdf`);
-}

@@ -520,7 +520,7 @@ export default function MainDashboard() {
           </div>
 
           <div className="order-1 md:order-2">
-            <div className="space-y-5 sm:space-y-4">
+            <div className="space-y-8 sm:space-y-7">
               <WeeklyGrid
                 weekDays={weekDays}
                 monthDays={monthDays}

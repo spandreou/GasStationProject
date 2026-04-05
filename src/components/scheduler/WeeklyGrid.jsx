@@ -236,6 +236,7 @@ const DayBox = memo(function DayBox({
   return (
     <section
       ref={setNodeRef}
+      data-day-anchor={day}
       onDragOver={(event) => event.preventDefault()}
       className={`relative overflow-hidden rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition sm:p-4 ${
         isOver && canManage
@@ -375,6 +376,7 @@ export default function WeeklyGrid({
   isSaving = false,
 }) {
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const gridSectionRef = useRef(null);
   const scrollRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -429,6 +431,7 @@ export default function WeeklyGrid({
     }),
   );
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [dayEditorAnchorTop, setDayEditorAnchorTop] = useState(0);
 
   const dayEditorShifts = useMemo(() => {
     if (!dayEditor?.date) return [];
@@ -453,8 +456,22 @@ export default function WeeklyGrid({
     });
   }, [activeEmployees, dayEditor.date, dayEditor.open, visibleDayOptions]);
 
+  const updateDayEditorAnchor = useCallback((date) => {
+    const container = gridSectionRef.current;
+    if (!container || !date) return;
+
+    const anchorElement = container.querySelector(`[data-day-anchor="${date}"]`);
+    if (!anchorElement) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const anchorRect = anchorElement.getBoundingClientRect();
+    const nextTop = Math.max(0, anchorRect.bottom - containerRect.top + 10);
+    setDayEditorAnchorTop(nextTop);
+  }, []);
+
   const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
     if (!canManage) return;
+    updateDayEditorAnchor(date);
     setDayEditor({
       open: true,
       date,
@@ -470,7 +487,7 @@ export default function WeeklyGrid({
             employeeId: '',
           }),
     );
-  }, [canManage]);
+  }, [canManage, updateDayEditorAnchor]);
 
   function closeDayEditor() {
     setDayEditor({
@@ -503,6 +520,12 @@ export default function WeeklyGrid({
     setDayEditor((prev) => ({ ...prev, editingShiftId: shift.id }));
     setDayEditorDraft(buildDraftFromShift(shift));
   }
+
+  useEffect(() => {
+    if (!dayEditor.open || !dayEditor.date) return;
+    const rafId = window.requestAnimationFrame(() => updateDayEditorAnchor(dayEditor.date));
+    return () => window.cancelAnimationFrame(rafId);
+  }, [dayEditor.date, dayEditor.open, scheduleMode, updateDayEditorAnchor, weekDays, monthDays]);
 
   async function handleDayEditorSave(event) {
     event.preventDefault();
@@ -590,7 +613,7 @@ export default function WeeklyGrid({
   }
 
   return (
-    <section id="weekly-grid-export" className="glass-panel rounded-2xl p-2 sm:p-4">
+    <section id="weekly-grid-export" ref={gridSectionRef} className="glass-panel relative rounded-2xl p-2 sm:p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Βαρδιών</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -887,15 +910,11 @@ export default function WeeklyGrid({
       )}
 
       {dayEditor.open ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-2 sm:p-4" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Κλείσιμο επεξεργασίας ημέρας"
-            className="absolute inset-0 bg-transparent"
-            onClick={closeDayEditor}
-          />
-
-          <div className="relative z-10 w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
+        <div
+          className="absolute left-2 right-2 z-[90] sm:left-4 sm:right-4"
+          style={{ top: `${dayEditorAnchorTop}px` }}
+        >
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
             <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-cyan-300/20">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 sm:text-base dark:text-white">

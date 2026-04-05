@@ -1,8 +1,10 @@
-import { History } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { groupAndSortShiftsByDay } from '../../utils/scheduleUtils';
 import { formatDateGreek } from '../../utils/time';
+
+const HISTORY_WINDOW_SIZE = 7;
 
 function formatSavedAt(value) {
   if (typeof value?.toDate === 'function') {
@@ -47,6 +49,7 @@ function sourceLabel(source) {
 
 export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees = [] }) {
   const [selectedEntryId, setSelectedEntryId] = useState('');
+  const [historyStartIndex, setHistoryStartIndex] = useState(0);
 
   const sortedHistory = useMemo(
     () =>
@@ -60,9 +63,43 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
 
   const selectedEntry = useMemo(() => {
     if (!sortedHistory.length) return null;
-    if (!selectedEntryId) return sortedHistory[0];
-    return sortedHistory.find((entry) => entry.id === selectedEntryId) || sortedHistory[0];
-  }, [selectedEntryId, sortedHistory]);
+    if (!selectedEntryId) return sortedHistory[historyStartIndex] || sortedHistory[0];
+    return sortedHistory.find((entry) => entry.id === selectedEntryId) || sortedHistory[historyStartIndex] || sortedHistory[0];
+  }, [historyStartIndex, selectedEntryId, sortedHistory]);
+
+  const maxHistoryStartIndex = useMemo(() => {
+    if (!sortedHistory.length) return 0;
+    return Math.floor((sortedHistory.length - 1) / HISTORY_WINDOW_SIZE) * HISTORY_WINDOW_SIZE;
+  }, [sortedHistory]);
+
+  const visibleHistory = useMemo(
+    () => sortedHistory.slice(historyStartIndex, historyStartIndex + HISTORY_WINDOW_SIZE),
+    [historyStartIndex, sortedHistory],
+  );
+
+  const canGoToMoreRecent = historyStartIndex > 0;
+  const canGoToOlder = historyStartIndex + HISTORY_WINDOW_SIZE < sortedHistory.length;
+
+  useEffect(() => {
+    if (!sortedHistory.length) {
+      if (historyStartIndex !== 0) setHistoryStartIndex(0);
+      if (selectedEntryId) setSelectedEntryId('');
+      return;
+    }
+
+    if (historyStartIndex > maxHistoryStartIndex) {
+      setHistoryStartIndex(maxHistoryStartIndex);
+      return;
+    }
+
+    const visibleIds = new Set(visibleHistory.map((entry) => entry.id));
+    if (!selectedEntryId || !visibleIds.has(selectedEntryId)) {
+      const nextSelectedId = visibleHistory[0]?.id || '';
+      if (nextSelectedId && nextSelectedId !== selectedEntryId) {
+        setSelectedEntryId(nextSelectedId);
+      }
+    }
+  }, [historyStartIndex, maxHistoryStartIndex, selectedEntryId, sortedHistory, visibleHistory]);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const groupedShifts = useMemo(
@@ -74,15 +111,39 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
 
   return (
     <section className="glass-panel rounded-2xl p-3 sm:p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <History size={17} className="text-brand-700 dark:text-cyan-300" />
-        <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ιστορικό Εβδομάδων</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <History size={17} className="text-brand-700 dark:text-cyan-300" />
+          <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ιστορικό Εβδομάδων</h2>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setHistoryStartIndex((prev) => Math.max(0, prev - HISTORY_WINDOW_SIZE))}
+            disabled={!canGoToMoreRecent}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300/70 bg-white/55 text-slate-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-200 dark:hover:bg-slate-900/65"
+            aria-label="Πιο πρόσφατα"
+            title="Πιο πρόσφατα"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryStartIndex((prev) => Math.min(maxHistoryStartIndex, prev + HISTORY_WINDOW_SIZE))}
+            disabled={!canGoToOlder}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-300/70 bg-white/55 text-slate-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-200 dark:hover:bg-slate-900/65"
+            aria-label="Πιο παλιά"
+            title="Πιο παλιά"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-3 xl:grid-cols-[1.2fr,1fr]">
-        <div className="space-y-2">
+        <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
           {sortedHistory.length ? (
-            sortedHistory.map((entry) => {
+            visibleHistory.map((entry) => {
               const isActive = entry.id === selectedEntry?.id;
               const shiftCount = entry.shiftCount ?? entry.metadata?.totalShifts ?? (entry.shifts || []).length;
               return (
@@ -90,7 +151,7 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
                   key={entry.id}
                   type="button"
                   onClick={() => setSelectedEntryId(entry.id)}
-                  className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                  className={`w-full rounded-xl border px-3 py-1.5 text-left transition ${
                     isActive
                       ? 'border-brand-300 bg-brand-50/80 dark:border-cyan-300/60 dark:bg-cyan-500/20'
                       : 'border-slate-300/70 bg-white/45 hover:bg-white/70 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:hover:bg-slate-900/65'
@@ -110,9 +171,9 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
                   <p className="text-[11px] text-slate-700 dark:text-slate-300">
                     Από: {entry.savedBy || entry.createdBy || '-'} • Βάρδιες: {shiftCount}
                   </p>
-                </button>
-              );
-            })
+              </button>
+            );
+          })
           ) : (
             <p className="rounded-lg border border-slate-300/60 bg-white/40 p-3 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-300">
               Δεν υπάρχουν αποθηκευμένα snapshots εβδομάδων.
@@ -133,7 +194,7 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
                 </p>
               </div>
 
-              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">
                 {Object.entries(groupedShifts).map(([date, dayShifts]) => (
                   <article key={date} className="rounded-lg border border-slate-300/60 bg-white/60 p-2 dark:border-cyan-300/30 dark:bg-slate-900/40">
                     <p className="mb-1 text-xs font-semibold text-slate-900 dark:text-white">{formatDateGreek(date)}</p>

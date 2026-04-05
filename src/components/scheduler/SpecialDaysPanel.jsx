@@ -52,6 +52,7 @@ export default function SpecialDaysPanel({
           Ημερομηνία
           <input
             type="date"
+            lang="el-GR"
             value={draft.date}
             onChange={(event) => setDraft((prev) => ({ ...prev, date: event.target.value }))}
             className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"

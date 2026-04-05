@@ -1,6 +1,7 @@
 import { useDroppable } from '@dnd-kit/core';
 import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
 import {
@@ -431,7 +432,6 @@ export default function WeeklyGrid({
     }),
   );
   const [isEditorSaving, setIsEditorSaving] = useState(false);
-  const [dayEditorAnchorTop, setDayEditorAnchorTop] = useState(0);
 
   const dayEditorShifts = useMemo(() => {
     if (!dayEditor?.date) return [];
@@ -456,28 +456,8 @@ export default function WeeklyGrid({
     });
   }, [activeEmployees, dayEditor.date, dayEditor.open, visibleDayOptions]);
 
-  const updateDayEditorAnchor = useCallback((date) => {
-    const container = gridSectionRef.current;
-    if (!container || !date) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const containerAbsTop = containerRect.top + window.scrollY;
-    const viewportFollowTop = window.scrollY + 96 - containerAbsTop;
-
-    const anchorElement = container.querySelector(`[data-day-anchor="${date}"]`);
-    let anchorTop = 0;
-    if (anchorElement) {
-      const anchorRect = anchorElement.getBoundingClientRect();
-      anchorTop = Math.max(0, anchorRect.bottom - containerRect.top + 10);
-    }
-
-    const nextTop = Math.max(anchorTop, viewportFollowTop);
-    setDayEditorAnchorTop(nextTop);
-  }, []);
-
   const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
     if (!canManage) return;
-    updateDayEditorAnchor(date);
     setDayEditor({
       open: true,
       date,
@@ -493,7 +473,7 @@ export default function WeeklyGrid({
             employeeId: '',
           }),
     );
-  }, [canManage, updateDayEditorAnchor]);
+  }, [canManage]);
 
   function closeDayEditor() {
     setDayEditor({
@@ -528,17 +508,16 @@ export default function WeeklyGrid({
   }
 
   useEffect(() => {
-    if (!dayEditor.open || !dayEditor.date) return;
-    const syncPosition = () => updateDayEditorAnchor(dayEditor.date);
-    const rafId = window.requestAnimationFrame(syncPosition);
-    window.addEventListener('scroll', syncPosition, { passive: true });
-    window.addEventListener('resize', syncPosition);
+    if (!dayEditor.open) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
     return () => {
-      window.cancelAnimationFrame(rafId);
-      window.removeEventListener('scroll', syncPosition);
-      window.removeEventListener('resize', syncPosition);
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
     };
-  }, [dayEditor.date, dayEditor.open, scheduleMode, updateDayEditorAnchor, weekDays, monthDays]);
+  }, [dayEditor.open]);
 
   async function handleDayEditorSave(event) {
     event.preventDefault();
@@ -646,6 +625,7 @@ export default function WeeklyGrid({
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
+                lang="el-GR"
                 className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                 onChange={(event) => onJumpToWeekDate?.(event.target.value)}
               />
@@ -922,11 +902,9 @@ export default function WeeklyGrid({
         </>
       )}
 
-      {dayEditor.open ? (
-        <div
-          className="absolute left-2 right-2 z-[90] sm:left-4 sm:right-4"
-          style={{ top: `${dayEditorAnchorTop}px` }}
-        >
+      {dayEditor.open && typeof document !== 'undefined'
+        ? createPortal(
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/55 p-2 sm:p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
             <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-cyan-300/20">
               <div>
@@ -946,7 +924,7 @@ export default function WeeklyGrid({
               </button>
             </div>
 
-            <div className="grid max-h-[80vh] gap-4 overflow-y-auto p-4 lg:grid-cols-[1.1fr,1.4fr]">
+            <div className="grid max-h-[85vh] gap-4 overflow-y-auto p-4 lg:grid-cols-[1.1fr,1.4fr]">
               <aside className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
@@ -1214,8 +1192,10 @@ export default function WeeklyGrid({
               </form>
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </section>
   );
 }

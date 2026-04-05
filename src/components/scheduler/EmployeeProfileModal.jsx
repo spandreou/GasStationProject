@@ -121,6 +121,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
             Ημερομηνία Πρόσληψης
             <input
               type="date"
+              lang="el-GR"
               value={form.hireDate}
               onChange={(event) => setForm((prev) => ({ ...prev, hireDate: event.target.value }))}
               className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"

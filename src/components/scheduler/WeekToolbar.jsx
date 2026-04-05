@@ -267,6 +267,7 @@ export default function WeekToolbar({
 
           <input
             type="date"
+            lang="el-GR"
             onChange={(event) => onJumpToWeekDate?.(event.target.value)}
             className="input-glass rounded-lg border border-white/35 bg-white/40 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
             title="Μετάβαση σε εβδομάδα"

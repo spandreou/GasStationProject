@@ -558,16 +558,18 @@ export default function MainDashboard() {
                 canManage={isAdmin}
                 isSaving={isSaving}
               />
-              <AnnouncementBoard
-                announcements={announcements}
-                isAdmin={isAdmin}
-                isSaving={isSaving}
-                onAddAnnouncement={addAnnouncement}
-                onDeleteAnnouncement={deleteAnnouncement}
-              />
-              <Suspense fallback={null}>
-                <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
-              </Suspense>
+              <div className="mt-16 space-y-8 sm:mt-24 lg:mt-28 sm:space-y-7">
+                <AnnouncementBoard
+                  announcements={announcements}
+                  isAdmin={isAdmin}
+                  isSaving={isSaving}
+                  onAddAnnouncement={addAnnouncement}
+                  onDeleteAnnouncement={deleteAnnouncement}
+                />
+                <Suspense fallback={null}>
+                  <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
+                </Suspense>
+              </div>
             </div>
           </div>
         </div>

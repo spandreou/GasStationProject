@@ -35,7 +35,7 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
   }
 
   return (
-    <section className="glass-panel rounded-2xl p-4 sm:p-5">
+    <section className="glass-panel mt-[10em] rounded-2xl p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <Megaphone size={18} className="text-brand-600 dark:text-cyan-200" />
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Ανακοινώσεων</h2>

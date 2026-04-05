@@ -49,7 +49,7 @@ import {
 import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
 import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
-import { getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
+import { formatDateGreek, getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 
 function getCurrentWeekStart() {
   return getIsoDate(getMonday(new Date()));
@@ -1744,7 +1744,7 @@ export const useSchedulerStore = create((set, get) => ({
 
       set((state) => ({
         shifts: state.shifts.filter((shift) => shift.date !== date),
-        warningMessage: `Καθαρίστηκαν οι βάρδιες για ${date}.`,
+        warningMessage: `Καθαρίστηκαν οι βάρδιες για ${formatDateGreek(date)}.`,
         shiftTemplates: state.shiftTemplates.filter((template) => !(template.isPlaced && template.date === date)),
       }));
       await get().saveCurrentWeekSnapshot('manual_save');

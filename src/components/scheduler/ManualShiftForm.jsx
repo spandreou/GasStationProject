@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SHIFT_PRESETS, SHIFT_TYPE_OPTIONS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
+import { formatDateGreek } from '../../utils/time';
 
 const initialManualState = {
   employeeId: '',
@@ -117,7 +118,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           >
             {availableDays.map((day) => (
               <option key={day} value={day}>
-                {day}
+                {formatDateGreek(day)}
               </option>
             ))}
           </select>

@@ -1,6 +1,6 @@
 import { SHIFT_TYPES } from './analytics';
 import { getMonthDays, getWeekStartFromDate, inferShiftTypeFromTimes } from './scheduleUtils';
-import { getIsoDate } from './time';
+import { formatDateGreek, getIsoDate } from './time';
 
 const MORNING_SHIFT = { shiftType: 'morning', startTime: '06:00', endTime: '14:00', label: 'Πρωινός' };
 const EVENING_SHIFT = { shiftType: 'evening', startTime: '14:00', endTime: '22:00', label: 'Απογευματινός' };
@@ -349,7 +349,7 @@ function applySpecialDayTemplate({
   specialDay.shifts.forEach((item) => {
     const employee = employeesById.get(item.employeeId);
     if (!employee) {
-      warnings.push(`Η ειδική ημέρα ${date} περιέχει άγνωστο υπάλληλο (${item.employeeId}).`);
+      warnings.push(`Η ειδική ημέρα ${formatDateGreek(date)} περιέχει άγνωστο υπάλληλο (${item.employeeId}).`);
       return;
     }
 
@@ -371,7 +371,7 @@ function applySpecialDayTemplate({
 
     const combined = [...existingEntries, ...generated];
     if (hasOverlap(combined, candidate)) {
-      warnings.push(`Παράλειψη ειδικής βάρδιας ${date} λόγω overlap για ${employee.fullName}.`);
+      warnings.push(`Παράλειψη ειδικής βάρδιας ${formatDateGreek(date)} λόγω overlap για ${employee.fullName}.`);
       return;
     }
 
@@ -611,7 +611,7 @@ export async function generateSmartWeekSchedule({
       }
 
       if (!selected) {
-        warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${date}.`);
+        warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${formatDateGreek(date)}.`);
         return;
       }
 
@@ -648,7 +648,7 @@ export async function generateSmartWeekSchedule({
       notes: 'Auto-generated Sunday fairness',
     });
     if (!inserted) {
-      warnings.push(`Δεν μπόρεσε να γίνει ανάθεση Κυριακής στις ${sundayDate}.`);
+      warnings.push(`Δεν μπόρεσε να γίνει ανάθεση Κυριακής στις ${formatDateGreek(sundayDate)}.`);
     }
   }
 
@@ -774,7 +774,7 @@ export function generateSmartMonthSchedule({
       });
 
       if (!picked) {
-        warnings.push(`Δεν βρέθηκε υποψήφιος για Κυριακή ${date}.`);
+        warnings.push(`Δεν βρέθηκε υποψήφιος για Κυριακή ${formatDateGreek(date)}.`);
         return;
       }
 
@@ -840,7 +840,7 @@ export function generateSmartMonthSchedule({
         generated.push(autoShift);
         plannedTypes.push(template.shiftType);
       } else {
-        warnings.push(`Overlap στον core rotation για ${employee.fullName} (${date}).`);
+        warnings.push(`Overlap στον core rotation για ${employee.fullName} (${formatDateGreek(date)}).`);
       }
     });
 
@@ -866,7 +866,7 @@ export function generateSmartMonthSchedule({
         if (!hasOverlap(existingForOverlap, intermediateShift)) {
           generated.push(intermediateShift);
         } else {
-          warnings.push(`Overlap για ενδιάμεσο εργαζόμενο ${intermediate.fullName} (${date}).`);
+          warnings.push(`Overlap για ενδιάμεσο εργαζόμενο ${intermediate.fullName} (${formatDateGreek(date)}).`);
         }
       }
     }
@@ -896,12 +896,12 @@ export function generateSmartMonthSchedule({
       if (!hasOverlap([...manualDayEntries, ...generated], candidate)) {
         generated.push(candidate);
       } else {
-        warnings.push(`Overlap για επιπλέον υπάλληλο ${employee.fullName} (${date}).`);
+        warnings.push(`Overlap για επιπλέον υπάλληλο ${employee.fullName} (${formatDateGreek(date)}).`);
       }
     });
 
     if (missingCoreTypes.length > 1 && !intermediate) {
-      warnings.push(`Πολλαπλές κενές core βάρδιες στις ${date} χωρίς διαθέσιμο intermediate.`);
+      warnings.push(`Πολλαπλές κενές core βάρδιες στις ${formatDateGreek(date)} χωρίς διαθέσιμο intermediate.`);
     }
   });
 

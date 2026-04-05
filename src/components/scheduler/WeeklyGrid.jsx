@@ -460,12 +460,18 @@ export default function WeeklyGrid({
     const container = gridSectionRef.current;
     if (!container || !date) return;
 
-    const anchorElement = container.querySelector(`[data-day-anchor="${date}"]`);
-    if (!anchorElement) return;
-
     const containerRect = container.getBoundingClientRect();
-    const anchorRect = anchorElement.getBoundingClientRect();
-    const nextTop = Math.max(0, anchorRect.bottom - containerRect.top + 10);
+    const containerAbsTop = containerRect.top + window.scrollY;
+    const viewportFollowTop = window.scrollY + 96 - containerAbsTop;
+
+    const anchorElement = container.querySelector(`[data-day-anchor="${date}"]`);
+    let anchorTop = 0;
+    if (anchorElement) {
+      const anchorRect = anchorElement.getBoundingClientRect();
+      anchorTop = Math.max(0, anchorRect.bottom - containerRect.top + 10);
+    }
+
+    const nextTop = Math.max(anchorTop, viewportFollowTop);
     setDayEditorAnchorTop(nextTop);
   }, []);
 
@@ -523,8 +529,15 @@ export default function WeeklyGrid({
 
   useEffect(() => {
     if (!dayEditor.open || !dayEditor.date) return;
-    const rafId = window.requestAnimationFrame(() => updateDayEditorAnchor(dayEditor.date));
-    return () => window.cancelAnimationFrame(rafId);
+    const syncPosition = () => updateDayEditorAnchor(dayEditor.date);
+    const rafId = window.requestAnimationFrame(syncPosition);
+    window.addEventListener('scroll', syncPosition, { passive: true });
+    window.addEventListener('resize', syncPosition);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', syncPosition);
+      window.removeEventListener('resize', syncPosition);
+    };
   }, [dayEditor.date, dayEditor.open, scheduleMode, updateDayEditorAnchor, weekDays, monthDays]);
 
   async function handleDayEditorSave(event) {
@@ -644,7 +657,7 @@ export default function WeeklyGrid({
                 <option value="">Ιστορικό εβδομάδων</option>
                 {weekHistory.map((item) => (
                   <option key={item.id} value={item.weekId}>
-                    {item.weekStart} ({getSnapshotSourceLabel(item.source)})
+                    {formatDateGreek(item.weekStart)} ({getSnapshotSourceLabel(item.source)})
                   </option>
                 ))}
               </select>
@@ -1047,7 +1060,7 @@ export default function WeeklyGrid({
                   >
                     {visibleDayOptions.map((day) => (
                       <option key={day} value={day}>
-                        {day}
+                        {formatDateGreek(day)}
                       </option>
                     ))}
                   </select>

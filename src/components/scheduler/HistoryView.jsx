@@ -1,5 +1,6 @@
 import { History } from 'lucide-react';
 import { getShiftTypeLabel } from '../../utils/analytics';
+import { formatDateGreek } from '../../utils/time';
 
 function buildMonthOptions() {
   const options = [];
@@ -106,7 +107,7 @@ export default function HistoryView({
                         : 'bg-slate-100/60 dark:bg-slate-900/55'
                     }
                   >
-                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{row.date}</td>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{formatDateGreek(row.date)}</td>
                     <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{getShiftTypeLabel(row.type)}</td>
                     <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{row.totalHours || 0}</td>
                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{row.notes || '-'}</td>

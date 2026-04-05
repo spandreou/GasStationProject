@@ -1,5 +1,6 @@
 import { CalendarPlus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { formatDateGreek } from '../../utils/time';
 
 const initialDraft = {
   date: '',
@@ -137,7 +138,7 @@ export default function SpecialDaysPanel({
             return (
               <article key={entry.date} className="glass-soft flex items-start justify-between gap-3 rounded-lg p-3 text-xs">
                 <div className="space-y-1">
-                  <p className="font-semibold text-slate-900 dark:text-white">{entry.date}</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">{formatDateGreek(entry.date)}</p>
                   <p className="text-slate-700 dark:text-slate-300">
                     {entry.label?.trim() || badge}
                     {timeRange ? ` (${timeRange})` : ''}

@@ -159,7 +159,7 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
                 >
                   <div className="flex items-center justify-between gap-2 text-xs">
                     <p className="font-semibold text-slate-900 dark:text-white">
-                      {entry.weekStart} - {entry.weekEnd}
+                      {formatDateGreek(entry.weekStart)} - {formatDateGreek(entry.weekEnd)}
                     </p>
                     <span className="rounded-full border border-slate-300/70 px-2 py-0.5 text-[10px] text-slate-700 dark:border-cyan-300/35 dark:text-slate-200">
                       {sourceLabel(entry.source || entry.metadata?.saveAction)}
@@ -186,7 +186,7 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
             <div className="space-y-2">
               <div className="border-b border-slate-300/70 pb-2 dark:border-cyan-300/30">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Snapshot: {selectedEntry.weekStart} - {selectedEntry.weekEnd}
+                  Snapshot: {formatDateGreek(selectedEntry.weekStart)} - {formatDateGreek(selectedEntry.weekEnd)}
                 </p>
                 <p className="text-[11px] text-slate-700 dark:text-slate-300">
                   {formatSavedAt(selectedEntry.savedAt || selectedEntry.createdAt)} •{' '}

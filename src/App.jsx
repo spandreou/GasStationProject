@@ -86,7 +86,7 @@ export default function App() {
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {renderDynamicBackground ? (
           <Suspense fallback={<StaticBackground />}>
-            <div className="h-full w-full opacity-75">
+            <div className="h-full w-full opacity-65">
               <Hyperspeed effectOptions={HYPERSPEED_OPTIONS} />
             </div>
           </Suspense>

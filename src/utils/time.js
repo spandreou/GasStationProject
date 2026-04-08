@@ -62,12 +62,49 @@ export function formatShiftTime(startTime, endTime) {
   return `${normalizeTimeLabel(startTime)} - ${normalizeTimeLabel(endTime)}`;
 }
 
+function parseIsoDateParts(dateString) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(`${dateString || ''}`.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() + 1 !== month
+    || date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
 export function formatDateGreek(dateString) {
-  const date = new Date(`${dateString}T00:00:00`);
-  return new Intl.DateTimeFormat('el-GR', {
-    day: '2-digit',
-    month: '2-digit',
-  }).format(date);
+  const parsed = parseIsoDateParts(dateString);
+  if (!parsed) return '';
+  const day = `${parsed.day}`.padStart(2, '0');
+  const month = `${parsed.month}`.padStart(2, '0');
+  return `${day}/${month}/${parsed.year}`;
+}
+
+export function parseGreekDateInputToIso(value) {
+  const normalized = `${value || ''}`.trim().replace(/\./g, '/').replace(/-/g, '/');
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normalized);
+  if (!match) return '';
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return '';
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() + 1 !== month
+    || date.getUTCDate() !== day
+  ) {
+    return '';
+  }
+  return `${year}-${`${month}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}`;
 }
 
 export function getMonday(date = new Date()) {

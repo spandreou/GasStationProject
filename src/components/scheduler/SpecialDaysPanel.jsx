@@ -1,6 +1,6 @@
 import { CalendarPlus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { formatDateGreek } from '../../utils/time';
+import { useEffect, useMemo, useState } from 'react';
+import { formatDateGreek, parseGreekDateInputToIso } from '../../utils/time';
 
 const initialDraft = {
   date: '',
@@ -25,7 +25,12 @@ export default function SpecialDaysPanel({
   onRemoveSpecialDay,
 }) {
   const [draft, setDraft] = useState(initialDraft);
+  const [draftDateInput, setDraftDateInput] = useState('');
   const entries = useMemo(() => toEntries(specialDaysByDate), [specialDaysByDate]);
+
+  useEffect(() => {
+    setDraftDateInput(draft.date ? formatDateGreek(draft.date) : '');
+  }, [draft.date]);
 
   async function handleSaveDraft() {
     const saved = await onSaveSpecialDay?.(draft);
@@ -51,10 +56,15 @@ export default function SpecialDaysPanel({
         <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
           Ημερομηνία
           <input
-            type="date"
-            lang="el-GR"
-            value={draft.date}
-            onChange={(event) => setDraft((prev) => ({ ...prev, date: event.target.value }))}
+            type="text"
+            inputMode="numeric"
+            placeholder="dd/mm/yyyy"
+            value={draftDateInput}
+            onChange={(event) => {
+              const nextInput = event.target.value;
+              setDraftDateInput(nextInput);
+              setDraft((prev) => ({ ...prev, date: parseGreekDateInputToIso(nextInput) || '' }));
+            }}
             className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
           />
         </label>

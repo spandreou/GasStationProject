@@ -2,22 +2,24 @@ import { Megaphone, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 function formatAnnouncementDate(value) {
+  const formatter = new Intl.DateTimeFormat('el-GR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   if (!value) return '';
 
   if (typeof value?.toDate === 'function') {
-    return new Intl.DateTimeFormat('el-GR', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(value.toDate());
+    return formatter.format(value.toDate());
   }
 
   if (typeof value === 'string') {
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return '';
-    return new Intl.DateTimeFormat('el-GR', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(parsed);
+    return formatter.format(parsed);
   }
 
   return '';
@@ -35,7 +37,7 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
   }
 
   return (
-    <section className="glass-panel mt-[10em] rounded-2xl p-4 sm:p-5">
+    <section className="glass-panel rounded-2xl p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <Megaphone size={18} className="text-brand-600 dark:text-cyan-200" />
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Ανακοινώσεων</h2>
@@ -68,14 +70,21 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
           </button>
         </form>
       ) : (
-        <p className="mb-4 text-xs text-slate-700 dark:text-slate-300">Μόνο ο διαχειριστής μπορεί να δημοσιεύει ανακοινώσεις.</p>
+        <p className="mb-4 rounded-lg border border-slate-300/70 bg-white/45 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-300">
+          Μόνο ο διαχειριστής μπορεί να δημοσιεύει ανακοινώσεις.
+        </p>
       )}
 
       <div className="space-y-3">
         {!announcements.length ? (
-          <p className="rounded-lg border border-slate-300/70 bg-white/50 px-3 py-2 text-sm text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-300">
-            Δεν υπάρχουν ανακοινώσεις ακόμα.
-          </p>
+          <div className="rounded-lg border border-dashed border-slate-300/70 bg-white/50 px-3 py-3 text-sm text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-300">
+            <p>Δεν υπάρχουν ανακοινώσεις ακόμα.</p>
+            <p className="mt-1 text-xs">
+              {isAdmin
+                ? 'Δημοσίευσε την πρώτη ανακοίνωση για να ενημερώσεις όλη την ομάδα.'
+                : 'Όταν προστεθεί ανακοίνωση από διαχειριστή, θα εμφανιστεί εδώ.'}
+            </p>
+          </div>
         ) : (
           announcements.map((announcement) => (
             <article

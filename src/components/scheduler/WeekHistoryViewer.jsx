@@ -110,7 +110,7 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
   if (!isAdmin) return null;
 
   return (
-    <section className="glass-panel !mt-[10em] rounded-2xl p-3 sm:p-4">
+    <section className="glass-panel rounded-2xl p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <History size={17} className="text-brand-700 dark:text-cyan-300" />

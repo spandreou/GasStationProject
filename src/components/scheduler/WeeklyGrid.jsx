@@ -1,5 +1,5 @@
-import { useDroppable } from '@dnd-kit/core';
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
+﻿import { useDroppable } from '@dnd-kit/core';
+import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Lock, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
@@ -10,7 +10,7 @@ import {
   groupAndSortShiftsByDay,
   inferShiftTypeFromTimes,
 } from '../../utils/scheduleUtils';
-import { formatDateGreek, normalizeTimeLabel, timeToMinutes } from '../../utils/time';
+import { formatDateGreek, normalizeTimeLabel, parseGreekDateInputToIso, timeToMinutes } from '../../utils/time';
 import AssignedShiftItem from './AssignedShiftItem';
 
 const MONTH_OPTIONS = [
@@ -164,6 +164,46 @@ function buildConflictShiftIdSet(shifts) {
   return conflictIds;
 }
 
+function getDayWorkMinutes(dayShifts = []) {
+  return dayShifts.reduce((totalMinutes, shift) => {
+    if ((shift?.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) return totalMinutes;
+    const startMinutes = timeToMinutes(shift?.startTime);
+    const endMinutes = timeToMinutes(shift?.endTime);
+    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes) || endMinutes <= startMinutes) {
+      return totalMinutes;
+    }
+    return totalMinutes + (endMinutes - startMinutes);
+  }, 0);
+}
+
+function formatCompactMinutes(totalMinutes) {
+  if (!totalMinutes) return '0ω';
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (!minutes) return `${hours}ω`;
+  return `${hours}ω ${minutes}λ`;
+}
+
+function DayStatusChip({ tone = 'neutral', icon: Icon = null, children }) {
+  const toneClasses = {
+    neutral: 'border-slate-300/70 bg-white/60 text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/55 dark:text-slate-200',
+    info: 'border-sky-300/70 bg-sky-50/75 text-sky-800 dark:border-sky-300/45 dark:bg-sky-500/15 dark:text-sky-100',
+    warning: 'border-amber-300/70 bg-amber-50/80 text-amber-900 dark:border-amber-300/45 dark:bg-amber-500/15 dark:text-amber-100',
+    danger: 'border-rose-300/70 bg-rose-50/80 text-rose-900 dark:border-rose-300/45 dark:bg-rose-500/15 dark:text-rose-100',
+    lock: 'border-slate-400/60 bg-slate-100/75 text-slate-800 dark:border-slate-400/45 dark:bg-slate-900/70 dark:text-slate-100',
+    accent: 'border-fuchsia-300/70 bg-fuchsia-50/80 text-fuchsia-900 dark:border-fuchsia-300/45 dark:bg-fuchsia-500/15 dark:text-fuchsia-100',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClasses[tone] || toneClasses.neutral}`}
+    >
+      {Icon ? <Icon size={11} /> : null}
+      {children}
+    </span>
+  );
+}
+
 const TemplateAssignmentCard = memo(function TemplateAssignmentCard({ template, canManage, onDeleteTemplate }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `template-assignment-${template.id}`,
@@ -216,6 +256,8 @@ const DayBox = memo(function DayBox({
   dayTemplates,
   specialDayConfig,
   canManage,
+  isWeekLocked = false,
+  isActive = false,
   getEmployeeById,
   getSundayViolationMessage,
   conflictShiftIds,
@@ -231,63 +273,93 @@ const DayBox = memo(function DayBox({
     disabled: !canManage,
   });
 
+  const hasShifts = dayShifts.length > 0;
+  const hasTemplates = dayTemplates.length > 0;
+  const isEmptyDay = !hasShifts && !hasTemplates;
   const specialInfo = getDaySpecialInfo(dayShifts, specialDayConfig);
   const manualCount = (dayShifts || []).filter((item) => item.isManualOverride).length;
+  const isHoliday = Boolean(specialDayConfig?.isHoliday || dayShifts.some((item) => item.isHoliday));
+  const isSpecialDay = Boolean(specialDayConfig?.isSpecialDay || dayShifts.some((item) => item.isSpecialDay));
+  const conflictCount = dayShifts.filter((shift) => conflictShiftIds.has(shift.id)).length;
+  const warningCount = dayShifts.reduce(
+    (total, shift) => (getSundayViolationMessage(shift.id) ? total + 1 : total),
+    0,
+  );
+  const uniqueEmployees = new Set(dayShifts.map((item) => item.employeeId).filter(Boolean)).size;
+  const workMinutes = getDayWorkMinutes(dayShifts);
+
+  const stateClasses = isOver && canManage
+    ? 'border-brand-400 bg-brand-50/75 shadow-brand-500/20 dark:border-cyan-300 dark:bg-cyan-500/12'
+    : conflictCount > 0 || warningCount > 0
+      ? 'border-amber-300/70 bg-amber-50/50 dark:border-amber-300/45 dark:bg-amber-500/8'
+      : isEmptyDay
+        ? 'border-dashed border-slate-300/80 bg-white/35 dark:border-cyan-300/25 dark:bg-slate-900/28'
+        : 'border-white/50 bg-white/45 dark:border-cyan-300/30 dark:bg-slate-900/40';
+
+  const interactionClasses = canManage
+    ? 'hover:-translate-y-[1px] hover:border-sky-300/70 hover:shadow-md hover:shadow-slate-900/10 focus-within:ring-2 focus-within:ring-brand-300/60 dark:hover:border-cyan-300/55 dark:hover:shadow-cyan-500/10 dark:focus-within:ring-cyan-300/45'
+    : '';
+  const mobileActiveClasses = isActive ? 'ring-2 ring-brand-300/65 dark:ring-cyan-300/55 md:ring-0' : '';
 
   return (
     <section
       ref={setNodeRef}
       data-day-anchor={day}
       onDragOver={(event) => event.preventDefault()}
-      className={`relative overflow-hidden rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition sm:p-4 ${
-        isOver && canManage
-          ? 'border-brand-400 bg-brand-50/70 dark:border-cyan-300 dark:bg-cyan-500/10'
-          : 'border-white/45 bg-white/45 dark:border-cyan-300/30 dark:bg-slate-900/40'
-      }`}
+      className={`group relative overflow-hidden rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition-all duration-200 sm:p-4 ${stateClasses} ${interactionClasses} ${mobileActiveClasses}`}
     >
       <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-200/45 blur-2xl dark:bg-pink-400/20" />
 
-      <header className="relative mb-3 rounded-xl bg-slate-900/85 px-3 py-2 text-xs font-semibold text-white dark:bg-slate-950/85 dark:text-cyan-100">
-        <div className="flex items-center justify-between gap-2">
-          <span>
-            {title} ({subtitle})
-          </span>
+      <header className="relative mb-2.5 rounded-xl border border-slate-300/60 bg-slate-900/80 px-3 py-2 text-xs text-white dark:border-cyan-300/25 dark:bg-slate-950/85 dark:text-cyan-100">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-bold leading-tight">{title}</p>
+            <p className="text-[11px] font-medium text-white/85 dark:text-cyan-100/85">{subtitle}</p>
+          </div>
           {canManage ? (
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => onOpenDayEditor?.(day, title, subtitle)}
-                className="rounded p-1 text-white/85 hover:bg-sky-500/20 hover:text-sky-100"
-                title="Επεξεργασία ημέρας"
-                aria-label="Επεξεργασία ημέρας"
+                className="rounded p-1 text-white/85 transition hover:bg-sky-500/20 hover:text-sky-100"
+                title="Edit day"
+                aria-label="Edit day"
               >
                 <Pencil size={14} />
               </button>
               <button
                 type="button"
                 onClick={() => onClearDay(day)}
-                className="rounded p-1 text-white/85 hover:bg-red-500/20 hover:text-red-200"
-                title="Καθαρισμός ημέρας"
-                aria-label="Καθαρισμός ημέρας"
+                className="rounded p-1 text-white/85 transition hover:bg-red-500/20 hover:text-red-200"
+                title="Clear day"
+                aria-label="Clear day"
               >
                 <Trash2 size={14} />
               </button>
             </div>
           ) : null}
         </div>
-        {specialInfo ? (
-          <span className="mt-1 inline-flex rounded-full border border-amber-300/60 bg-amber-100/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
-            {specialInfo === 'Αργία' ? 'Αργία' : `Ειδικό Ωράριο: ${specialInfo}`}
-          </span>
-        ) : null}
-        {manualCount > 0 ? (
-          <span className="mt-1 ml-2 inline-flex rounded-full border border-fuchsia-300/60 bg-fuchsia-200/20 px-2 py-0.5 text-[11px] font-semibold text-fuchsia-100">
-            Manual entries: {manualCount}
-          </span>
-        ) : null}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {isWeekLocked ? (
+            <DayStatusChip tone="lock" icon={Lock}>
+              Locked week
+            </DayStatusChip>
+          ) : null}
+          {!canManage ? <DayStatusChip tone="neutral">Read-only</DayStatusChip> : null}
+          {isHoliday ? <DayStatusChip tone="warning">Holiday</DayStatusChip> : null}
+          {isSpecialDay && !isHoliday ? <DayStatusChip tone="info">Special day</DayStatusChip> : null}
+          {manualCount > 0 ? <DayStatusChip tone="accent">Manual: {manualCount}</DayStatusChip> : null}
+          {conflictCount > 0 ? (
+            <DayStatusChip tone="danger" icon={AlertCircle}>
+              Conflict: {conflictCount}
+            </DayStatusChip>
+          ) : null}
+          {warningCount > 0 ? <DayStatusChip tone="warning">Warnings: {warningCount}</DayStatusChip> : null}
+          {isEmptyDay ? <DayStatusChip tone="neutral">No shifts</DayStatusChip> : null}
+        </div>
       </header>
 
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {dayTemplates.map((template) => (
           <TemplateAssignmentCard
             key={template.id}
@@ -318,7 +390,49 @@ const DayBox = memo(function DayBox({
             </div>
           );
         })}
+
+        {isEmptyDay ? (
+          <div className="rounded-xl border border-dashed border-slate-300/80 bg-white/55 px-3 py-3 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-300">
+            <p className="font-semibold text-slate-800 dark:text-slate-100">No shifts assigned for this day.</p>
+            <p className="mt-1 text-[11px]">
+              {isWeekLocked
+                ? 'This week is locked. You can only view this day.'
+                : canManage
+                  ? 'Drop a card here or use day edit to add a shift.'
+                  : 'Read-only mode: changes are disabled.'}
+            </p>
+            {canManage && !isWeekLocked ? (
+              <button
+                type="button"
+                onClick={() => onOpenDayEditor?.(day, title, subtitle)}
+                className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-300/80 bg-white/70 px-2 py-1 text-[11px] font-semibold text-slate-800 transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/55 dark:text-slate-100 dark:hover:bg-slate-900/75"
+              >
+                <Plus size={12} />
+                Add shift
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-300/60 pt-2 text-[11px] text-slate-700 dark:border-cyan-300/20 dark:text-slate-300">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{dayShifts.length} shifts</span>
+          <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{uniqueEmployees} employees</span>
+          {hasTemplates ? (
+            <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{dayTemplates.length} cards</span>
+          ) : null}
+        </div>
+        <span className="font-semibold text-slate-800 dark:text-slate-100">Work hours: {formatCompactMinutes(workMinutes)}</span>
+      </footer>
+      {specialInfo ? (
+        <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-400">
+          {isHoliday ? 'This day is marked as a holiday.' : `Day note: ${specialInfo}`}
+        </p>
+      ) : null}
+      {isOver && canManage ? (
+        <p className="mt-1 text-[10px] font-semibold text-brand-700 dark:text-cyan-200">Drop here to assign.</p>
+      ) : null}
     </section>
   );
 });
@@ -374,12 +488,16 @@ export default function WeeklyGrid({
   onDeleteShiftTemplate,
   onClearDayShifts,
   canManage,
+  isWeekLocked = false,
   isSaving = false,
 }) {
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const gridSectionRef = useRef(null);
   const scrollRef = useRef(null);
+  const dayEditorFormRef = useRef(null);
+  const dayEditorEmployeeSelectRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isCreateFormHighlighted, setIsCreateFormHighlighted] = useState(false);
 
   const grouped = useMemo(() => groupAndSortShiftsByDay(shifts), [shifts]);
   const conflictShiftIds = useMemo(() => buildConflictShiftIdSet(shifts), [shifts]);
@@ -432,6 +550,7 @@ export default function WeeklyGrid({
     }),
   );
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [weekJumpInput, setWeekJumpInput] = useState('');
 
   const dayEditorShifts = useMemo(() => {
     if (!dayEditor?.date) return [];
@@ -455,6 +574,11 @@ export default function WeeklyGrid({
       };
     });
   }, [activeEmployees, dayEditor.date, dayEditor.open, visibleDayOptions]);
+
+  useEffect(() => {
+    if (scheduleMode !== 'week') return;
+    setWeekJumpInput(formatDateGreek(weekDays?.[0] || ''));
+  }, [scheduleMode, weekDays]);
 
   const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
     if (!canManage) return;
@@ -491,7 +615,7 @@ export default function WeeklyGrid({
     );
   }
 
-  function setEditorToCreateMode() {
+  function setEditorToCreateMode({ focusForm = false } = {}) {
     setDayEditor((prev) => ({ ...prev, editingShiftId: '' }));
     setDayEditorDraft(
       buildNewDraft({
@@ -499,7 +623,21 @@ export default function WeeklyGrid({
         employeeId: '',
       }),
     );
+
+    if (focusForm) {
+      requestAnimationFrame(() => {
+        dayEditorFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        dayEditorEmployeeSelectRef.current?.focus();
+        setIsCreateFormHighlighted(true);
+      });
+    }
   }
+
+  useEffect(() => {
+    if (!isCreateFormHighlighted) return;
+    const timeoutId = setTimeout(() => setIsCreateFormHighlighted(false), 900);
+    return () => clearTimeout(timeoutId);
+  }, [isCreateFormHighlighted]);
 
   function setEditorToExistingShift(shift) {
     if (!shift) return;
@@ -575,6 +713,16 @@ export default function WeeklyGrid({
     onClearDayShifts(date);
   }, [onClearDayShifts]);
 
+  const commitWeekJump = useCallback((rawValue) => {
+    const isoDate = parseGreekDateInputToIso(rawValue);
+    if (!isoDate) {
+      setWeekJumpInput(formatDateGreek(weekDays?.[0] || ''));
+      return;
+    }
+    onJumpToWeekDate?.(isoDate);
+    setWeekJumpInput(formatDateGreek(isoDate));
+  }, [onJumpToWeekDate, weekDays]);
+
   function getScrollStep() {
     const container = scrollRef.current;
     if (!container) return 0;
@@ -605,8 +753,8 @@ export default function WeeklyGrid({
   }
 
   return (
-    <section id="weekly-grid-export" ref={gridSectionRef} className="glass-panel relative rounded-2xl p-2 sm:p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
+    <section id="weekly-grid-export" ref={gridSectionRef} className="glass-panel relative overflow-hidden rounded-2xl p-3 sm:p-4 lg:p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Βαρδιών</h2>
         <div className="flex flex-wrap items-center gap-2">
           <ScheduleModeSelector scheduleMode={scheduleMode} onChange={onChangeScheduleMode} />
@@ -621,13 +769,22 @@ export default function WeeklyGrid({
 
       {scheduleMode === 'week' ? (
         <>
-          <div className="mb-3 grid gap-2 md:grid-cols-2">
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
             <div className="flex flex-wrap items-center gap-2">
               <input
-                type="date"
-                lang="el-GR"
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
+                value={weekJumpInput}
+                onChange={(event) => setWeekJumpInput(event.target.value)}
+                onBlur={(event) => commitWeekJump(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitWeekJump(event.currentTarget.value);
+                  }
+                }}
                 className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
-                onChange={(event) => onJumpToWeekDate?.(event.target.value)}
               />
               <select
                 className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
@@ -733,42 +890,46 @@ export default function WeeklyGrid({
             </button>
           </div>
 
-          <div
-            ref={scrollRef}
-            onScroll={handleScroll}
-            className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth md:grid md:min-w-[1120px] md:grid-cols-2 md:gap-4 md:snap-none xl:grid-cols-4"
-          >
-            {weekDays.map((day, index) => {
-              const dayShifts = grouped[day] || [];
-              const dayTemplates = placedTemplatesByDay.get(day) || [];
+          <div className="rounded-xl border border-white/45 bg-white/25 p-2 dark:border-cyan-300/20 dark:bg-slate-900/30 sm:p-3">
+            <div
+              ref={scrollRef}
+              onScroll={handleScroll}
+              className="flex gap-2.5 overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:grid-cols-2 md:gap-3 md:snap-none lg:min-w-[1040px] xl:grid-cols-4"
+            >
+              {weekDays.map((day, index) => {
+                const dayShifts = grouped[day] || [];
+                const dayTemplates = placedTemplatesByDay.get(day) || [];
 
-              return (
-                <div key={day} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
-                  <DayBox
-                    day={day}
-                    title={WEEKDAY_LABELS[index]}
-                    subtitle={formatDateGreek(day)}
-                  dayShifts={dayShifts}
-                  dayTemplates={dayTemplates}
-                  specialDayConfig={specialDaysByDate?.[day]}
-                  canManage={canManage}
-                  getEmployeeById={getEmployeeById}
-                  getSundayViolationMessage={getSundayViolationMessage}
-                  conflictShiftIds={conflictShiftIds}
-                  onDeleteShift={onDeleteShift}
-                  onToggleManualOverride={onToggleManualOverride}
-                  onDeleteShiftTemplate={onDeleteShiftTemplate}
-                  onOpenDayEditor={openDayEditor}
-                  onClearDay={clearDayWithConfirm}
-                />
-                </div>
-              );
-            })}
+                return (
+                  <div key={day} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                    <DayBox
+                      day={day}
+                      title={WEEKDAY_LABELS[index]}
+                      subtitle={formatDateGreek(day)}
+                      dayShifts={dayShifts}
+                      dayTemplates={dayTemplates}
+                      specialDayConfig={specialDaysByDate?.[day]}
+                      canManage={canManage}
+                      isWeekLocked={isWeekLocked}
+                      isActive={index === activeIndex}
+                      getEmployeeById={getEmployeeById}
+                      getSundayViolationMessage={getSundayViolationMessage}
+                      conflictShiftIds={conflictShiftIds}
+                      onDeleteShift={onDeleteShift}
+                      onToggleManualOverride={onToggleManualOverride}
+                      onDeleteShiftTemplate={onDeleteShiftTemplate}
+                      onOpenDayEditor={openDayEditor}
+                      onClearDay={clearDayWithConfirm}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </>
       ) : (
         <>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
               Μήνας
               <select
@@ -809,7 +970,7 @@ export default function WeeklyGrid({
             </button>
           </div>
 
-          <div className="mb-3 grid gap-2 md:grid-cols-3">
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
             <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
               Βασικός Υπάλληλος Α
               <select
@@ -868,7 +1029,7 @@ export default function WeeklyGrid({
             </label>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 md:gap-3 xl:grid-cols-3">
             {monthDays.map((day) => {
               const dayShifts = grouped[day] || [];
               return (
@@ -881,6 +1042,7 @@ export default function WeeklyGrid({
                   dayTemplates={[]}
                   specialDayConfig={specialDaysByDate?.[day]}
                   canManage={canManage}
+                  isWeekLocked={false}
                   getEmployeeById={getEmployeeById}
                   getSundayViolationMessage={getSundayViolationMessage}
                   conflictShiftIds={conflictShiftIds}
@@ -932,12 +1094,12 @@ export default function WeeklyGrid({
                   </h4>
                   <button
                     type="button"
-                    onClick={setEditorToCreateMode}
+                    onClick={() => setEditorToCreateMode({ focusForm: true })}
                     className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-600"
                     disabled={!canManage}
                   >
                     <Plus size={12} />
-                    Προσθήκη Υπαλλήλου
+                    Νέα Βάρδια
                   </button>
                 </div>
 
@@ -1002,14 +1164,23 @@ export default function WeeklyGrid({
                 })}
               </aside>
 
-              <form onSubmit={handleDayEditorSave} className="grid gap-2 sm:grid-cols-2">
+              <form
+                ref={dayEditorFormRef}
+                onSubmit={handleDayEditorSave}
+                className={`grid gap-2 rounded-lg p-1 transition sm:grid-cols-2 ${
+                  isCreateFormHighlighted
+                    ? 'ring-2 ring-brand-300/70 bg-brand-50/20 dark:ring-cyan-300/45 dark:bg-cyan-500/10'
+                    : ''
+                }`}
+              >
                 <h4 className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-slate-700 dark:text-slate-200">
-                  {dayEditor.editingShiftId ? 'Επεξεργασία Βάρδιας' : 'Προσθήκη Υπαλλήλου'}
+                  {dayEditor.editingShiftId ? 'Επεξεργασία Βάρδιας' : 'Νέα Βάρδια'}
                 </h4>
 
                 <label className="text-xs font-medium text-slate-800 dark:text-slate-200">
                   Υπάλληλος
                   <select
+                    ref={dayEditorEmployeeSelectRef}
                     value={dayEditorDraft.employeeId}
                     onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, employeeId: event.target.value }))}
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
@@ -1199,5 +1370,8 @@ export default function WeeklyGrid({
     </section>
   );
 }
+
+
+
 
 

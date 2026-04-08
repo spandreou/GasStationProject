@@ -1,5 +1,6 @@
 import { Save, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { formatDateGreek, parseGreekDateInputToIso } from '../../utils/time';
 
 const emptyForm = {
   fullName: '',
@@ -13,10 +14,12 @@ const emptyForm = {
 
 export default function EmployeeProfileModal({ open, employee, isAdmin, onClose, onSave }) {
   const [form, setForm] = useState(emptyForm);
+  const [hireDateInput, setHireDateInput] = useState('');
 
   useEffect(() => {
     if (!employee) {
       setForm(emptyForm);
+      setHireDateInput('');
       return;
     }
 
@@ -29,6 +32,7 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
       email: employee.email || '',
       hireDate: employee.hireDate || '',
     });
+    setHireDateInput(employee.hireDate ? formatDateGreek(employee.hireDate) : '');
   }, [employee]);
 
   if (!open || !employee) return null;
@@ -120,10 +124,15 @@ export default function EmployeeProfileModal({ open, employee, isAdmin, onClose,
           <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
             Ημερομηνία Πρόσληψης
             <input
-              type="date"
-              lang="el-GR"
-              value={form.hireDate}
-              onChange={(event) => setForm((prev) => ({ ...prev, hireDate: event.target.value }))}
+              type="text"
+              inputMode="numeric"
+              placeholder="dd/mm/yyyy"
+              value={hireDateInput}
+              onChange={(event) => {
+                const nextInput = event.target.value;
+                setHireDateInput(nextInput);
+                setForm((prev) => ({ ...prev, hireDate: parseGreekDateInputToIso(nextInput) || '' }));
+              }}
               className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               disabled={!isAdmin}
             />

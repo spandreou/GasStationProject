@@ -1,4 +1,4 @@
-import { AlertTriangle, Plus, ShieldCheck, WifiOff } from 'lucide-react';
+import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, ShieldCheck, WifiOff } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { adminEmail, firebaseConfigErrorMessage, isDemoMode, isFirebaseConfigured } from '../../firebase/config';
@@ -6,14 +6,13 @@ import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { getMonthDays } from '../../utils/scheduleUtils';
-import { getWeekDays } from '../../utils/time';
+import { formatDateGreek, getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AnnouncementBoard from './AnnouncementBoard';
 import AnalyticsPanel from './AnalyticsPanel';
-import EmployeeSidebar from './EmployeeSidebar';
 import HistoryView from './HistoryView';
-import ManualShiftForm from './ManualShiftForm';
 import SchedulingRulesPanel from './SchedulingRulesPanel';
+import SchedulerSidebar from './SchedulerSidebar';
 import SpecialDaysPanel from './SpecialDaysPanel';
 import UndoSnackbar from './UndoSnackbar';
 import WeekToolbar from './WeekToolbar';
@@ -33,12 +32,52 @@ function loadExportService() {
   return exportServicePromise;
 }
 
+function MessageBanner({
+  icon: Icon = Info,
+  tone = 'info',
+  title,
+  message,
+  impact,
+  nextAction,
+  actionLabel,
+  onAction,
+}) {
+  const toneClasses = {
+    warning: 'border-amber-300/70 text-amber-900 dark:text-amber-100',
+    danger: 'border-red-300/70 text-red-800 dark:text-red-200',
+    info: 'border-slate-300/70 text-slate-800 dark:text-slate-100',
+  };
+
+  return (
+    <div className={`glass-soft rounded-xl border p-3 ${toneClasses[tone] || toneClasses.info}`}>
+      <div className="flex items-start gap-2">
+        <Icon size={18} className="mt-0.5 shrink-0" />
+        <div className="space-y-1.5">
+          {title ? <p className="text-sm font-semibold">{title}</p> : null}
+          <p className="text-sm">{message}</p>
+          {impact ? <p className="text-xs opacity-90">{impact}</p> : null}
+          {nextAction ? <p className="text-xs opacity-90">{nextAction}</p> : null}
+          {actionLabel && typeof onAction === 'function' ? (
+            <button
+              type="button"
+              onClick={onAction}
+              className="inline-flex items-center gap-1 rounded-md border border-current/40 px-2 py-1 text-xs font-semibold hover:bg-white/35 dark:hover:bg-slate-900/45"
+            >
+              <RefreshCw size={12} />
+              {actionLabel}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MainDashboard() {
   const [activeDragItem, setActiveDragItem] = useState(null);
   const [profileEmployee, setProfileEmployee] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
-  const [isManualSheetOpen, setIsManualSheetOpen] = useState(false);
+  const [mobileSidebarSection, setMobileSidebarSection] = useState('employees');
   const [scheduleMode, setScheduleMode] = useState('week');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -208,16 +247,6 @@ export default function MainDashboard() {
   );
 
   const handleCloseProfileModal = useCallback(() => setProfileEmployee(null), []);
-
-  const handleMobileManualShiftCreate = useCallback(
-    async (payload) => {
-      const created = await addShift(payload);
-      if (created?.id) {
-        setIsManualSheetOpen(false);
-      }
-    },
-    [addShift],
-  );
 
   async function handleDragEnd(event) {
     const { active, over } = event;
@@ -404,15 +433,53 @@ export default function MainDashboard() {
     await upsertSpecialDay(payload);
   }
 
+  const handleSaveTemplateFromToolbar = useCallback(
+    async (name) => {
+      if (!name) return;
+      await saveCurrentWeekAsTemplate(name);
+    },
+    [saveCurrentWeekAsTemplate],
+  );
+
+  const handleRetryDataLoad = useCallback(() => {
+    clearMessages();
+    cleanupData();
+    initializeData();
+  }, [clearMessages, cleanupData, initializeData]);
+
+  const prioritizedStatusBanner = errorMessage
+    ? {
+        tone: 'danger',
+        title: 'Αποτυχία φόρτωσης δεδομένων',
+        message: errorMessage,
+        impact: 'Η προβολή μπορεί να είναι ελλιπής ή μη ενημερωμένη.',
+        nextAction: 'Μπορείς να δοκιμάσεις ξανά φόρτωση δεδομένων με ασφάλεια.',
+        actionLabel: 'Δοκίμασε ξανά',
+        onAction: isFirebaseConfigured ? handleRetryDataLoad : undefined,
+      }
+    : warningMessage
+      ? {
+          tone: 'warning',
+          title: 'Χρειάζεται προσοχή',
+          message: warningMessage,
+          impact: 'Κάποια ενέργεια μπορεί να ολοκληρώθηκε μερικώς ή να χρειάζεται έλεγχο.',
+          nextAction: 'Έλεγξε τα στοιχεία και δοκίμασε ξανά την ίδια ενέργεια.',
+        }
+      : null;
+
+  const showReadOnlyBanner = !isAdmin && isFirebaseConfigured && !prioritizedStatusBanner;
+
   if (isLoading || isAuthLoading) {
     return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
 
   const dashboardContent = (
     <>
-      <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-4 text-slate-900 sm:gap-4 md:p-6 dark:text-slate-100">
+      <main className="scheduler-layout-shell mx-auto flex w-full max-w-[1820px] flex-col gap-4 p-4 text-slate-900 sm:gap-5 md:p-6 lg:p-7 dark:text-slate-100">
         <WeekToolbar
           weekDays={weekDays}
+          weekTemplates={weekTemplates}
+          selectedTemplateId={selectedTemplateId}
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           isAdmin={isAdmin}
@@ -424,6 +491,9 @@ export default function MainDashboard() {
           onNextWeek={goToNextWeek}
           onCurrentWeek={goToCurrentWeek}
           onSaveWeek={saveCurrentWeekManually}
+          onSaveTemplate={handleSaveTemplateFromToolbar}
+          onSelectTemplate={setSelectedTemplateId}
+          onLoadSelectedTemplate={loadSelectedTemplateIntoCurrentWeek}
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={clearWeekShifts}
           onClearMonth={() => clearMonthShifts({ year: selectedYear, month: selectedMonth })}
@@ -438,89 +508,67 @@ export default function MainDashboard() {
         />
 
         {!isFirebaseConfigured ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-amber-300/70 p-3 text-sm text-amber-900 dark:text-amber-200">
-            <WifiOff size={18} className="mt-0.5 shrink-0" />
-            {firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Έλεγξε τα env vars στο Vercel/τοπικό περιβάλλον.'}
-          </div>
+          <MessageBanner
+            icon={WifiOff}
+            tone="warning"
+            title="Το Firebase δεν είναι έτοιμο"
+            message={firebaseConfigErrorMessage || 'Η σύνδεση με τη βάση δεν είναι διαθέσιμη.'}
+            impact="Το dashboard εμφανίζεται, αλλά δεδομένα και αποθήκευση μπορεί να λείπουν."
+            nextAction="Έλεγξε τα env vars στο local ή στο deployment environment."
+          />
         ) : null}
 
-        {!isAdmin ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-slate-300/60 p-2 text-[10px] text-slate-800 leading-snug sm:p-3 sm:text-sm dark:text-slate-100">
-            <ShieldCheck size={18} className="mt-0.5 shrink-0" />
-            <p className="line-clamp-2 sm:line-clamp-none">
-              Λειτουργία μόνο ανάγνωσης: μόνο ο συνδεδεμένος διαχειριστής βλέπει ΑΦΜ και κάνει αλλαγές.
-            </p>
-          </div>
+        {showReadOnlyBanner ? (
+          <MessageBanner
+            icon={ShieldCheck}
+            tone="info"
+            title="Read-only πρόσβαση"
+            message="Το περιβάλλον είναι σε προβολή χωρίς δικαίωμα επεξεργασίας."
+            impact="Τα admin-only actions είναι κλειδωμένα μέχρι login διαχειριστή."
+            nextAction="Αν χρειάζεσαι αλλαγές, κάνε είσοδο ως διαχειριστής από το toolbar."
+          />
         ) : null}
 
-        {warningMessage ? (
-          <div className="glass-soft flex items-start gap-2 rounded-xl border border-red-300/70 p-3 text-sm text-red-700 dark:text-red-200">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-            {warningMessage}
-          </div>
+        {prioritizedStatusBanner ? (
+          <MessageBanner
+            icon={AlertTriangle}
+            tone={prioritizedStatusBanner.tone}
+            title={prioritizedStatusBanner.title}
+            message={prioritizedStatusBanner.message}
+            impact={prioritizedStatusBanner.impact}
+            nextAction={prioritizedStatusBanner.nextAction}
+            actionLabel={prioritizedStatusBanner.actionLabel}
+            onAction={prioritizedStatusBanner.onAction}
+          />
         ) : null}
 
-        {errorMessage ? (
-          <div className="glass-soft rounded-xl border border-red-300/70 p-3 text-sm text-red-700 dark:text-red-200">
-            {errorMessage}
-          </div>
-        ) : null}
-
-        <div className="grid gap-5 sm:gap-4 xl:grid-cols-[360px,1fr]">
-          <div className="order-2 space-y-5 sm:space-y-4 md:order-1">
+        <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-[320px,minmax(0,1fr)] 2xl:grid-cols-[340px,minmax(0,1fr)]">
+          <div className="order-2 xl:order-1">
             <div className="hidden md:block">
-              <EmployeeSidebar
+              <SchedulerSidebar
                 employees={employees}
                 shiftTemplates={shiftTemplates}
                 weekDays={weekDays}
+                visibleDays={visibleDays}
                 isAdmin={isAdmin}
+                scheduleMode={scheduleMode}
+                onModeChange={setScheduleMode}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                analytics={analytics}
                 onAddEmployee={addEmployee}
                 onDeleteEmployee={deleteEmployee}
                 onOpenAdminLogin={openLoginModal}
                 onOpenProfile={setProfileEmployee}
                 onAddShiftTemplate={addShiftTemplate}
                 onDeleteShiftTemplate={deleteShiftTemplate}
+                onCreateShift={addShift}
               />
             </div>
-
-            <div className="hidden md:block">
-              <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={addShift} canManage={isAdmin} />
-            </div>
-
-            <AnalyticsPanel
-              employees={employees}
-              mode={scheduleMode}
-              onModeChange={setScheduleMode}
-              selectedMonth={selectedMonth}
-              selectedYear={selectedYear}
-              totalsByEmployee={analytics.totalsByEmployee}
-              totalHours={analytics.totalHours}
-              leaveDaysByEmployee={analytics.leaveDaysByEmployee}
-              totalsByType={analytics.totalsByType}
-              shiftsCountByEmployee={analytics.shiftsCountByEmployee}
-              workBreakdownByEmployee={analytics.workBreakdownByEmployee}
-            />
-
-            <SchedulingRulesPanel
-              isAdmin={isAdmin}
-              isSaving={isSaving}
-              employees={employees}
-              generatorRules={generatorRules}
-              onSaveRules={saveGeneratorRules}
-              onSaveEmployeeRules={saveEmployeeSchedulingRules}
-            />
-
-            <SpecialDaysPanel
-              isAdmin={isAdmin}
-              isSaving={isSaving}
-              specialDaysByDate={specialDaysByDate}
-              onSaveSpecialDay={handleSaveSpecialDay}
-              onRemoveSpecialDay={removeSpecialDay}
-            />
           </div>
 
-          <div className="order-1 md:order-2">
-            <div className="space-y-8 sm:space-y-7">
+          <div className="order-1 min-w-0 xl:order-2">
+            <div className="space-y-4 lg:space-y-5">
               <WeeklyGrid
                 weekDays={weekDays}
                 monthDays={monthDays}
@@ -556,101 +604,97 @@ export default function MainDashboard() {
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onClearDayShifts={clearDayShifts}
                 canManage={isAdmin}
+                isWeekLocked={isWeekEffectivelyLocked}
                 isSaving={isSaving}
               />
-              <div className="mt-16 space-y-8 sm:mt-24 lg:mt-28 sm:space-y-7">
-                <AnnouncementBoard
-                  announcements={announcements}
+
+              <AnnouncementBoard
+                announcements={announcements}
+                isAdmin={isAdmin}
+                isSaving={isSaving}
+                onAddAnnouncement={addAnnouncement}
+                onDeleteAnnouncement={deleteAnnouncement}
+              />
+
+              <div className={`grid gap-4 lg:gap-5 ${isAdmin ? 'xl:grid-cols-2' : ''}`}>
+                {isAdmin ? (
+                  <HistoryView
+                    isAdmin={isAdmin}
+                    employees={employees}
+                    historyRows={attendanceHistory}
+                    filters={historyFilters}
+                    isLoading={isHistoryLoading}
+                    onFilterChange={setHistoryFilters}
+                  />
+                ) : null}
+                <AnalyticsPanel
+                  employees={employees}
+                  mode={scheduleMode}
+                  onModeChange={setScheduleMode}
+                  selectedMonth={selectedMonth}
+                  selectedYear={selectedYear}
+                  totalsByEmployee={analytics.totalsByEmployee}
+                  totalHours={analytics.totalHours}
+                  leaveDaysByEmployee={analytics.leaveDaysByEmployee}
+                  totalsByType={analytics.totalsByType}
+                  shiftsCountByEmployee={analytics.shiftsCountByEmployee}
+                  workBreakdownByEmployee={analytics.workBreakdownByEmployee}
+                />
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                <SchedulingRulesPanel
                   isAdmin={isAdmin}
                   isSaving={isSaving}
-                  onAddAnnouncement={addAnnouncement}
-                  onDeleteAnnouncement={deleteAnnouncement}
+                  employees={employees}
+                  generatorRules={generatorRules}
+                  onSaveRules={saveGeneratorRules}
+                  onSaveEmployeeRules={saveEmployeeSchedulingRules}
                 />
+
+                <SpecialDaysPanel
+                  isAdmin={isAdmin}
+                  isSaving={isSaving}
+                  specialDaysByDate={specialDaysByDate}
+                  onSaveSpecialDay={handleSaveSpecialDay}
+                  onRemoveSpecialDay={removeSpecialDay}
+                />
+              </div>
+
+              {isAdmin ? (
                 <Suspense fallback={null}>
                   <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
                 </Suspense>
-              </div>
+              ) : null}
             </div>
           </div>
         </div>
-
-        <HistoryView
-          isAdmin={isAdmin}
-          employees={employees}
-          historyRows={attendanceHistory}
-          filters={historyFilters}
-          isLoading={isHistoryLoading}
-          onFilterChange={setHistoryFilters}
-        />
       </main>
 
-      <button
-        type="button"
-        onClick={() => setIsQuickActionsOpen(true)}
-        className="fixed bottom-6 right-6 z-[65] inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600 md:hidden"
-        aria-label="Quick actions"
-      >
-        <Plus size={24} />
-      </button>
-
-      {isQuickActionsOpen ? (
-        <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Κλείσιμο"
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setIsQuickActionsOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-4 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
-            <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Γρήγορες Ενέργειες</h3>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsQuickActionsOpen(false);
-                  setIsSidebarOpen(true);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-left text-sm font-semibold text-slate-900 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
-              >
-                Νέος Υπάλληλος
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsQuickActionsOpen(false);
-                  setIsManualSheetOpen(true);
-                }}
-                className="w-full rounded-xl border border-brand-300/70 bg-brand-500/90 px-4 py-3 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600"
-              >
-                Νέα Custom Βάρδια
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isManualSheetOpen ? (
-        <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Κλείσιμο"
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setIsManualSheetOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
-            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
-            <div className="max-h-[78vh] overflow-y-auto pb-4">
-              <ManualShiftForm
-                employees={employees}
-                weekDays={visibleDays}
-                onCreateShift={handleMobileManualShiftCreate}
-                canManage={isAdmin}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <div className="fixed bottom-6 right-6 z-[65] flex flex-col gap-2 md:hidden">
+        <button
+          type="button"
+          onClick={() => {
+            setMobileSidebarSection('employees');
+            setIsSidebarOpen(true);
+          }}
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-white/80 text-slate-900 shadow-xl shadow-slate-900/20 backdrop-blur-md transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-900/85"
+          aria-label="Άνοιγμα sidebar"
+        >
+          <PanelLeft size={20} />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMobileSidebarSection('manual');
+            setIsSidebarOpen(true);
+          }}
+          className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600"
+          aria-label="Γρήγορη χειροκίνητη βάρδια"
+        >
+          <Plus size={24} />
+        </button>
+      </div>
 
       {isSidebarOpen ? (
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
@@ -663,19 +707,27 @@ export default function MainDashboard() {
           <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
             <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
             <div className="max-h-[78vh] overflow-y-auto pb-4">
-              <EmployeeSidebar
-                employees={employees}
-                shiftTemplates={shiftTemplates}
-                weekDays={weekDays}
-                isAdmin={isAdmin}
-                onAddEmployee={addEmployee}
-                onDeleteEmployee={deleteEmployee}
-                onOpenAdminLogin={openLoginModal}
-                onOpenProfile={setProfileEmployee}
-                onAddShiftTemplate={addShiftTemplate}
-                onDeleteShiftTemplate={deleteShiftTemplate}
-                compact
-              />
+                <SchedulerSidebar
+                  employees={employees}
+                  shiftTemplates={shiftTemplates}
+                  weekDays={weekDays}
+                  visibleDays={visibleDays}
+                  isAdmin={isAdmin}
+                  scheduleMode={scheduleMode}
+                  onModeChange={setScheduleMode}
+                  selectedMonth={selectedMonth}
+                  selectedYear={selectedYear}
+                  analytics={analytics}
+                  onAddEmployee={addEmployee}
+                  onDeleteEmployee={deleteEmployee}
+                  onOpenAdminLogin={openLoginModal}
+                  onOpenProfile={setProfileEmployee}
+                  onAddShiftTemplate={addShiftTemplate}
+                  onDeleteShiftTemplate={deleteShiftTemplate}
+                  onCreateShift={addShift}
+                  defaultSection={mobileSidebarSection}
+                  compact
+                />
             </div>
           </div>
         </div>
@@ -718,7 +770,7 @@ export default function MainDashboard() {
             </div>
 
             <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
-              {quickAssignDraft.employeeName} - {quickAssignDraft.date}
+              {quickAssignDraft.employeeName} - {formatDateGreek(quickAssignDraft.date)}
             </p>
 
             <form onSubmit={handleQuickAssignSave} className="space-y-3">
@@ -787,3 +839,5 @@ export default function MainDashboard() {
     </Suspense>
   );
 }
+
+

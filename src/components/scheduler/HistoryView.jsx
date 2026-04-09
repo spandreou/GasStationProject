@@ -1,6 +1,7 @@
-import { History } from 'lucide-react';
+﻿import { History } from 'lucide-react';
 import { getShiftTypeLabel } from '../../utils/analytics';
 import { formatDateGreek } from '../../utils/time';
+import StateNotice from '../feedback/StateNotice';
 
 function buildMonthOptions() {
   const options = [];
@@ -40,7 +41,7 @@ export default function HistoryView({
           <button
             type="button"
             onClick={() => onFilterChange({ employeeId: '' })}
-            className="inline-flex items-center justify-center rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-800 backdrop-blur-sm hover:bg-white/65 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+            className="inline-flex items-center justify-center rounded-lg border border-white/35 bg-white/45 px-3 py-2 text-xs font-semibold text-slate-800 backdrop-blur-sm transition active:scale-[0.99] hover:bg-white/65 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
           >
             Καθαρισμός φίλτρου υπαλλήλου
           </button>
@@ -80,56 +81,53 @@ export default function HistoryView({
         </label>
       </div>
 
-      <div className="overflow-auto rounded-xl border border-white/40 dark:border-cyan-300/25">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-900/85 text-white">
-            <tr>
-              <th className="px-3 py-2 font-semibold">Ημερομηνία</th>
-              <th className="px-3 py-2 font-semibold">Τύπος</th>
-              <th className="px-3 py-2 font-semibold">Ώρες</th>
-              <th className="px-3 py-2 font-semibold">Σχόλια</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr>
-                <td className="px-3 py-3 text-slate-700 dark:text-slate-200" colSpan={4}>
-                  Φόρτωση ιστορικού...
-                </td>
-              </tr>
-            ) : null}
+      {isLoading ? (
+        <StateNotice
+          state="loading"
+          title="Φόρτωση ιστορικού"
+          message="Γίνεται ανάκτηση παρουσιών για τα επιλεγμένα φίλτρα."
+        />
+      ) : null}
 
-            {!isLoading && !historyRows.length ? (
-              <tr>
-                <td className="px-3 py-3" colSpan={4}>
-                  <div className="rounded-lg border border-dashed border-slate-300/70 bg-white/45 px-3 py-2 text-sm text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-300">
-                    <p>Δεν βρέθηκαν εγγραφές για τα φίλτρα που επέλεξες.</p>
-                    <p className="mt-1 text-xs">Δοκίμασε άλλο μήνα ή καθάρισε το φίλτρο υπαλλήλου.</p>
-                  </div>
-                </td>
-              </tr>
-            ) : null}
+      {!isLoading && !historyRows.length ? (
+        <StateNotice
+          state="empty"
+          title="Δεν βρέθηκαν εγγραφές"
+          message="Δοκίμασε άλλο μήνα ή καθάρισε το φίλτρο υπαλλήλου."
+        />
+      ) : null}
 
-            {!isLoading
-              ? historyRows.map((row, index) => (
-                  <tr
-                    key={row.id}
-                    className={
-                      index % 2 === 0
-                        ? 'bg-white/45 dark:bg-slate-900/35'
-                        : 'bg-slate-100/60 dark:bg-slate-900/55'
-                    }
-                  >
-                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{formatDateGreek(row.date)}</td>
-                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{getShiftTypeLabel(row.type)}</td>
-                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{row.totalHours || 0}</td>
-                    <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{row.notes || '-'}</td>
-                  </tr>
-                ))
-              : null}
-          </tbody>
-        </table>
-      </div>
+      {!isLoading && historyRows.length ? (
+        <div className="overflow-auto rounded-xl border border-white/40 dark:border-cyan-300/25">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-900/85 text-white">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Ημερομηνία</th>
+                <th className="px-3 py-2 font-semibold">Τύπος</th>
+                <th className="px-3 py-2 font-semibold">Ώρες</th>
+                <th className="px-3 py-2 font-semibold">Σχόλια</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historyRows.map((row, index) => (
+                <tr
+                  key={row.id}
+                  className={
+                    index % 2 === 0
+                      ? 'bg-white/45 dark:bg-slate-900/35'
+                      : 'bg-slate-100/60 dark:bg-slate-900/55'
+                  }
+                >
+                  <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{formatDateGreek(row.date)}</td>
+                  <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{getShiftTypeLabel(row.type)}</td>
+                  <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{row.totalHours || 0}</td>
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{row.notes || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </section>
   );
 }

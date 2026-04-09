@@ -1,6 +1,8 @@
-import { CalendarPlus, Trash2 } from 'lucide-react';
+﻿import { CalendarPlus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateGreek, parseGreekDateInputToIso } from '../../utils/time';
+import ConfirmDialog from '../feedback/ConfirmDialog';
+import StateNotice from '../feedback/StateNotice';
 
 const initialDraft = {
   date: '',
@@ -26,6 +28,9 @@ export default function SpecialDaysPanel({
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [draftDateInput, setDraftDateInput] = useState('');
+  const [formMessage, setFormMessage] = useState('');
+  const [pendingDeleteDate, setPendingDeleteDate] = useState('');
+
   const entries = useMemo(() => toEntries(specialDaysByDate), [specialDaysByDate]);
 
   useEffect(() => {
@@ -33,14 +38,25 @@ export default function SpecialDaysPanel({
   }, [draft.date]);
 
   async function handleSaveDraft() {
-    const saved = await onSaveSpecialDay?.(draft);
-    if (saved) {
-      setDraft(initialDraft);
+    if (!draft.date) {
+      setFormMessage('Συμπλήρωσε έγκυρη ημερομηνία σε μορφή dd/mm/yyyy.');
+      return;
     }
+
+    const saved = await onSaveSpecialDay?.(draft);
+    if (!saved) {
+      setFormMessage('Η ειδική ημέρα δεν αποθηκεύτηκε. Δοκίμασε ξανά.');
+      return;
+    }
+
+    setFormMessage('');
+    setDraft(initialDraft);
   }
 
-  async function handleRemoveEntry(date) {
-    await onRemoveSpecialDay?.(date);
+  async function handleConfirmRemoveEntry() {
+    if (!pendingDeleteDate) return;
+    await onRemoveSpecialDay?.(pendingDeleteDate);
+    setPendingDeleteDate('');
   }
 
   if (!isAdmin) return null;
@@ -62,8 +78,10 @@ export default function SpecialDaysPanel({
             value={draftDateInput}
             onChange={(event) => {
               const nextInput = event.target.value;
+              const isoDate = parseGreekDateInputToIso(nextInput) || '';
               setDraftDateInput(nextInput);
-              setDraft((prev) => ({ ...prev, date: parseGreekDateInputToIso(nextInput) || '' }));
+              setDraft((prev) => ({ ...prev, date: isoDate }));
+              if (formMessage) setFormMessage('');
             }}
             className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
           />
@@ -74,7 +92,10 @@ export default function SpecialDaysPanel({
           <input
             type="text"
             value={draft.label}
-            onChange={(event) => setDraft((prev) => ({ ...prev, label: event.target.value }))}
+            onChange={(event) => {
+              setDraft((prev) => ({ ...prev, label: event.target.value }));
+              if (formMessage) setFormMessage('');
+            }}
             placeholder="π.χ. Εθνική Αργία ή Ειδικό Ωράριο"
             className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
           />
@@ -120,19 +141,28 @@ export default function SpecialDaysPanel({
         </label>
       </div>
 
+      {formMessage ? (
+        <div className="mt-3">
+          <StateNotice state="error" compact message={formMessage} />
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={handleSaveDraft}
           disabled={isSaving || !draft.date}
-          className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Αποθήκευση ειδικής ημέρας
+          {isSaving ? 'Αποθήκευση...' : 'Αποθήκευση ειδικής ημέρας'}
         </button>
         <button
           type="button"
-          onClick={() => setDraft(initialDraft)}
-          className="rounded-lg border border-slate-300 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+          onClick={() => {
+            setDraft(initialDraft);
+            setFormMessage('');
+          }}
+          className="rounded-lg border border-slate-300 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-800 transition active:scale-[0.99] hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
         >
           Καθαρισμός φόρμας
         </button>
@@ -169,14 +199,14 @@ export default function SpecialDaysPanel({
                         operatingEndTime: entry.operatingEndTime || '',
                       })
                     }
-                    className="rounded-lg border border-slate-300 bg-white/60 px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                    className="rounded-lg border border-slate-300 bg-white/60 px-2 py-1 text-[11px] font-semibold text-slate-800 transition active:scale-[0.99] hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
                   >
                     Επεξεργασία
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleRemoveEntry(entry.date)}
-                    className="rounded-lg border border-red-300 bg-red-50/70 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 dark:border-red-300/45 dark:bg-red-500/15 dark:text-red-200"
+                    onClick={() => setPendingDeleteDate(entry.date)}
+                    className="rounded-lg border border-red-300 bg-red-50/70 px-2 py-1 text-[11px] font-semibold text-red-700 transition active:scale-[0.99] hover:bg-red-100 dark:border-red-300/45 dark:bg-red-500/15 dark:text-red-200"
                   >
                     <span className="inline-flex items-center gap-1">
                       <Trash2 size={12} />
@@ -188,11 +218,26 @@ export default function SpecialDaysPanel({
             );
           })
         ) : (
-          <p className="rounded-lg border border-slate-300/60 bg-white/40 p-3 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-300">
-            Δεν έχουν οριστεί ειδικές ημέρες.
-          </p>
+          <StateNotice
+            state="empty"
+            compact
+            title="Δεν έχουν οριστεί ειδικές ημέρες"
+            message="Πρόσθεσε μια ειδική ημέρα για να εμφανιστεί στη λίστα."
+          />
         )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteDate)}
+        title="Διαγραφή ειδικής ημέρας"
+        message={pendingDeleteDate ? `Θέλεις να διαγράψεις την καταχώρηση για ${formatDateGreek(pendingDeleteDate)};` : ''}
+        details="Η ενέργεια αφαιρεί την ειδική ημέρα από το πρόγραμμα."
+        tone="danger"
+        confirmLabel="Ναι, διαγραφή"
+        onClose={() => setPendingDeleteDate('')}
+        onConfirm={handleConfirmRemoveEntry}
+        isConfirming={isSaving}
+      />
     </section>
   );
 }

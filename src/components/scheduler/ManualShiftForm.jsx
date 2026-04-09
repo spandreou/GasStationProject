@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { SHIFT_PRESETS, SHIFT_TYPE_OPTIONS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
-import { formatDateGreek } from '../../utils/time';
+import { formatDateGreek, timeToMinutes } from '../../utils/time';
+import StateNotice from '../feedback/StateNotice';
 
 const initialManualState = {
   employeeId: '',
@@ -24,6 +25,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
     employeeId: employees[0]?.id || '',
     date: availableDays[0] || '',
   });
+  const [validationMessage, setValidationMessage] = useState('');
 
   const hasEmployees = employees.length > 0;
 
@@ -37,25 +39,52 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
     }));
   }, [employees, availableDays]);
 
+  useEffect(() => {
+    if (!validationMessage) return;
+    const timeoutId = setTimeout(() => setValidationMessage(''), 3500);
+    return () => clearTimeout(timeoutId);
+  }, [validationMessage]);
+
   const shiftTypeLabel = useMemo(() => {
     return SHIFT_TYPE_OPTIONS.find((item) => item.value === form.shiftType)?.label || 'Προσαρμοσμένη';
   }, [form.shiftType]);
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (!form.employeeId || !form.date) {
+      setValidationMessage('Συμπλήρωσε υπάλληλο και ημερομηνία.');
+      return;
+    }
+
+    if (timeToMinutes(form.startTime) >= timeToMinutes(form.endTime)) {
+      setValidationMessage('Η ώρα λήξης πρέπει να είναι μετά την ώρα έναρξης.');
+      return;
+    }
+
+    if (form.shiftType === 'custom' && !form.customLabel.trim()) {
+      setValidationMessage('Συμπλήρωσε ετικέτα για την προσαρμοσμένη βάρδια.');
+      return;
+    }
+
     const created = await onCreateShift({
       ...form,
       label: form.shiftType === 'custom' ? form.customLabel || 'Προσαρμοσμένη' : shiftTypeLabel,
       shiftType: form.shiftType,
     });
-    if (created?.id) {
-      setForm((prev) => ({
-        ...prev,
-        notes: '',
-        specialDayLabel: '',
-        customLabel: prev.shiftType === 'custom' ? prev.customLabel : '',
-      }));
+
+    if (!created?.id) {
+      setValidationMessage('Η βάρδια δεν αποθηκεύτηκε. Δοκίμασε ξανά.');
+      return;
     }
+
+    setValidationMessage('');
+    setForm((prev) => ({
+      ...prev,
+      notes: '',
+      specialDayLabel: '',
+      customLabel: prev.shiftType === 'custom' ? prev.customLabel : '',
+    }));
   }
 
   function applyPreset(preset) {
@@ -66,6 +95,7 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
       endTime: preset.endTime,
       customLabel: preset.shiftType === 'custom' ? prev.customLabel : '',
     }));
+    if (validationMessage) setValidationMessage('');
   }
 
   return (
@@ -95,7 +125,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <select
             className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.employeeId}
-            onChange={(event) => setForm((prev) => ({ ...prev, employeeId: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, employeeId: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!hasEmployees || !canManage}
           >
@@ -112,7 +145,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <select
             className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.date}
-            onChange={(event) => setForm((prev) => ({ ...prev, date: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, date: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!canManage}
           >
@@ -129,7 +165,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <select
             className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.shiftType}
-            onChange={(event) => setForm((prev) => ({ ...prev, shiftType: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, shiftType: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!canManage}
           >
@@ -146,7 +185,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <select
             className="input-glass mt-1 w-full min-h-12 appearance-none rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.type}
-            onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, type: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!canManage}
           >
@@ -164,7 +206,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
               className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               placeholder="π.χ. Εκπαίδευση / Απογραφή"
               value={form.customLabel}
-              onChange={(event) => setForm((prev) => ({ ...prev, customLabel: event.target.value }))}
+              onChange={(event) => {
+                setForm((prev) => ({ ...prev, customLabel: event.target.value }));
+                if (validationMessage) setValidationMessage('');
+              }}
               disabled={!canManage}
               required
             />
@@ -177,7 +222,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             type="time"
             className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.startTime}
-            onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, startTime: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!canManage}
           />
@@ -189,7 +237,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
             type="time"
             className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition focus:ring-2 placeholder:text-slate-500 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
             value={form.endTime}
-            onChange={(event) => setForm((prev) => ({ ...prev, endTime: event.target.value }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, endTime: event.target.value }));
+              if (validationMessage) setValidationMessage('');
+            }}
             required
             disabled={!canManage}
           />
@@ -199,7 +250,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <input
             type="checkbox"
             checked={form.isHoliday}
-            onChange={(event) => setForm((prev) => ({ ...prev, isHoliday: event.target.checked }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, isHoliday: event.target.checked }));
+              if (validationMessage) setValidationMessage('');
+            }}
             disabled={!canManage}
           />
           Αργία
@@ -209,7 +263,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           <input
             type="checkbox"
             checked={form.isSpecialDay}
-            onChange={(event) => setForm((prev) => ({ ...prev, isSpecialDay: event.target.checked }))}
+            onChange={(event) => {
+              setForm((prev) => ({ ...prev, isSpecialDay: event.target.checked }));
+              if (validationMessage) setValidationMessage('');
+            }}
             disabled={!canManage}
           />
           Ειδικό Ωράριο
@@ -222,7 +279,10 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
               className="input-glass mt-1 w-full min-h-12 rounded-lg border border-slate-300 px-3 py-2 text-slate-950 font-semibold outline-none ring-brand-300/50 transition placeholder:text-slate-500 focus:ring-2 dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-400"
               placeholder="π.χ. Ειδικό Ωράριο 08:00-20:00"
               value={form.specialDayLabel}
-              onChange={(event) => setForm((prev) => ({ ...prev, specialDayLabel: event.target.value }))}
+              onChange={(event) => {
+                setForm((prev) => ({ ...prev, specialDayLabel: event.target.value }));
+                if (validationMessage) setValidationMessage('');
+              }}
               disabled={!canManage}
             />
           </label>
@@ -239,9 +299,15 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
           />
         </label>
 
+        {validationMessage ? (
+          <div className="md:col-span-2">
+            <StateNotice state="error" compact message={validationMessage} />
+          </div>
+        ) : null}
+
         <button
           type="submit"
-          className="md:col-span-2 rounded-lg bg-slate-900 px-3 py-2 min-h-12 text-sm font-semibold text-white hover:bg-slate-700 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="md:col-span-2 min-h-12 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition active:scale-[0.99] hover:bg-slate-700 dark:border dark:border-pink-300/40 dark:bg-cyan-500/85 dark:text-slate-950 dark:hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!hasEmployees || !canManage}
         >
           Αποθήκευση Βάρδιας

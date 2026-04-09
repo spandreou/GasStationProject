@@ -1,4 +1,4 @@
-﻿import { useDroppable } from '@dnd-kit/core';
+import { useDroppable } from '@dnd-kit/core';
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Lock, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,6 +11,8 @@ import {
   inferShiftTypeFromTimes,
 } from '../../utils/scheduleUtils';
 import { formatDateGreek, normalizeTimeLabel, parseGreekDateInputToIso, timeToMinutes } from '../../utils/time';
+import ConfirmDialog from '../feedback/ConfirmDialog';
+import StateNotice from '../feedback/StateNotice';
 import AssignedShiftItem from './AssignedShiftItem';
 
 const MONTH_OPTIONS = [
@@ -496,6 +498,7 @@ export default function WeeklyGrid({
   const scrollRef = useRef(null);
   const dayEditorFormRef = useRef(null);
   const dayEditorEmployeeSelectRef = useRef(null);
+  const dayEditorDialogRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isCreateFormHighlighted, setIsCreateFormHighlighted] = useState(false);
 
@@ -550,12 +553,20 @@ export default function WeeklyGrid({
     }),
   );
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [dayEditorValidationMessage, setDayEditorValidationMessage] = useState('');
+  const [pendingClearDay, setPendingClearDay] = useState('');
   const [weekJumpInput, setWeekJumpInput] = useState('');
 
   const dayEditorShifts = useMemo(() => {
     if (!dayEditor?.date) return [];
     return grouped[dayEditor.date] || [];
   }, [dayEditor?.date, grouped]);
+
+  useEffect(() => {
+    if (!dayEditorValidationMessage) return;
+    const timeoutId = setTimeout(() => setDayEditorValidationMessage(''), 4200);
+    return () => clearTimeout(timeoutId);
+  }, [dayEditorValidationMessage]);
 
   useEffect(() => {
     if (!dayEditor.open) return;
@@ -599,7 +610,7 @@ export default function WeeklyGrid({
     );
   }, [canManage]);
 
-  function closeDayEditor() {
+  const closeDayEditor = useCallback(() => {
     setDayEditor({
       open: false,
       date: '',
@@ -607,16 +618,18 @@ export default function WeeklyGrid({
       subtitle: '',
       editingShiftId: '',
     });
+    setDayEditorValidationMessage('');
     setDayEditorDraft(
       buildNewDraft({
         date: visibleDayOptions[0] || '',
         employeeId: '',
       }),
     );
-  }
+  }, [visibleDayOptions]);
 
   function setEditorToCreateMode({ focusForm = false } = {}) {
     setDayEditor((prev) => ({ ...prev, editingShiftId: '' }));
+    setDayEditorValidationMessage('');
     setDayEditorDraft(
       buildNewDraft({
         date: dayEditor.date || visibleDayOptions[0] || '',
@@ -642,6 +655,7 @@ export default function WeeklyGrid({
   function setEditorToExistingShift(shift) {
     if (!shift) return;
     setDayEditor((prev) => ({ ...prev, editingShiftId: shift.id }));
+    setDayEditorValidationMessage('');
     setDayEditorDraft(buildDraftFromShift(shift));
   }
 
@@ -651,15 +665,48 @@ export default function WeeklyGrid({
     const previousHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+      dayEditorDialogRef.current?.focus();
+    });
     return () => {
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [dayEditor.open]);
 
+  useEffect(() => {
+    if (!dayEditor.open) return;
+    const handleEscapeClose = (event) => {
+      if (event.key !== 'Escape' && event.key !== 'Esc') return;
+      event.preventDefault();
+      closeDayEditor();
+    };
+    window.addEventListener('keydown', handleEscapeClose, true);
+    document.addEventListener('keydown', handleEscapeClose, true);
+    return () => {
+      window.removeEventListener('keydown', handleEscapeClose, true);
+      document.removeEventListener('keydown', handleEscapeClose, true);
+    };
+  }, [closeDayEditor, dayEditor.open]);
+
   async function handleDayEditorSave(event) {
     event.preventDefault();
     if (!canManage) return;
+
+    if (!dayEditorDraft.employeeId || !dayEditorDraft.date) {
+      setDayEditorValidationMessage('Συμπλήρωσε υπάλληλο και ημερομηνία.');
+      return;
+    }
+
+    if (timeToMinutes(dayEditorDraft.startTime) >= timeToMinutes(dayEditorDraft.endTime)) {
+      setDayEditorValidationMessage('Η ώρα λήξης πρέπει να είναι μετά την ώρα έναρξης.');
+      return;
+    }
+
+    if (dayEditorDraft.type === SHIFT_TYPES.WORK && dayEditorDraft.shiftType === 'custom' && !dayEditorDraft.customLabel?.trim()) {
+      setDayEditorValidationMessage('Δώσε ετικέτα για την προσαρμοσμένη βάρδια.');
+      return;
+    }
 
     const payload = {
       employeeId: dayEditorDraft.employeeId,
@@ -686,14 +733,20 @@ export default function WeeklyGrid({
           ...payload,
         });
         if (updated) {
+          setDayEditorValidationMessage('');
           closeDayEditor();
+        } else {
+          setDayEditorValidationMessage('Η ενημέρωση βάρδιας απέτυχε. Έλεγξε τα στοιχεία και δοκίμασε ξανά.');
         }
         return;
       }
 
       const created = await onCreateShift?.(payload);
       if (created) {
+        setDayEditorValidationMessage('');
         closeDayEditor();
+      } else {
+        setDayEditorValidationMessage('Η βάρδια δεν αποθηκεύτηκε. Δοκίμασε ξανά.');
       }
     } finally {
       setIsEditorSaving(false);
@@ -708,10 +761,14 @@ export default function WeeklyGrid({
   );
 
   const clearDayWithConfirm = useCallback((date) => {
-    const shouldClear = window.confirm(`Να διαγραφούν όλες οι βάρδιες για ${formatDateGreek(date)};`);
-    if (!shouldClear) return;
-    onClearDayShifts(date);
-  }, [onClearDayShifts]);
+    setPendingClearDay(date);
+  }, []);
+
+  const confirmClearDay = useCallback(async () => {
+    if (!pendingClearDay) return;
+    await onClearDayShifts(pendingClearDay);
+    setPendingClearDay('');
+  }, [onClearDayShifts, pendingClearDay]);
 
   const commitWeekJump = useCallback((rawValue) => {
     const isoDate = parseGreekDateInputToIso(rawValue);
@@ -1066,7 +1123,18 @@ export default function WeeklyGrid({
 
       {dayEditor.open && typeof document !== 'undefined'
         ? createPortal(
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/55 p-2 sm:p-4" role="dialog" aria-modal="true">
+        <div
+          ref={dayEditorDialogRef}
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/55 p-2 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape' && event.key !== 'Esc') return;
+            event.preventDefault();
+            closeDayEditor();
+          }}
+        >
           <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200/60 bg-white/95 shadow-2xl backdrop-blur-md dark:border-cyan-300/30 dark:bg-slate-950/90">
             <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-cyan-300/20">
               <div>
@@ -1352,6 +1420,12 @@ export default function WeeklyGrid({
                   />
                 </label>
 
+                {dayEditorValidationMessage ? (
+                  <div className="sm:col-span-2">
+                    <StateNotice state="error" compact message={dayEditorValidationMessage} />
+                  </div>
+                ) : null}
+
                 <button
                   type="submit"
                   disabled={!canManage || isEditorSaving || isSaving || !dayEditorDraft.employeeId || !dayEditorDraft.date}
@@ -1367,6 +1441,22 @@ export default function WeeklyGrid({
         document.body,
       )
         : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingClearDay)}
+        title="Καθαρισμός ημέρας"
+        message={
+          pendingClearDay
+            ? `Θέλεις να διαγραφούν όλες οι βάρδιες για ${formatDateGreek(pendingClearDay)};`
+            : ''
+        }
+        details="Η ενέργεια αφαιρεί όλες τις βάρδιες της ημέρας."
+        tone="danger"
+        confirmLabel="Ναι, καθαρισμός"
+        onClose={() => setPendingClearDay('')}
+        onConfirm={confirmClearDay}
+        isConfirming={isSaving}
+      />
     </section>
   );
 }

@@ -242,7 +242,11 @@ export const useSchedulerStore = create((set, get) => ({
 
     const unsubscribeTemplates = subscribeShiftTemplates(
       (shiftTemplates) => set({ shiftTemplates }),
-      () => set({ errorMessage: 'Αποτυχία φόρτωσης custom βαρδιών.' }),
+      () =>
+        set({
+          errorMessage:
+            'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.',
+        }),
     );
 
     const unsubscribeAnnouncements = subscribeAnnouncements(

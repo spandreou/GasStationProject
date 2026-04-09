@@ -58,31 +58,31 @@ function humanizeStoreMessage(rawMessage) {
   const normalized = message.toLowerCase();
 
   if (normalized.includes('failed to clear week')) {
-    return 'Ξ”ΞµΞ½ ΞΏΞ»ΞΏΞΊΞ»Ξ·ΟΟΞΈΞ·ΞΊΞµ ΞΏ ΞΊΞ±ΞΈΞ±ΟΞΉΟƒΞΌΟΟ‚ ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ±Ο‚. ΞΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ­ΞΌΞµΞΉΞ½Ξ±Ξ½ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚. Ξ”ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬.';
+    return 'Δεν ολοκληρώθηκε ο καθαρισμός εβδομάδας. Μπορεί να έμειναν βάρδιες. Δοκίμασε ξανά.';
   }
   if (normalized.includes('failed to clear month')) {
-    return 'Ξ”ΞµΞ½ ΞΏΞ»ΞΏΞΊΞ»Ξ·ΟΟΞΈΞ·ΞΊΞµ ΞΏ ΞΊΞ±ΞΈΞ±ΟΞΉΟƒΞΌΟΟ‚ ΞΌΞ®Ξ½Ξ±. ΞΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ­ΞΌΞµΞΉΞ½Ξ±Ξ½ Ξ²Ξ¬ΟΞ΄ΞΉΞµΟ‚. Ξ”ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬.';
+    return 'Δεν ολοκληρώθηκε ο καθαρισμός μήνα. Μπορεί να έμειναν βάρδιες. Δοκίμασε ξανά.';
   }
   if (normalized.includes('failed to create shift')) {
-    return 'Ξ— Ξ²Ξ¬ΟΞ΄ΞΉΞ± Ξ΄ΞµΞ½ Ξ±Ο€ΞΏΞΈΞ·ΞΊΞµΟΟ„Ξ·ΞΊΞµ. ΞΞ»ΞµΞ³ΞΎΞµ Ο„Ξ± ΟƒΟ„ΞΏΞΉΟ‡ΞµΞ―Ξ± ΞΊΞ±ΞΉ Ξ΄ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬.';
+    return 'Η βάρδια δεν αποθηκεύτηκε. Έλεγξε τα στοιχεία και δοκίμασε ξανά.';
   }
   if (normalized.includes('overlapping shift')) {
-    return 'Ξ¥Ο€Ξ¬ΟΟ‡ΞµΞΉ ΞµΟ€ΞΉΞΊΞ¬Ξ»Ο…ΟΞ· Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚ Ξ³ΞΉΞ± Ο„ΞΏΞ½ Ξ―Ξ΄ΞΉΞΏ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏ. Ξ”ΞΉΟΟΞΈΟ‰ΟƒΞµ Ο„ΞΉΟ‚ ΟΟΞµΟ‚ ΞΊΞ±ΞΉ ΞΎΞ±Ξ½Ξ±Ο€ΟΞΏΟƒΟ€Ξ¬ΞΈΞ·ΟƒΞµ.';
+    return 'Υπάρχει επικάλυψη βάρδιας για τον ίδιο υπάλληλο. Διόρθωσε τις ώρες και ξαναπροσπάθησε.';
   }
   if (normalized.includes('this week is locked')) {
-    return 'Ξ— ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ· ΞΌΞµΟ„Ξ¬ Ο„Ξ·Ξ½ ΞΏΟΞΉΟƒΟ„ΞΉΞΊΞΏΟ€ΞΏΞ―Ξ·ΟƒΞ·. Ξ”ΞµΞ½ ΞµΟ€ΞΉΟ„ΟΞ­Ο€ΞΏΞ½Ο„Ξ±ΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚.';
+    return 'Η εβδομάδα είναι κλειδωμένη μετά την οριστικοποίηση. Δεν επιτρέπονται αλλαγές.';
   }
   if (normalized.includes('template') || normalized.includes('custom βαρδι')) {
     return 'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.';
   }
   if (normalized.includes('history')) {
-    return 'Ξ”ΞµΞ½ ΞµΞ½Ξ·ΞΌΞµΟΟΞΈΞ·ΞΊΞµ Ο€Ξ»Ξ®ΟΟ‰Ο‚ Ο„ΞΏ ΞΉΟƒΟ„ΞΏΟΞΉΞΊΟ. ΞΞΉ Ο„ΞµΞ»ΞµΟ…Ο„Ξ±Ξ―ΞµΟ‚ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚ ΞΌΟ€ΞΏΟΞµΞ― Ξ½Ξ± ΞΌΞ·Ξ½ ΞµΞΌΟ†Ξ±Ξ½Ξ―Ξ¶ΞΏΞ½Ο„Ξ±ΞΉ Ξ¬ΞΌΞµΟƒΞ±.';
+    return 'Δεν ενημερώθηκε πλήρως το ιστορικό. Οι τελευταίες αλλαγές μπορεί να μην εμφανίζονται άμεσα.';
   }
   if (normalized.includes('clipboard')) {
-    return 'Ξ”ΞµΞ½ Ξ®Ο„Ξ±Ξ½ Ξ΄Ο…Ξ½Ξ±Ο„Ξ® Ξ· Ξ±Ξ½Ο„ΞΉΞ³ΟΞ±Ο†Ξ® ΟƒΟ„ΞΏ clipboard. ΞΞ»ΞµΞ³ΞΎΞµ Ο„Ξ± Ξ΄ΞΉΞΊΞ±ΞΉΟΞΌΞ±Ο„Ξ± browser ΞΊΞ±ΞΉ Ξ΄ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬.';
+    return 'Δεν ήταν δυνατή η αντιγραφή στο clipboard. Έλεγξε τα δικαιώματα του browser και δοκίμασε ξανά.';
   }
   if (normalized.includes('pdf') || normalized.includes('excel') || normalized.includes('word')) {
-    return 'Ξ— ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ® Ξ±ΟΟ‡ΞµΞ―ΞΏΟ… Ξ±Ο€Ξ­Ο„Ο…Ο‡Ξµ. Ξ”ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬ Ξ® Ξ¬Ξ»Ξ»Ξ±ΞΎΞµ Ο„ΟΟ€ΞΏ ΞµΞΎΞ±Ξ³Ο‰Ξ³Ξ®Ο‚.';
+    return 'Η εξαγωγή αρχείου απέτυχε. Δοκίμασε ξανά ή άλλαξε τύπο εξαγωγής.';
   }
 
   return message;
@@ -396,7 +396,7 @@ export default function MainDashboard() {
     previousWeekFingerprintRef.current = weekFingerprint;
     setHasUnsavedChanges(false);
     setLastSavedAt(new Date());
-    setSyncStatusOverride({ status: 'saved', label: 'Ξ‘Ο€ΞΏΞΈΞ·ΞΊΞµΟ…ΞΌΞ­Ξ½ΞΏ' });
+    setSyncStatusOverride({ status: 'saved', label: 'Αποθηκευμένο' });
   }, [weekFingerprint]);
 
   async function runActionWithFeedback({
@@ -408,18 +408,18 @@ export default function MainDashboard() {
     retryAction,
   }) {
     setActionBusy(actionKey, true);
-    setSyncStatusOverride({ status: 'saving', label: 'Ξ•ΞΊΟ„Ξ­Ξ»ΞµΟƒΞ· ΞµΞ½Ξ­ΟΞ³ΞµΞΉΞ±Ο‚...' });
+    setSyncStatusOverride({ status: 'saving', label: 'Εκτέλεση ενέργειας...' });
 
     try {
       const result = await execute();
       if (result === false || result === null) {
         const failureMessage = humanizeStoreMessage(errorMessageFallback);
-        setSyncStatusOverride({ status: 'error', label: 'Ξ— ΞµΞ½Ξ­ΟΞ³ΞµΞΉΞ± Ξ±Ο€Ξ­Ο„Ο…Ο‡Ξµ' });
+        setSyncStatusOverride({ status: 'error', label: 'Η ενέργεια απέτυχε' });
         pushToast({
           type: 'error',
-          title: 'Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ±',
+          title: 'Αποτυχία',
           message: failureMessage,
-          actionLabel: retryAction ? 'Ξ”ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬' : '',
+          actionLabel: retryAction ? 'Δοκίμασε ξανά' : '',
           onAction: retryAction,
         });
         return false;
@@ -432,17 +432,17 @@ export default function MainDashboard() {
       }
 
       if (successMessage) {
-        pushToast({ type: 'success', title: 'ΞΞ³ΞΉΞ½Ξµ', message: successMessage });
+        pushToast({ type: 'success', title: 'Έγινε', message: successMessage });
       }
       return true;
     } catch (error) {
       const failureMessage = toActionError(error, errorMessageFallback);
-      setSyncStatusOverride({ status: 'error', label: 'Ξ— ΞµΞ½Ξ­ΟΞ³ΞµΞΉΞ± Ξ±Ο€Ξ­Ο„Ο…Ο‡Ξµ' });
+      setSyncStatusOverride({ status: 'error', label: 'Η ενέργεια απέτυχε' });
       pushToast({
         type: 'error',
-        title: 'Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ±',
+        title: 'Αποτυχία',
         message: failureMessage,
-        actionLabel: retryAction ? 'Ξ”ΞΏΞΊΞ―ΞΌΞ±ΟƒΞµ ΞΎΞ±Ξ½Ξ¬' : '',
+        actionLabel: retryAction ? 'Δοκίμασε ξανά' : '',
         onAction: retryAction,
       });
       return false;
@@ -541,7 +541,7 @@ export default function MainDashboard() {
     const { employeeId, date, startTime, endTime, type } = quickAssignDraft;
     if (!employeeId || !date) return;
     if (isWeekEffectivelyLocked) {
-      setWarningMessage('Ξ— ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ·. Ξ”ΞµΞ½ ΞµΟ€ΞΉΟ„ΟΞ­Ο€ΞµΟ„Ξ±ΞΉ Ξ½Ξ­Ξ± Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ·.');
+      setWarningMessage('Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται νέα ανάθεση.');
       return;
     }
 
@@ -560,7 +560,7 @@ export default function MainDashboard() {
       if (!saved) return;
       setQuickAssignDraft((prev) => ({ ...prev, open: false }));
     } catch (error) {
-      setWarningMessage(error?.message || 'Ξ‘Ο€ΞΏΟ„Ο…Ο‡Ξ―Ξ± Ξ±Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·Ο‚ Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ·Ο‚.');
+      setWarningMessage(error?.message || 'Αποτυχία αποθήκευσης ανάθεσης.');
     }
   }
 
@@ -842,7 +842,7 @@ export default function MainDashboard() {
   const showReadOnlyBanner = !isAdmin && !isAdminTransitioning && isFirebaseConfigured && !prioritizedStatusBanner;
 
   if (isLoading || isAuthLoading) {
-    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Ξ¦ΟΟΟ„Ο‰ΟƒΞ· Ο€ΟΞΏΞ³ΟΞ¬ΞΌΞΌΞ±Ο„ΞΏΟ‚...</p>;
+    return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
 
   const dashboardContent = (
@@ -886,10 +886,10 @@ export default function MainDashboard() {
           <MessageBanner
             icon={WifiOff}
             tone="warning"
-            title="Ξ¤ΞΏ Firebase Ξ΄ΞµΞ½ ΞµΞ―Ξ½Ξ±ΞΉ Ξ­Ο„ΞΏΞΉΞΌΞΏ"
-            message={firebaseConfigErrorMessage || 'Ξ— ΟƒΟΞ½Ξ΄ΞµΟƒΞ· ΞΌΞµ Ο„Ξ· Ξ²Ξ¬ΟƒΞ· Ξ΄ΞµΞ½ ΞµΞ―Ξ½Ξ±ΞΉ Ξ΄ΞΉΞ±ΞΈΞ­ΟƒΞΉΞΌΞ·.'}
-            impact="Ξ¤ΞΏ dashboard ΞµΞΌΟ†Ξ±Ξ½Ξ―Ξ¶ΞµΟ„Ξ±ΞΉ, Ξ±Ξ»Ξ»Ξ¬ Ξ΄ΞµΞ΄ΞΏΞΌΞ­Ξ½Ξ± ΞΊΞ±ΞΉ Ξ±Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ· ΞΌΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ»ΞµΞ―Ο€ΞΏΟ…Ξ½."
-            nextAction="ΞΞ»ΞµΞ³ΞΎΞµ Ο„Ξ± env vars ΟƒΟ„ΞΏ local Ξ® ΟƒΟ„ΞΏ deployment environment."
+            title="Το Firebase δεν είναι έτοιμο"
+            message={firebaseConfigErrorMessage || 'Η σύνδεση με τη βάση δεν είναι διαθέσιμη.'}
+            impact="Το dashboard εμφανίζεται, αλλά δεδομένα και αποθήκευση μπορεί να λείπουν."
+            nextAction="Έλεγξε τα env vars στο local ή στο deployment environment."
           />
         ) : null}
 
@@ -897,10 +897,10 @@ export default function MainDashboard() {
           <MessageBanner
             icon={ShieldCheck}
             tone="info"
-            title="Read-only Ο€ΟΟΟƒΞ²Ξ±ΟƒΞ·"
-            message="Ξ¤ΞΏ Ο€ΞµΟΞΉΞ²Ξ¬Ξ»Ξ»ΞΏΞ½ ΞµΞ―Ξ½Ξ±ΞΉ ΟƒΞµ Ο€ΟΞΏΞ²ΞΏΞ»Ξ® Ο‡Ο‰ΟΞ―Ο‚ Ξ΄ΞΉΞΊΞ±Ξ―Ο‰ΞΌΞ± ΞµΟ€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ±Ο‚."
-            impact="Ξ¤Ξ± admin-only actions ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ± ΞΌΞ­Ο‡ΟΞΉ login Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®."
-            nextAction="Ξ‘Ξ½ Ο‡ΟΞµΞΉΞ¬Ξ¶ΞµΟƒΞ±ΞΉ Ξ±Ξ»Ξ»Ξ±Ξ³Ξ­Ο‚, ΞΊΞ¬Ξ½Ξµ ΞµΞ―ΟƒΞΏΞ΄ΞΏ Ο‰Ο‚ Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®Ο‚ Ξ±Ο€Ο Ο„ΞΏ toolbar."
+            title="Read-only πρόσβαση"
+            message="Το περιβάλλον είναι σε προβολή χωρίς δικαίωμα επεξεργασίας."
+            impact="Τα admin-only actions είναι κλειδωμένα μέχρι login διαχειριστή."
+            nextAction="Αν χρειάζεσαι αλλαγές, κάνε είσοδο ως διαχειριστής από το toolbar."
           />
         ) : null}
 
@@ -1054,7 +1054,7 @@ export default function MainDashboard() {
             setIsSidebarOpen(true);
           }}
           className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-white/80 text-slate-900 shadow-xl shadow-slate-900/20 backdrop-blur-md transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-900/85"
-          aria-label="Ξ†Ξ½ΞΏΞΉΞ³ΞΌΞ± sidebar"
+          aria-label="Άνοιγμα sidebar"
         >
           <PanelLeft size={20} />
         </button>
@@ -1065,7 +1065,7 @@ export default function MainDashboard() {
             setIsSidebarOpen(true);
           }}
           className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600"
-          aria-label="Ξ“ΟΞ®Ξ³ΞΏΟΞ· Ο‡ΞµΞΉΟΞΏΞΊΞ―Ξ½Ξ·Ο„Ξ· Ξ²Ξ¬ΟΞ΄ΞΉΞ±"
+          aria-label="Γρήγορη χειροκίνητη βάρδια"
         >
           <Plus size={24} />
         </button>
@@ -1075,7 +1075,7 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ"
+            aria-label="Κλείσιμο"
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -1134,13 +1134,13 @@ export default function MainDashboard() {
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center" role="dialog" aria-modal="true">
           <div className="glass-panel w-full max-w-md rounded-2xl p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Ξ“ΟΞ®Ξ³ΞΏΟΞ· Ξ‘Ξ½Ξ¬ΞΈΞµΟƒΞ·</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Γρήγορη Ανάθεση</h3>
               <button
                 type="button"
                 onClick={() => setQuickAssignDraft((prev) => ({ ...prev, open: false }))}
                 className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ
+                Κλείσιμο
               </button>
             </div>
 
@@ -1151,7 +1151,7 @@ export default function MainDashboard() {
             <form onSubmit={handleQuickAssignSave} className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  ΞΟΞ± ΞΞ½Ξ±ΟΞΎΞ·Ο‚
+                  Ώρα Έναρξης
                   <input
                     type="time"
                     value={quickAssignDraft.startTime}
@@ -1161,7 +1161,7 @@ export default function MainDashboard() {
                   />
                 </label>
                 <label className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                  ΞΟΞ± Ξ›Ξ®ΞΎΞ·Ο‚
+                  Ώρα Λήξης
                   <input
                     type="time"
                     value={quickAssignDraft.endTime}
@@ -1173,16 +1173,16 @@ export default function MainDashboard() {
               </div>
 
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-100">
-                Ξ¤ΟΟ€ΞΏΟ‚
+                Τύπος
                 <select
                   value={quickAssignDraft.type}
                   onChange={(event) => setQuickAssignDraft((prev) => ({ ...prev, type: event.target.value }))}
                   className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 dark:border-cyan-300/45 dark:text-white"
                 >
-                  <option value={SHIFT_TYPES.WORK}>Ξ•ΟΞ³Ξ±ΟƒΞ―Ξ±</option>
-                  <option value={SHIFT_TYPES.REST}>Ξ΅ΞµΟ€Ο</option>
-                  <option value={SHIFT_TYPES.LEAVE}>Ξ†Ξ΄ΞµΞΉΞ±</option>
-                  <option value={SHIFT_TYPES.SICK}>Ξ‘ΟƒΞΈΞ­Ξ½ΞµΞΉΞ±</option>
+                  <option value={SHIFT_TYPES.WORK}>Εργασία</option>
+                  <option value={SHIFT_TYPES.REST}>Ρεπό</option>
+                  <option value={SHIFT_TYPES.LEAVE}>Άδεια</option>
+                  <option value={SHIFT_TYPES.SICK}>Ασθένεια</option>
                 </select>
               </label>
 
@@ -1191,7 +1191,7 @@ export default function MainDashboard() {
                 className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
                 disabled={isSaving || isWeekEffectivelyLocked}
               >
-                {isWeekEffectivelyLocked ? 'Ξ— ΞµΞ²Ξ΄ΞΏΞΌΞ¬Ξ΄Ξ± ΞµΞ―Ξ½Ξ±ΞΉ ΞΊΞ»ΞµΞΉΞ΄Ο‰ΞΌΞ­Ξ½Ξ·' : isSaving ? 'Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·...' : 'Ξ‘Ο€ΞΏΞΈΞ®ΞΊΞµΟ…ΟƒΞ·'}
+                {isWeekEffectivelyLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
               </button>
             </form>
           </div>

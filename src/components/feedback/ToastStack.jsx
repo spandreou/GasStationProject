@@ -1,4 +1,4 @@
-﻿import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { useEffect } from 'react';
 
 const TOAST_STYLES = {
@@ -9,7 +9,7 @@ const TOAST_STYLES = {
   warning:
     'border-amber-300/70 bg-amber-50/95 text-amber-900 dark:border-amber-300/45 dark:bg-amber-500/20 dark:text-amber-100',
   info:
-    'border-slate-300/70 bg-white/90 text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/82 dark:text-slate-100',
+    'border-slate-400/75 bg-slate-100/96 text-slate-950 ring-1 ring-slate-300/60 dark:border-cyan-300/45 dark:bg-slate-900/92 dark:text-slate-50 dark:ring-cyan-300/20',
 };
 
 function ToastIcon({ type }) {
@@ -20,6 +20,8 @@ function ToastIcon({ type }) {
 }
 
 function ToastItem({ toast, onDismiss }) {
+  const isInfoToast = (toast.type || 'info') === 'info';
+
   useEffect(() => {
     if (!Number.isFinite(toast.duration) || toast.duration <= 0) return undefined;
     const timeoutId = setTimeout(() => onDismiss(toast.id), toast.duration);
@@ -36,13 +38,21 @@ function ToastItem({ toast, onDismiss }) {
     >
       <ToastIcon type={toast.type} />
       <div className="min-w-0 flex-1">
-        {toast.title ? <p className="text-xs font-semibold">{toast.title}</p> : null}
-        <p className="text-xs leading-relaxed">{toast.message}</p>
+        {toast.title ? (
+          <p className={`text-xs font-semibold ${isInfoToast ? 'text-slate-950 dark:text-slate-50' : ''}`}>{toast.title}</p>
+        ) : null}
+        <p className={`text-xs leading-relaxed ${isInfoToast ? 'text-slate-900/95 dark:text-slate-100/95' : ''}`}>
+          {toast.message}
+        </p>
         {toast.actionLabel && typeof toast.onAction === 'function' ? (
           <button
             type="button"
             onClick={toast.onAction}
-            className="mt-1 rounded-md border border-current/35 px-2 py-0.5 text-[11px] font-semibold hover:bg-white/35 dark:hover:bg-slate-900/45"
+            className={`mt-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+              isInfoToast
+                ? 'border-slate-500/45 text-slate-900 hover:bg-slate-200/75 dark:border-slate-300/35 dark:text-slate-100 dark:hover:bg-slate-800/65'
+                : 'border-current/35 hover:bg-white/35 dark:hover:bg-slate-900/45'
+            }`}
           >
             {toast.actionLabel}
           </button>
@@ -51,8 +61,12 @@ function ToastItem({ toast, onDismiss }) {
       <button
         type="button"
         onClick={() => onDismiss(toast.id)}
-        className="rounded p-1 text-current/70 transition hover:bg-white/35 hover:text-current dark:hover:bg-slate-900/45"
-        aria-label="Κλείσιμο ειδοποίησης"
+        className={`rounded p-1 transition ${
+          isInfoToast
+            ? 'text-slate-900/85 hover:bg-slate-200/75 hover:text-slate-950 dark:text-slate-100/85 dark:hover:bg-slate-800/65 dark:hover:text-slate-50'
+            : 'text-current/70 hover:bg-white/35 hover:text-current dark:hover:bg-slate-900/45'
+        }`}
+        aria-label="Close notification"
       >
         <X size={13} />
       </button>

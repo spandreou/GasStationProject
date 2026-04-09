@@ -1,4 +1,5 @@
-ï»¿import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { useEffect } from 'react';
 
 const TONE_STYLES = {
   danger:
@@ -20,18 +21,31 @@ export default function ConfirmDialog({
   title,
   message,
   details,
-  confirmLabel = 'Î•Ï€Î¹Î²ÎµÎ²Î±Î¯Ï‰ÏƒÎ·',
-  cancelLabel = 'Î‘ÎºÏÏÏ‰ÏƒÎ·',
+  confirmLabel = 'Åðéâåâáßùóç',
+  cancelLabel = 'Áêýñùóç',
   tone = 'danger',
   isConfirming = false,
   onClose,
   onConfirm,
 }) {
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape' && event.key !== 'Esc') return;
+      event.preventDefault();
+      if (!isConfirming) onClose?.();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isConfirming, onClose, open]);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0" aria-label="ÎšÎ»ÎµÎ¯ÏƒÎ¹Î¼Î¿" onClick={onClose} />
+      <button type="button" className="absolute inset-0" aria-label="Êëåßóéìï" onClick={onClose} />
       <section
         className={`relative w-full max-w-md rounded-2xl border p-4 shadow-2xl backdrop-blur-md ${
           TONE_STYLES[tone] || TONE_STYLES.info
@@ -41,7 +55,7 @@ export default function ConfirmDialog({
           type="button"
           onClick={onClose}
           className="absolute right-3 top-3 rounded p-1 text-current/70 transition hover:bg-white/35 hover:text-current dark:hover:bg-slate-900/45"
-          aria-label="ÎšÎ»ÎµÎ¯ÏƒÎ¹Î¼Î¿ Î´Î¹Î±Î»ÏŒÎ³Î¿Ï…"
+          aria-label="Êëåßóéìï äéáëüãïõ"
         >
           <X size={14} />
         </button>

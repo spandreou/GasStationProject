@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { groupAndSortShiftsByDay } from '../../utils/scheduleUtils';
 import { formatDateGreek } from '../../utils/time';
+import StateNotice from '../feedback/StateNotice';
 
 const HISTORY_WINDOW_SIZE = 7;
 
@@ -175,9 +176,12 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
             );
           })
           ) : (
-            <p className="rounded-lg border border-slate-300/60 bg-white/40 p-3 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-300">
-              Δεν υπάρχουν αποθηκευμένα snapshots εβδομάδων.
-            </p>
+            <StateNotice
+              state="empty"
+              compact
+              title="Δεν υπάρχουν snapshots"
+              message="Δεν έχει αποθηκευτεί ακόμη εβδομαδιαίο ιστορικό."
+            />
           )}
         </div>
 
@@ -219,7 +223,12 @@ export default function WeekHistoryViewer({ isAdmin, weekHistory = [], employees
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-700 dark:text-slate-300">Επίλεξε snapshot για προεπισκόπηση.</p>
+            <StateNotice
+              state="info"
+              compact
+              title="Επίλεξε snapshot"
+              message="Επίλεξε μία εγγραφή από τη λίστα για να δεις λεπτομέρειες βαρδιών."
+            />
           )}
         </div>
       </div>

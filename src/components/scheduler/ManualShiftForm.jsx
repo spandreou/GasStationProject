@@ -104,6 +104,26 @@ export default function ManualShiftForm({ employees, weekDays, onCreateShift, ca
       <p className="mb-2 text-xs text-slate-700 sm:mb-3 sm:text-sm dark:text-slate-300">
         Παραμετροποίηση βάρδιας: τύπος, ώρες, ειδικό ωράριο, σημειώσεις.
       </p>
+      {!canManage ? (
+        <div className="mb-3">
+          <StateNotice
+            state="info"
+            compact
+            title="Read-only προβολή"
+            message="Για δημιουργία ή αλλαγή βαρδιών χρειάζεται σύνδεση διαχειριστή."
+          />
+        </div>
+      ) : null}
+      {!hasEmployees ? (
+        <div className="mb-3">
+          <StateNotice
+            state="warning"
+            compact
+            title="Δεν υπάρχουν υπάλληλοι"
+            message="Πρόσθεσε πρώτα υπάλληλο για να μπορέσεις να δημιουργήσεις βάρδια."
+          />
+        </div>
+      ) : null}
 
       <div className="mb-3 flex flex-wrap gap-2">
         {SHIFT_PRESETS.map((preset) => (

@@ -98,9 +98,11 @@ function classifyStoreFeedback(message) {
   if (!normalized) return 'info';
 
   const successSignals = ['αποθηκε', 'οριστικ', 'ολοκληρ', 'δημοσι', 'φορτώθηκε', 'αντιγράφηκε'];
-  const errorSignals = ['αποτυχ', 'failed', 'error', 'δεν ', 'cannot', 'unable', 'επικάλυψη', 'κλειδω'];
+  const errorSignals = ['αποτυχ', 'failed', 'error', 'cannot', 'unable'];
+  const warningSignals = ['δεν ', 'επικάλυψη', 'κλειδω', 'προσοχή', 'μερικ'];
 
-  if (errorSignals.some((keyword) => normalized.includes(keyword))) return 'warning';
+  if (errorSignals.some((keyword) => normalized.includes(keyword))) return 'error';
+  if (warningSignals.some((keyword) => normalized.includes(keyword))) return 'warning';
   if (successSignals.some((keyword) => normalized.includes(keyword))) return 'success';
   return 'info';
 }
@@ -770,7 +772,14 @@ export default function MainDashboard() {
     const tone = classifyStoreFeedback(warningMessage);
     pushToast({
       type: tone,
-      title: tone === 'success' ? 'Ολοκληρώθηκε' : tone === 'warning' ? 'Προσοχή' : 'Ενημέρωση',
+      title:
+        tone === 'success'
+          ? 'Ολοκληρώθηκε'
+          : tone === 'error'
+            ? 'Αποτυχία'
+            : tone === 'warning'
+              ? 'Προσοχή'
+              : 'Ενημέρωση',
       message: humanizeStoreMessage(warningMessage),
     });
   }, [pushToast, warningMessage]);

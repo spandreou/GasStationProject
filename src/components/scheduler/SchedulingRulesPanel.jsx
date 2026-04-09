@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import StateNotice from '../feedback/StateNotice';
 
 const DAY_OFF_OPTIONS = [
   { value: '', label: 'Χωρίς σταθερό ρεπό' },
@@ -163,6 +164,14 @@ export default function SchedulingRulesPanel({
       </button>
 
       <div className="space-y-2">
+        {!activeEmployees.length ? (
+          <StateNotice
+            state="empty"
+            compact
+            title="Δεν υπάρχουν εργαζόμενοι"
+            message="Πρόσθεσε εργαζόμενους για να ρυθμίσεις προσωπικούς κανόνες προγραμματισμού."
+          />
+        ) : null}
         {activeEmployees.map((employee) => {
           const draft = employeeDraftMap[employee.id] || buildEmployeeRuleDraft(employee);
           return (

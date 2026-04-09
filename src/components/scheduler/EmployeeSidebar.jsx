@@ -1,6 +1,8 @@
 import { Lock, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateGreek } from '../../utils/time';
+import ConfirmDialog from '../feedback/ConfirmDialog';
+import StateNotice from '../feedback/StateNotice';
 import ShiftCard from './ShiftCard';
 import ShiftTemplateCard from './ShiftTemplateCard';
 
@@ -41,6 +43,7 @@ export default function EmployeeSidebar({
 
   const [employeeForm, setEmployeeForm] = useState(defaultEmployeeForm);
   const [templateForm, setTemplateForm] = useState({ ...defaultTemplateForm, date: weekDays?.[0] || '' });
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     setTemplateForm((prev) => ({
@@ -85,18 +88,32 @@ export default function EmployeeSidebar({
     }
   }
 
-  async function handleDeleteEmployee(employee) {
-    const confirmed = window.confirm(
-      `ΞΞ­Ξ»ΞµΞΉΟ‚ Ξ½Ξ± Ξ΄ΞΉΞ±Ξ³ΟΞ¬ΟΞµΞΉΟ‚ Ο„ΞΏΞ½/Ο„Ξ·Ξ½ ${employee.fullName}; ΞΞ± Ξ΄ΞΉΞ±Ξ³ΟΞ±Ο†ΞΏΟΞ½ ΞΊΞ±ΞΉ ΞΏΞΉ Ξ²Ξ¬ΟΞ΄ΞΉΞ­Ο‚ Ο„ΞΏΟ…/Ο„Ξ·Ο‚.`,
-    );
-    if (!confirmed) return;
-    await onDeleteEmployee(employee.id);
+  function askDeleteEmployee(employee) {
+    setConfirmState({
+      tone: 'danger',
+      title: 'Διαγραφή υπαλλήλου',
+      message: `Θέλεις να διαγράψεις τον/την ${employee.fullName};`,
+      details: 'Θα διαγραφούν και οι βάρδιες που συνδέονται με αυτόν τον υπάλληλο. Η ενέργεια δεν αναιρείται από το UI.',
+      confirmLabel: 'Ναι, διαγραφή',
+      action: async () => onDeleteEmployee(employee.id),
+    });
   }
 
-  async function handleDeleteTemplate(template) {
-    const confirmed = window.confirm(`ΞΞ­Ξ»ΞµΞΉΟ‚ Ξ½Ξ± Ξ΄ΞΉΞ±Ξ³ΟΞ¬ΟΞµΞΉΟ‚ Ο„Ξ·Ξ½ ΞΊΞ¬ΟΟ„Ξ± "${template.label}";`);
-    if (!confirmed) return;
-    await onDeleteShiftTemplate(template.id);
+  function askDeleteTemplate(template) {
+    setConfirmState({
+      tone: 'danger',
+      title: 'Διαγραφή κάρτας βάρδιας',
+      message: `Θέλεις να διαγράψεις την κάρτα "${template.label}";`,
+      details: 'Η ενέργεια αφαιρεί την κάρτα από τη λίστα έτοιμων templates και δεν αναιρείται από το UI.',
+      confirmLabel: 'Ναι, διαγραφή',
+      action: async () => onDeleteShiftTemplate(template.id),
+    });
+  }
+
+  async function handleConfirmAction() {
+    if (!confirmState?.action) return;
+    await confirmState.action();
+    setConfirmState(null);
   }
 
   return (
@@ -104,11 +121,22 @@ export default function EmployeeSidebar({
       {showEmployeesBlock ? (
         <>
           <div>
-            <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Ξ¥Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΞΉ</h2>
+            <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Υπάλληλοι</h2>
             <p className="text-xs text-slate-700 sm:text-sm dark:text-slate-300">
-              Ξ£ΟΟΞµ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏ Ο€Ξ¬Ξ½Ο‰ ΟƒΞµ ΞΊΞ¬ΟΟ„Ξ± Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚ ΞΌΞ­ΟƒΞ± ΟƒΟ„ΞΏ grid Ξ³ΞΉΞ± Ξ±Ξ½Ξ¬ΞΈΞµΟƒΞ·.
+              Σύρε υπάλληλο πάνω σε κάρτα βάρδιας μέσα στο grid για ανάθεση.
             </p>
           </div>
+
+          {!isAdmin ? (
+            <StateNotice
+              state="info"
+              compact
+              title="Read-only προβολή"
+              message="Μπορείς να δεις στοιχεία προσωπικού, αλλά όχι να προσθέσεις ή να διαγράψεις υπαλλήλους."
+              actionLabel="Είσοδος διαχειριστή"
+              onAction={onOpenAdminLogin}
+            />
+          ) : null}
 
           <div className="max-h-[220px] space-y-2 overflow-auto pr-1 scrollbar-thin sm:max-h-[260px]">
             {sortedEmployees.map((employee) => (
@@ -122,27 +150,37 @@ export default function EmployeeSidebar({
                   onClick={() => onOpenProfile(employee)}
                   disabled={!isAdmin}
                   className="rounded-lg border border-white/35 bg-white/55 p-2 text-slate-700 backdrop-blur-sm hover:bg-white/80 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Ξ ΟΞΏΟ†Ξ―Ξ» / Ξ•Ο€ΞµΞΎΞµΟΞ³Ξ±ΟƒΞ―Ξ±"
+                  title="Προφίλ / Επεξεργασία"
                 >
                   <Pencil size={15} />
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleDeleteEmployee(employee)}
-                  disabled={!isAdmin}
-                  className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Ξ”ΞΉΞ±Ξ³ΟΞ±Ο†Ξ®"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => askDeleteEmployee(employee)}
+                    className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
+                    title="Διαγραφή"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                ) : null}
               </div>
             ))}
+
+            {!sortedEmployees.length ? (
+              <StateNotice
+                state="empty"
+                compact
+                title="Δεν υπάρχουν υπάλληλοι"
+                message="Πρόσθεσε τον πρώτο υπάλληλο για να ξεκινήσεις αναθέσεις βαρδιών."
+              />
+            ) : null}
           </div>
 
           <form onSubmit={handleEmployeeSubmit} className="glass-soft space-y-2 rounded-xl p-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-800 sm:text-sm dark:text-slate-100">ΞΞ­ΞΏΟ‚ Ο…Ο€Ξ¬Ξ»Ξ»Ξ·Ξ»ΞΏΟ‚</p>
+              <p className="text-xs font-semibold text-slate-800 sm:text-sm dark:text-slate-100">Νέος υπάλληλος</p>
               {!isAdmin ? (
                 <button
                   type="button"
@@ -150,7 +188,7 @@ export default function EmployeeSidebar({
                   className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 sm:text-xs dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
                 >
                   <Lock size={12} />
-                  Ξ•Ξ―ΟƒΞΏΞ΄ΞΏΟ‚ Ξ”ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®
+                  Είσοδος Διαχειριστή
                 </button>
               ) : null}
             </div>
@@ -158,7 +196,7 @@ export default function EmployeeSidebar({
             <input
               value={employeeForm.fullName}
               onChange={(event) => setEmployeeForm((prev) => ({ ...prev, fullName: event.target.value }))}
-              placeholder="ΞΞ½ΞΏΞΌΞ±Ο„ΞµΟ€ΟΞ½Ο…ΞΌΞΏ"
+              placeholder="Ονοματεπώνυμο"
               className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
               required
               disabled={!isAdmin}
@@ -167,13 +205,13 @@ export default function EmployeeSidebar({
             <input
               value={employeeForm.role}
               onChange={(event) => setEmployeeForm((prev) => ({ ...prev, role: event.target.value }))}
-              placeholder="Ξ΅ΟΞ»ΞΏΟ‚ (Ο€.Ο‡. Ξ¤Ξ±ΞΌΞµΞ―ΞΏ)"
+              placeholder="Ρόλος (π.χ. Ταμείο)"
               className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
               disabled={!isAdmin}
             />
 
             <label className="flex items-center justify-between text-[11px] font-medium text-slate-800 sm:text-xs dark:text-slate-200">
-              Ξ§ΟΟΞΌΞ± ΞΊΞ¬ΟΟ„Ξ±Ο‚
+              Χρώμα κάρτας
               <input
                 type="color"
                 value={employeeForm.color}
@@ -189,7 +227,7 @@ export default function EmployeeSidebar({
               disabled={!isAdmin}
             >
               <Plus size={16} />
-              Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ·
+              Προσθήκη
             </button>
           </form>
         </>
@@ -199,8 +237,17 @@ export default function EmployeeSidebar({
         <section className="glass-soft space-y-3 rounded-xl p-3">
           <div className="flex items-center gap-2">
             <Sparkles size={15} className="text-cyan-700 dark:text-pink-300" />
-            <h3 className="text-xs font-bold text-slate-900 sm:text-sm dark:text-white">ΞΞ· Ξ±Ξ½Ξ±Ο„ΞµΞΈΞµΞΉΞΌΞ­Ξ½ΞµΟ‚ ΞΊΞ¬ΟΟ„ΞµΟ‚</h3>
+            <h3 className="text-xs font-bold text-slate-900 sm:text-sm dark:text-white">Μη ανατεθειμένες κάρτες</h3>
           </div>
+
+          {!isAdmin ? (
+            <StateNotice
+              state="info"
+              compact
+              title="Read-only templates"
+              message="Μπορείς να δεις τις κάρτες templates, αλλά η διαχείριση γίνεται μόνο από διαχειριστή."
+            />
+          ) : null}
 
           <div className="max-h-[170px] space-y-2 overflow-auto pr-1 scrollbar-thin sm:max-h-[200px]">
             {pendingTemplates.map((template) => (
@@ -209,27 +256,30 @@ export default function EmployeeSidebar({
                   <ShiftTemplateCard template={template} disabled={!isAdmin} />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleDeleteTemplate(template)}
-                  disabled={!isAdmin}
-                  className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Ξ”ΞΉΞ±Ξ³ΟΞ±Ο†Ξ® ΞΊΞ¬ΟΟ„Ξ±Ο‚"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => askDeleteTemplate(template)}
+                    className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
+                    title="Διαγραφή κάρτας"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                ) : null}
               </div>
             ))}
 
             {!pendingTemplates.length ? (
-              <div className="rounded-lg border border-dashed border-slate-300/70 bg-white/45 px-3 py-2 text-[11px] text-slate-600 sm:text-xs dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-300">
-                <p>Ξ”ΞµΞ½ Ο…Ο€Ξ¬ΟΟ‡ΞΏΟ…Ξ½ Ξ­Ο„ΞΏΞΉΞΌΞµΟ‚ ΞΊΞ¬ΟΟ„ΞµΟ‚.</p>
-                {isAdmin ? (
-                  <p className="mt-1">Ξ¦Ο„ΞΉΞ¬ΞΎΞµ Ξ½Ξ­Ξ± ΞΊΞ¬ΟΟ„Ξ± ΞΊΞ±ΞΉ ΟƒΟΟΞµ Ο„Ξ·Ξ½ ΟƒΟ„Ξ·Ξ½ Ξ·ΞΌΞ­ΟΞ± Ο€ΞΏΟ… ΞΈΞµΟ‚.</p>
-                ) : (
-                  <p className="mt-1">Ξ Ξ΄ΞΉΞ±Ο‡ΞµΞΉΟΞΉΟƒΟ„Ξ®Ο‚ ΞΌΟ€ΞΏΟΞµΞ― Ξ½Ξ± Ξ΄Ξ·ΞΌΞΉΞΏΟ…ΟΞ³Ξ®ΟƒΞµΞΉ Ξ½Ξ­ΞµΟ‚ ΞΊΞ¬ΟΟ„ΞµΟ‚.</p>
-                )}
-              </div>
+              <StateNotice
+                state="empty"
+                compact
+                title="Δεν υπάρχουν έτοιμες κάρτες"
+                message={
+                  isAdmin
+                    ? 'Δημιούργησε νέα κάρτα και σύρε την στην ημέρα που θέλεις.'
+                    : 'Όταν δημιουργηθούν νέες κάρτες από διαχειριστή, θα εμφανιστούν εδώ.'
+                }
+              />
             ) : null}
           </div>
 
@@ -237,19 +287,19 @@ export default function EmployeeSidebar({
             onSubmit={handleTemplateSubmit}
             className="space-y-2 rounded-lg border border-cyan-300/45 bg-cyan-50/55 p-2.5 dark:border-pink-300/35 dark:bg-slate-900/45"
           >
-            <p className="text-[11px] font-semibold text-slate-800 sm:text-xs dark:text-slate-100">ΞΞ­Ξ± ΞΊΞ¬ΟΟ„Ξ± Ξ²Ξ¬ΟΞ΄ΞΉΞ±Ο‚</p>
+            <p className="text-[11px] font-semibold text-slate-800 sm:text-xs dark:text-slate-100">Νέα κάρτα βάρδιας</p>
 
             <input
               value={templateForm.label}
               onChange={(event) => setTemplateForm((prev) => ({ ...prev, label: event.target.value }))}
-              placeholder="ΞΞ½ΞΏΞΌΞ± (Ο€.Ο‡. Ξ Ξ»ΟΟƒΞΉΞΌΞΏ)"
+              placeholder="Όνομα (π.χ. Πλύσιμο)"
               className="input-glass w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] text-slate-900 outline-none ring-brand-300/50 transition placeholder:text-slate-700 focus:ring-2 sm:text-sm dark:border-cyan-300/45 dark:text-white dark:placeholder:text-slate-300"
               disabled={!isAdmin}
               required
             />
 
             <label className="block text-[11px] font-medium text-slate-800 sm:text-xs dark:text-slate-100">
-              Ξ—ΞΌΞµΟΞΏΞΌΞ·Ξ½Ξ―Ξ±
+              Ημερομηνία
               <select
                 value={templateForm.date}
                 onChange={(event) => setTemplateForm((prev) => ({ ...prev, date: event.target.value }))}
@@ -290,11 +340,22 @@ export default function EmployeeSidebar({
               disabled={!isAdmin}
             >
               <Plus size={16} />
-              Ξ ΟΞΏΟƒΞΈΞ®ΞΊΞ· Ξ ΟΞΏΟ„ΟΟ€ΞΏΟ…
+              Προσθήκη Προτύπου
             </button>
           </form>
         </section>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title || ''}
+        message={confirmState?.message || ''}
+        details={confirmState?.details || ''}
+        tone={confirmState?.tone || 'danger'}
+        confirmLabel={confirmState?.confirmLabel || 'Ναι, συνέχισε'}
+        onClose={() => setConfirmState(null)}
+        onConfirm={handleConfirmAction}
+      />
     </aside>
   );
 }

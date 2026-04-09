@@ -1,4 +1,5 @@
 import { Clock3 } from 'lucide-react';
+import StateNotice from '../feedback/StateNotice';
 
 export default function AnalyticsPanel({
   employees,
@@ -68,9 +69,11 @@ export default function AnalyticsPanel({
       </div>
 
       {!hasEmployees ? (
-        <div className="rounded-xl border border-dashed border-slate-300/70 bg-white/45 p-3 text-xs text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/35 dark:text-slate-300">
-          Δεν υπάρχουν υπάλληλοι για να εμφανιστούν στατιστικά.
-        </div>
+        <StateNotice
+          state="empty"
+          title="Δεν υπάρχουν στατιστικά ακόμα"
+          message="Πρόσθεσε υπαλλήλους και βάρδιες για να εμφανιστούν συγκεντρωτικά στοιχεία."
+        />
       ) : (
         <div className="space-y-2">
           {employees.map((employee) => {

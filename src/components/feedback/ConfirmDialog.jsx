@@ -21,8 +21,8 @@ export default function ConfirmDialog({
   title,
   message,
   details,
-  confirmLabel = 'Επιβεβαίωση',
-  cancelLabel = 'Ακύρωση',
+  confirmLabel = 'Ξ•Ο€ΞΉΞ²ΞµΞ²Ξ±Ξ―Ο‰ΟƒΞ·',
+  cancelLabel = 'Ξ‘ΞΊΟΟΟ‰ΟƒΞ·',
   tone = 'danger',
   isConfirming = false,
   onClose,
@@ -45,7 +45,7 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0" aria-label="Κλείσιμο" onClick={onClose} />
+      <button type="button" className="absolute inset-0" aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ" onClick={onClose} />
       <section
         className={`relative w-full max-w-md rounded-2xl border p-4 shadow-2xl backdrop-blur-md ${
           TONE_STYLES[tone] || TONE_STYLES.info
@@ -55,7 +55,7 @@ export default function ConfirmDialog({
           type="button"
           onClick={onClose}
           className="absolute right-3 top-3 rounded p-1 text-current/70 transition hover:bg-white/35 hover:text-current dark:hover:bg-slate-900/45"
-          aria-label="Κλείσιμο διαλόγου"
+          aria-label="ΞΞ»ΞµΞ―ΟƒΞΉΞΌΞΏ Ξ΄ΞΉΞ±Ξ»ΟΞ³ΞΏΟ…"
         >
           <X size={14} />
         </button>

@@ -114,7 +114,7 @@ function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onEx
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 z-[9999] mt-2 min-w-[200px] rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md dark:border-cyan-300/45 dark:bg-slate-900/90">
+        <div className="z-[9999] mt-2 w-full rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md sm:absolute sm:right-0 sm:min-w-[200px] sm:w-auto dark:border-cyan-300/45 dark:bg-slate-900/90">
           <button
             type="button"
             onClick={() => handleAction(onExportWeekPdf)}

@@ -37,6 +37,7 @@ const DEFAULT_WEEK_RULES = {
   fixedDaysOff: {},
 };
 const INTERMEDIATE_EXTRA_WEEKDAYS = new Set([1, 5, 6]); // Mon, Fri, Sat
+const INTERMEDIATE_PRIMARY_WEEKDAYS = new Set([2, 3, 4]); // Tue, Wed, Thu
 const CORE_FIXED_OFF_WEEKDAYS = { coreA: 2, coreB: 3, intermediate: 4 }; // Tue/Wed/Thu
 const PRIMARY_ROLE_OFF_WEEKDAYS = new Set([2, 3, 4]); // Tue/Wed/Thu only
 
@@ -402,6 +403,7 @@ export async function generateSmartWeekSchedule({
     : 'balanced';
 
   const activeEmployees = sortEmployeesByName((employees || []).filter((employee) => employee?.isActive !== false));
+  const hasExactlyFourEmployees = activeEmployees.length === 4;
   if (!activeEmployees.length) {
     return { shifts: [], warnings: ['Δεν βρέθηκαν ενεργοί υπάλληλοι.'] };
   }
@@ -513,6 +515,15 @@ export async function generateSmartWeekSchedule({
     return true;
   }
 
+  function canAssignIntermediateForPattern(employee, weekday, assignedToday, allowOverTarget = false) {
+    if (!employee?.id) return false;
+    if (assignedToday.has(employee.id)) return false;
+    const forceIntermediate = hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
+    if (isOffDay(employee, weekday) && !forceIntermediate) return false;
+    if (!allowOverTarget && !isUnderTarget(employee)) return false;
+    return true;
+  }
+
   function candidateScore(employee, shiftType) {
     const assigned = assignedCountByEmployee[employee.id] || 0;
     const target = targetWorkDaysByEmployee[employee.id] || 99;
@@ -554,12 +565,20 @@ export async function generateSmartWeekSchedule({
     weekday,
     assignedToday,
     allowOverTarget = false,
+    excludedEmployeeIds = null,
   }) {
     if (generationMode === 'manual_assist') {
-      return preferred.find((employee) => canAssignForDay(employee, weekday, assignedToday, allowOverTarget)) || null;
+      return (
+        preferred.find(
+          (employee) =>
+            !(excludedEmployeeIds?.has?.(employee?.id)) &&
+            canAssignForDay(employee, weekday, assignedToday, allowOverTarget),
+        ) || null
+      );
     }
 
     const available = activeEmployees.filter((employee) =>
+      !(excludedEmployeeIds?.has?.(employee?.id)) &&
       canAssignForDay(employee, weekday, assignedToday, allowOverTarget),
     );
 
@@ -576,18 +595,31 @@ export async function generateSmartWeekSchedule({
 
   weekDays.slice(0, 6).forEach((date) => {
     const weekday = toDate(date).getDay();
+    const shouldUseIntermediatePattern =
+      hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
+    const shouldEnforceTwoByTwoCoverage =
+      hasExactlyFourEmployees && INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday);
     const assignedToday = new Set(
       generated
         .filter((shift) => shift.date === date && (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK)
         .map((shift) => shift.employeeId),
     );
 
-    const slotTemplates = [
-      { ...MORNING_SHIFT, slot: 'morning' },
-      { ...EVENING_SHIFT, slot: 'evening' },
-    ];
+    const slotTemplates = shouldEnforceTwoByTwoCoverage
+      ? [
+          { ...MORNING_SHIFT, slot: 'morning' },
+          { ...MORNING_SHIFT, slot: 'morning' },
+          { ...EVENING_SHIFT, slot: 'evening' },
+          { ...EVENING_SHIFT, slot: 'evening' },
+        ]
+      : [
+          { ...MORNING_SHIFT, slot: 'morning' },
+          { ...EVENING_SHIFT, slot: 'evening' },
+        ];
 
     slotTemplates.forEach((slotTemplate) => {
+      const excludedEmployeeIds =
+        shouldUseIntermediatePattern && intermediate?.id ? new Set([intermediate.id]) : null;
       const preferred = slotTemplate.slot === 'morning'
         ? [morningPrimary, eveningPrimary, intermediate]
         : [eveningPrimary, morningPrimary, intermediate];
@@ -598,6 +630,7 @@ export async function generateSmartWeekSchedule({
         weekday,
         assignedToday,
         allowOverTarget: false,
+        excludedEmployeeIds,
       });
 
       if (!selected && generationMode !== 'manual_assist') {
@@ -607,6 +640,7 @@ export async function generateSmartWeekSchedule({
           weekday,
           assignedToday,
           allowOverTarget: true,
+          excludedEmployeeIds,
         });
       }
 
@@ -627,8 +661,8 @@ export async function generateSmartWeekSchedule({
     if (
       generationMode !== 'manual_assist' &&
       intermediate &&
-      INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday) &&
-      canAssignForDay(intermediate, weekday, assignedToday, false)
+      shouldUseIntermediatePattern &&
+      canAssignIntermediateForPattern(intermediate, weekday, assignedToday, false)
     ) {
       const inserted = addShiftForDay({
         employee: intermediate,
@@ -692,6 +726,7 @@ export function generateSmartMonthSchedule({
   const warnings = [];
 
   const activeEmployees = sortEmployeesByName((employees || []).filter((employee) => employee?.isActive !== false));
+  const hasExactlyFourEmployees = activeEmployees.length === 4;
   if (!activeEmployees.length) {
     return { shifts: [], warnings: ['Δεν βρέθηκαν ενεργοί υπάλληλοι.'], meta: { monthDays } };
   }
@@ -727,6 +762,10 @@ export function generateSmartMonthSchedule({
 
   monthDays.forEach((date) => {
     const weekday = toDate(date).getDay();
+    const shouldUseIntermediatePattern =
+      hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
+    const shouldEnforceTwoByTwoCoverage =
+      hasExactlyFourEmployees && INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday);
     const weekIndex = weekIndexByKey[getWeekStartFromDate(date)] || 0;
     const manualDayEntries = manualOverridesByDate.get(date) || [];
     const hasManualForDate = normalizedRules.allowManualOverride && manualDayEntries.length > 0;
@@ -844,13 +883,17 @@ export function generateSmartMonthSchedule({
       }
     });
 
-    if (intermediate) {
+    if (intermediate && (!hasExactlyFourEmployees || shouldUseIntermediatePattern)) {
       const intermediateHasManual = manualDayEntries.some((entry) => entry.employeeId === intermediate.id);
       const fixedOff = fixedOffById[intermediate.id];
-      const isOffDay = typeof fixedOff === 'number' && fixedOff === weekday;
+      const shouldForceIntermediate = hasExactlyFourEmployees && shouldUseIntermediatePattern;
+      const isOffDay = typeof fixedOff === 'number' && fixedOff === weekday && !shouldForceIntermediate;
 
       if (!intermediateHasManual && !isOffDay) {
-        const missingTemplate = missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
+        const missingTemplate =
+          hasExactlyFourEmployees && shouldUseIntermediatePattern
+            ? null
+            : missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
         const template = missingTemplate || getPreferredIntermediateShift(intermediate, weekIndex);
 
         const intermediateShift = buildShiftFromTemplate({
@@ -884,7 +927,36 @@ export function generateSmartMonthSchedule({
     });
 
     additionalEmployees.forEach((employee, slotIndex) => {
-      const template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+      const existingDayEntries = [...manualDayEntries, ...generated.filter((entry) => entry.date === date)];
+      const workEntries = existingDayEntries.filter((entry) => (entry.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK);
+
+      const morningCount = workEntries.filter((entry) => {
+        const shiftType = entry.shiftType || inferShiftTypeFromTimes(entry.startTime, entry.endTime);
+        return shiftType === 'morning';
+      }).length;
+      const eveningCount = workEntries.filter((entry) => {
+        const shiftType = entry.shiftType || inferShiftTypeFromTimes(entry.startTime, entry.endTime);
+        return shiftType === 'evening';
+      }).length;
+
+      let template;
+      if (shouldEnforceTwoByTwoCoverage) {
+        if (morningCount < 2) {
+          template = MORNING_SHIFT;
+        } else if (eveningCount < 2) {
+          template = EVENING_SHIFT;
+        } else {
+          template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+          if (template.shiftType === 'intermediate') {
+            template = (weekIndex + slotIndex) % 2 === 0 ? MORNING_SHIFT : EVENING_SHIFT;
+          }
+        }
+      } else {
+        template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+        if (hasExactlyFourEmployees && shouldUseIntermediatePattern && template.shiftType === 'intermediate') {
+          template = morningCount <= eveningCount ? MORNING_SHIFT : EVENING_SHIFT;
+        }
+      }
       const candidate = buildShiftFromTemplate({
         employee,
         date,

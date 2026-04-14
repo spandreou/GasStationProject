@@ -35,6 +35,7 @@ function buildEmployeeRuleDraft(employee) {
     participatesInRotation: employee.participatesInRotation !== false,
     participatesInSundayRotation: employee.participatesInSundayRotation !== false,
     defaultShiftPreference: employee.defaultShiftPreference || 'auto',
+    weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
   };
 }
 
@@ -283,6 +284,26 @@ export default function SchedulingRulesPanel({
                     disabled={isBusy}
                   />
                   Sunday rotation
+                </label>
+
+                <label className="rounded-lg border border-slate-300/70 bg-white/40 px-3 py-2 text-[11px] text-slate-800 md:col-span-2 dark:border-cyan-300/35 dark:bg-slate-900/40 dark:text-slate-200">
+                  <span className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(draft.weeklyFixedShiftSideRotation)}
+                      onChange={(event) =>
+                        setEmployeeDraftMap((prev) => ({
+                          ...prev,
+                          [employee.id]: { ...draft, weeklyFixedShiftSideRotation: event.target.checked },
+                        }))
+                      }
+                      disabled={isBusy}
+                    />
+                    Σταθερή βάρδια ανά εβδομάδα (εναλλάξ πρωί/απόγευμα)
+                  </span>
+                  <span className="mt-1 block text-[10px] text-slate-600 dark:text-slate-300/90">
+                    Μία εβδομάδα μόνο πρωί και την επόμενη μόνο απόγευμα.
+                  </span>
                 </label>
               </div>
             </article>

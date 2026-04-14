@@ -15,6 +15,7 @@ export default function AnalyticsPanel({
   workBreakdownByEmployee = {},
 }) {
   const isMonthMode = mode === 'month';
+  const restLabel = isMonthMode ? 'Ρεπό μήνα' : 'Ρεπό εβδομάδας';
   const monthLabel = new Intl.DateTimeFormat('el-GR', { month: 'long', year: 'numeric' }).format(
     new Date(selectedYear || new Date().getFullYear(), selectedMonth ?? new Date().getMonth(), 1),
   );
@@ -60,7 +61,7 @@ export default function AnalyticsPanel({
       </div>
 
       <div className="mb-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4 sm:text-xs">
-        <div className="rounded-md bg-slate-500/50 px-2 py-1 text-white">Ρεπό: {totalsByType?.restDays || 0}</div>
+        <div className="rounded-md bg-slate-500/50 px-2 py-1 text-white">{restLabel}: {totalsByType?.restDays || 0}</div>
         <div className="rounded-md bg-orange-500/50 px-2 py-1 text-white">Άδειες: {totalsByType?.leaveDays || 0}</div>
         <div className="rounded-md bg-red-500/50 px-2 py-1 text-white">Ασθένειες: {totalsByType?.sickDays || 0}</div>
         <div className="rounded-md bg-indigo-500/50 px-2 py-1 text-white">
@@ -103,8 +104,8 @@ export default function AnalyticsPanel({
                   {breakdown.custom || 0}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
-                  Ρεπό: {leave.restDays} | Άδεια: {leave.leaveDays} | Ασθένεια: {leave.sickDays} | Κυριακές εκτός
-                  εργασίας: {leave.nonWorkingSundays || 0}
+                  {restLabel}: {leave.restDays} | Άδεια: {leave.leaveDays} | Ασθένεια: {leave.sickDays} | Κυριακές
+                  εκτός εργασίας: {leave.nonWorkingSundays || 0}
                 </p>
                 {leave.inferredRestDays > 0 ? (
                   <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-400">

@@ -601,6 +601,7 @@ export const useSchedulerStore = create((set, get) => ({
         participatesInRotation: true,
         participatesInSundayRotation: true,
         defaultShiftPreference: 'auto',
+        weeklyFixedShiftSideRotation: false,
       });
       set({ warningMessage: 'Ο υπάλληλος προστέθηκε.' });
       return true;
@@ -642,6 +643,7 @@ export const useSchedulerStore = create((set, get) => ({
     participatesInRotation,
     participatesInSundayRotation,
     defaultShiftPreference,
+    weeklyFixedShiftSideRotation,
   }) => {
     if (!requireAdmin(get, set)) return false;
     if (!employeeId) return false;
@@ -659,6 +661,7 @@ export const useSchedulerStore = create((set, get) => ({
         participatesInRotation: Boolean(participatesInRotation),
         participatesInSundayRotation: participatesInSundayRotation !== false,
         defaultShiftPreference: defaultShiftPreference || 'auto',
+        weeklyFixedShiftSideRotation: weeklyFixedShiftSideRotation === true,
       });
 
       set({ warningMessage: 'Οι κανόνες εργαζομένου ενημερώθηκαν.' });

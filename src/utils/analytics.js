@@ -46,10 +46,17 @@ function getDefaultDayStatus() {
   };
 }
 
+function resolveNonWorkingCategory(dayStatus) {
+  if (dayStatus.hasSick) return SHIFT_TYPES.SICK;
+  if (dayStatus.hasLeave) return SHIFT_TYPES.LEAVE;
+  if (dayStatus.hasRest) return SHIFT_TYPES.REST;
+  return '';
+}
+
 export function calculateWeeklyTotals(shifts, employees, weekDays) {
   const visibleDays = [...new Set((weekDays || []).filter(Boolean))];
   const visibleSet = new Set(visibleDays);
-  const isWeeklyRange = visibleDays.length === 7;
+  const hasAnyEntryByDate = Object.fromEntries(visibleDays.map((date) => [date, false]));
 
   const totalsByEmployee = employees.reduce((acc, employee) => {
     acc[employee.id] = 0;
@@ -92,6 +99,7 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
 
   (shifts || []).forEach((shift) => {
     if (!visibleSet.has(shift.date)) return;
+    hasAnyEntryByDate[shift.date] = true;
 
     const employeeId = shift.employeeId;
     if (!employeeId || !Object.prototype.hasOwnProperty.call(totalsByEmployee, employeeId)) return;
@@ -136,7 +144,8 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     const employeeId = employee.id;
     const employeeDayStatus = dayStatusByEmployee[employeeId] || {};
 
-    let explicitRestNonSunday = 0;
+    let explicitRestDays = 0;
+    let inferredRestDays = 0;
     let leaveDays = 0;
     let sickDays = 0;
     let nonWorkingSundays = 0;
@@ -145,16 +154,17 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
       const dayStatus = employeeDayStatus[date] || getDefaultDayStatus();
       const hasWork = Boolean(dayStatus.hasWork);
 
-      // Priority for non-working categories: sick > leave > rest.
       if (!hasWork) {
-        if (dayStatus.hasSick) {
+        const nonWorkingCategory = resolveNonWorkingCategory(dayStatus);
+        if (nonWorkingCategory === SHIFT_TYPES.SICK) {
           sickDays += 1;
-        } else if (dayStatus.hasLeave) {
+        } else if (nonWorkingCategory === SHIFT_TYPES.LEAVE) {
           leaveDays += 1;
-        } else if (dayStatus.hasRest) {
-          if (!isSundayDate(date)) {
-            explicitRestNonSunday += 1;
-          }
+        } else if (nonWorkingCategory === SHIFT_TYPES.REST) {
+          explicitRestDays += 1;
+        } else if (!isSundayDate(date) && hasAnyEntryByDate[date]) {
+          // Treat empty assignment as inferred rest only when the day has schedule activity.
+          inferredRestDays += 1;
         }
       }
 
@@ -163,15 +173,8 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
       }
     });
 
-    let inferredRestDays = 0;
-    if (isWeeklyRange && explicitRestNonSunday < 1) {
-      inferredRestDays = 1 - explicitRestNonSunday;
-    }
-
-    // Weekly business rule:
-    // - 1 regular rest day inside the week (explicit or inferred)
-    // - +1 additional rest if employee does not work on Sunday.
-    const restDays = explicitRestNonSunday + inferredRestDays + nonWorkingSundays;
+    const weekdayRestDays = explicitRestDays + inferredRestDays;
+    const restDays = weekdayRestDays > 0 ? weekdayRestDays : nonWorkingSundays;
 
     leaveDaysByEmployee[employeeId] = {
       restDays,
@@ -201,4 +204,3 @@ export function calculateWeeklyTotals(shifts, employees, weekDays) {
     totalsByType,
   };
 }
-

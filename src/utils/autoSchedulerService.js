@@ -228,6 +228,32 @@ function getIntermediateShiftByWeek(weekIndex) {
   return weekIndex % 2 === 0 ? INTERMEDIATE_SHIFT_A : INTERMEDIATE_SHIFT_B;
 }
 
+function usesWeeklyFixedShiftSideRotation(employee) {
+  return employee?.weeklyFixedShiftSideRotation === true;
+}
+
+function resolveWeeklyShiftSideTemplate(employee, weekIndex) {
+  if (!usesWeeklyFixedShiftSideRotation(employee)) return null;
+  return weekIndex % 2 === 0 ? MORNING_SHIFT : EVENING_SHIFT;
+}
+
+function respectsWeeklyShiftSideRule(employee, weekIndex, shiftType) {
+  const weeklyTemplate = resolveWeeklyShiftSideTemplate(employee, weekIndex);
+  if (!weeklyTemplate) return true;
+  if (shiftType !== 'morning' && shiftType !== 'evening') return false;
+  return weeklyTemplate.shiftType === shiftType;
+}
+
+function applyWeeklyShiftSideTemplate(employee, weekIndex, template, { preserveCoverage = false } = {}) {
+  if (!template || preserveCoverage) return template;
+  const weeklyTemplate = resolveWeeklyShiftSideTemplate(employee, weekIndex);
+  if (!weeklyTemplate) return template;
+  if (template.shiftType !== 'morning' && template.shiftType !== 'evening' && template.shiftType !== 'intermediate') {
+    return template;
+  }
+  return weeklyTemplate;
+}
+
 function getPreferredIntermediateShift(employee, weekIndex) {
   const preference = `${employee?.defaultShiftPreference || ''}`.toLowerCase();
   if (preference === 'morning') return MORNING_SHIFT;
@@ -536,6 +562,9 @@ export async function generateSmartWeekSchedule({
     if (shiftType === 'intermediate' && (preference === 'intermediate_0900' || preference === 'intermediate_1000')) {
       score -= 0.15;
     }
+    if (!respectsWeeklyShiftSideRule(employee, weekIndex, shiftType)) {
+      score += 12;
+    }
     return score;
   }
 
@@ -567,20 +596,24 @@ export async function generateSmartWeekSchedule({
     allowOverTarget = false,
     excludedEmployeeIds = null,
   }) {
+    const canAssignWithRule = (employee, ignoreWeeklyRule = false) => (
+      !(excludedEmployeeIds?.has?.(employee?.id)) &&
+      canAssignForDay(employee, weekday, assignedToday, allowOverTarget) &&
+      (ignoreWeeklyRule || respectsWeeklyShiftSideRule(employee, weekIndex, slotTemplate.shiftType))
+    );
+
     if (generationMode === 'manual_assist') {
       return (
-        preferred.find(
-          (employee) =>
-            !(excludedEmployeeIds?.has?.(employee?.id)) &&
-            canAssignForDay(employee, weekday, assignedToday, allowOverTarget),
-        ) || null
+        preferred.find((employee) => canAssignWithRule(employee, false))
+        || preferred.find((employee) => canAssignWithRule(employee, true))
+        || null
       );
     }
 
-    const available = activeEmployees.filter((employee) =>
-      !(excludedEmployeeIds?.has?.(employee?.id)) &&
-      canAssignForDay(employee, weekday, assignedToday, allowOverTarget),
-    );
+    const strictAvailable = activeEmployees.filter((employee) => canAssignWithRule(employee, false));
+    const available = strictAvailable.length
+      ? strictAvailable
+      : activeEmployees.filter((employee) => canAssignWithRule(employee, true));
 
     available.sort((a, b) => {
       const scoreDiff = candidateScore(a, slotTemplate.shiftType) - candidateScore(b, slotTemplate.shiftType);
@@ -844,8 +877,8 @@ export function generateSmartMonthSchedule({
     const missingCoreTypes = [];
 
     const corePlan = [
-      { employee: coreA, template: coreAShift },
-      { employee: coreB, template: coreBShift },
+      { employee: coreA, template: applyWeeklyShiftSideTemplate(coreA, weekIndex, coreAShift) },
+      { employee: coreB, template: applyWeeklyShiftSideTemplate(coreB, weekIndex, coreBShift) },
     ];
 
     corePlan.forEach(({ employee, template }) => {
@@ -894,7 +927,10 @@ export function generateSmartMonthSchedule({
           hasExactlyFourEmployees && shouldUseIntermediatePattern
             ? null
             : missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
-        const template = missingTemplate || getPreferredIntermediateShift(intermediate, weekIndex);
+        const intermediateTemplate = missingTemplate || getPreferredIntermediateShift(intermediate, weekIndex);
+        const template = shouldForceIntermediate
+          ? intermediateTemplate
+          : applyWeeklyShiftSideTemplate(intermediate, weekIndex, intermediateTemplate);
 
         const intermediateShift = buildShiftFromTemplate({
           employee: intermediate,
@@ -957,6 +993,10 @@ export function generateSmartMonthSchedule({
           template = morningCount <= eveningCount ? MORNING_SHIFT : EVENING_SHIFT;
         }
       }
+      const preserveCoverage =
+        shouldEnforceTwoByTwoCoverage &&
+        ((template.shiftType === 'morning' && morningCount < 2) || (template.shiftType === 'evening' && eveningCount < 2));
+      template = applyWeeklyShiftSideTemplate(employee, weekIndex, template, { preserveCoverage });
       const candidate = buildShiftFromTemplate({
         employee,
         date,

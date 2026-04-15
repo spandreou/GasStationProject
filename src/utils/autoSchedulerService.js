@@ -39,7 +39,6 @@ const DEFAULT_WEEK_RULES = {
 const INTERMEDIATE_EXTRA_WEEKDAYS = new Set([1, 5, 6]); // Mon, Fri, Sat
 const INTERMEDIATE_PRIMARY_WEEKDAYS = new Set([2, 3, 4]); // Tue, Wed, Thu
 const CORE_FIXED_OFF_WEEKDAYS = { coreA: 2, coreB: 3, intermediate: 4 }; // Tue/Wed/Thu
-const PRIMARY_ROLE_OFF_WEEKDAYS = new Set([2, 3, 4]); // Tue/Wed/Thu only
 
 function shiftKey(shift) {
   return `${shift.date}_${shift.employeeId}_${shift.startTime}_${shift.endTime}_${shift.type || SHIFT_TYPES.WORK}`;
@@ -207,12 +206,100 @@ function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   return { coreA, coreB, intermediate };
 }
 
+const WEEKDAY_NAME_TO_INDEX = new Map([
+  ['κυριακη', 0],
+  ['δευτερα', 1],
+  ['τριτη', 2],
+  ['τεταρτη', 3],
+  ['πεμπτη', 4],
+  ['παρασκευη', 5],
+  ['σαββατο', 6],
+  ['sunday', 0],
+  ['monday', 1],
+  ['tuesday', 2],
+  ['wednesday', 3],
+  ['thursday', 4],
+  ['friday', 5],
+  ['saturday', 6],
+]);
+
+function normalizeWeekdayToken(value) {
+  return `${value || ''}`
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
+function normalizeDayIndex(value) {
+  if (value === '' || value === null || typeof value === 'undefined') return null;
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value >= 0 && value <= 6 ? value : null;
+  }
+
+  const token = normalizeWeekdayToken(value);
+  if (!token) return null;
+
+  if (/^\d+$/.test(token)) {
+    const numeric = Number(token);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 6 ? numeric : null;
+  }
+
+  return WEEKDAY_NAME_TO_INDEX.get(token) ?? null;
+}
+
+function normalizeDayList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeDayIndex(item)).filter((item) => item !== null);
+  }
+
+  if (value && typeof value === 'object') {
+    const resolved = [];
+    Object.entries(value).forEach(([key, flag]) => {
+      if (!flag) return;
+      const parsed = normalizeDayIndex(key);
+      if (parsed !== null) resolved.push(parsed);
+    });
+    return resolved;
+  }
+
+  if (typeof value === 'string' && /[,;|]/.test(value)) {
+    return value
+      .split(/[,;|]/)
+      .map((item) => normalizeDayIndex(item))
+      .filter((item) => item !== null);
+  }
+
+  const single = normalizeDayIndex(value);
+  return single === null ? [] : [single];
+}
+
 function getFixedDayOff(employee, fallbackValue, rules) {
   const explicit = rules.fixedDaysOff?.[employee?.id];
   const employeeLevel = employee?.fixedDayOff;
-  if (typeof explicit === 'number') return explicit;
-  if (typeof employeeLevel === 'number') return employeeLevel;
-  return fallbackValue;
+
+  const explicitDay = normalizeDayIndex(explicit);
+  if (explicitDay !== null) return explicitDay;
+
+  const employeeDay = normalizeDayIndex(employeeLevel);
+  if (employeeDay !== null) return employeeDay;
+
+  const fallbackDay = normalizeDayIndex(fallbackValue);
+  return fallbackDay;
+}
+
+function hasFixedDayOffOnWeekday(employee, weekday, rules) {
+  const explicit = rules?.fixedDaysOff?.[employee?.id];
+  const explicitDays = normalizeDayList(explicit);
+  if (explicitDays.includes(weekday)) return true;
+
+  const employeeDays = normalizeDayList(employee?.fixedDaysOff);
+  if (employeeDays.includes(weekday)) return true;
+
+  const employeeDay = normalizeDayIndex(employee?.fixedDayOff);
+  if (employeeDay === weekday) return true;
+
+  return false;
 }
 
 function buildWeekRotationIndex(monthDays) {
@@ -443,24 +530,8 @@ export async function generateSmartWeekSchedule({
   }
 
   const fixedOffById = {};
-  const roleDefaultOffById = new Map();
-  if (coreA?.id) roleDefaultOffById.set(coreA.id, CORE_FIXED_OFF_WEEKDAYS.coreA);
-  if (coreB?.id) roleDefaultOffById.set(coreB.id, CORE_FIXED_OFF_WEEKDAYS.coreB);
-  if (intermediate?.id) roleDefaultOffById.set(intermediate.id, CORE_FIXED_OFF_WEEKDAYS.intermediate);
   activeEmployees.forEach((employee) => {
-    const roleFallback = roleDefaultOffById.has(employee.id) ? roleDefaultOffById.get(employee.id) : null;
-    let resolved = getFixedDayOff(employee, roleFallback, normalizedRules);
-
-    if (
-      roleDefaultOffById.has(employee.id) &&
-      typeof resolved === 'number' &&
-      !PRIMARY_ROLE_OFF_WEEKDAYS.has(resolved)
-    ) {
-      resolved = roleFallback;
-      warnings.push(
-        `Το ρεπό για ${employee.fullName} ευθυγραμμίστηκε σε Τρίτη/Τετάρτη/Πέμπτη για το weekly auto mode.`,
-      );
-    }
+    let resolved = getFixedDayOff(employee, null, normalizedRules);
 
     if (typeof resolved === 'number' && resolved >= 0 && resolved <= 6) {
       fixedOffById[employee.id] = resolved;
@@ -502,11 +573,11 @@ export async function generateSmartWeekSchedule({
     if (countDiff !== 0) return countDiff;
     return (a.fullName || '').localeCompare(b.fullName || '', 'el');
   });
-  const sundayEmployee = sundayCandidates[0] || activeEmployees[0];
-  if (sundayEmployee && fixedOffById[sundayEmployee.id] === 0) {
-    // Keep Sunday assignment valid when a Sunday fixed-off is accidentally configured.
-    delete fixedOffById[sundayEmployee.id];
+  const sundayAvailable = sundayCandidates.filter((employee) => !hasFixedDayOffOnWeekday(employee, 0, normalizedRules));
+  if (!sundayAvailable.length) {
+    warnings.push('Δεν βρέθηκε διαθέσιμος υπάλληλος για Κυριακή χωρίς να παραβιαστεί σταθερό ρεπό.');
   }
+  const sundayEmployee = sundayAvailable[0] || null;
 
   const assignedCountByEmployee = Object.fromEntries(activeEmployees.map((employee) => [employee.id, 0]));
   const targetWorkDaysByEmployee = Object.fromEntries(
@@ -524,6 +595,7 @@ export async function generateSmartWeekSchedule({
 
   function isOffDay(employee, weekday) {
     if (!employee?.id) return false;
+    if (hasFixedDayOffOnWeekday(employee, weekday, normalizedRules)) return true;
     return fixedOffById[employee.id] === weekday;
   }
 
@@ -544,8 +616,7 @@ export async function generateSmartWeekSchedule({
   function canAssignIntermediateForPattern(employee, weekday, assignedToday, allowOverTarget = false) {
     if (!employee?.id) return false;
     if (assignedToday.has(employee.id)) return false;
-    const forceIntermediate = hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
-    if (isOffDay(employee, weekday) && !forceIntermediate) return false;
+    if (isOffDay(employee, weekday)) return false;
     if (!allowOverTarget && !isUnderTarget(employee)) return false;
     return true;
   }
@@ -626,17 +697,160 @@ export async function generateSmartWeekSchedule({
     return available[0] || null;
   }
 
+  function pickIntermediateCoverageEmployee(availableEmployees, weekday, assignedToday) {
+    if (!availableEmployees.length) return null;
+
+    const ranked = [...availableEmployees].sort((a, b) => {
+      const designatedA = a.id === intermediate?.id;
+      const designatedB = b.id === intermediate?.id;
+      if (designatedA !== designatedB) return designatedA ? -1 : 1;
+
+      const roleA = normalizeRole(a.scheduleRole || a.roleType) === 'intermediate';
+      const roleB = normalizeRole(b.scheduleRole || b.roleType) === 'intermediate';
+      if (roleA !== roleB) return roleA ? -1 : 1;
+
+      const scoreDiff = candidateScore(a, 'intermediate') - candidateScore(b, 'intermediate');
+      if (scoreDiff !== 0) return scoreDiff;
+      return (a.fullName || '').localeCompare(b.fullName || '', 'el');
+    });
+
+    const strict = ranked.find((employee) =>
+      canAssignIntermediateForPattern(employee, weekday, assignedToday, false),
+    );
+    if (strict) return strict;
+
+    return (
+      ranked.find((employee) => canAssignIntermediateForPattern(employee, weekday, assignedToday, true)) || null
+    );
+  }
+
   weekDays.slice(0, 6).forEach((date) => {
     const weekday = toDate(date).getDay();
-    const shouldUseIntermediatePattern =
-      hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
-    const shouldEnforceTwoByTwoCoverage =
-      hasExactlyFourEmployees && INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday);
     const assignedToday = new Set(
       generated
         .filter((shift) => shift.date === date && (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK)
         .map((shift) => shift.employeeId),
     );
+    const availableEmployees = activeEmployees.filter((employee) => !isOffDay(employee, weekday));
+    const shouldUseIntermediatePattern = false;
+    const shouldEnforceTwoByTwoCoverage = hasExactlyFourEmployees && availableEmployees.length === 4;
+
+    // Coverage priority: when exactly 3 employees are available, enforce 1 morning + 1 intermediate + 1 evening.
+    if (availableEmployees.length === 3) {
+      const intermediateEmployee = pickIntermediateCoverageEmployee(availableEmployees, weekday, assignedToday);
+
+      if (intermediateEmployee) {
+        const insertedIntermediate = addShiftForDay({
+          employee: intermediateEmployee,
+          date,
+          template: getPreferredIntermediateShift(intermediateEmployee, weekIndex),
+          notes: 'Auto-generated 3-employee coverage',
+        });
+        if (insertedIntermediate) assignedToday.add(intermediateEmployee.id);
+      } else {
+        warnings.push(`Ακάλυπτη ενδιάμεση βάρδια στις ${formatDateGreek(date)}.`);
+      }
+
+      const excludedEmployeeIds = intermediateEmployee?.id ? new Set([intermediateEmployee.id]) : null;
+      [
+        { ...MORNING_SHIFT, slot: 'morning' },
+        { ...EVENING_SHIFT, slot: 'evening' },
+      ].forEach((slotTemplate) => {
+        const preferred = slotTemplate.slot === 'morning'
+          ? [morningPrimary, eveningPrimary, intermediate]
+          : [eveningPrimary, morningPrimary, intermediate];
+
+        let selected = pickSlotCandidate({
+          slotTemplate,
+          preferred,
+          weekday,
+          assignedToday,
+          allowOverTarget: false,
+          excludedEmployeeIds,
+        });
+
+        if (!selected) {
+          selected = pickSlotCandidate({
+            slotTemplate,
+            preferred,
+            weekday,
+            assignedToday,
+            allowOverTarget: true,
+            excludedEmployeeIds,
+          });
+        }
+
+        if (!selected && excludedEmployeeIds?.size) {
+          selected = pickSlotCandidate({
+            slotTemplate,
+            preferred,
+            weekday,
+            assignedToday,
+            allowOverTarget: true,
+            excludedEmployeeIds: null,
+          });
+        }
+
+        if (!selected) {
+          warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${formatDateGreek(date)}.`);
+          return;
+        }
+
+        const inserted = addShiftForDay({
+          employee: selected,
+          date,
+          template: slotTemplate,
+          notes: 'Auto-generated 3-employee coverage',
+        });
+        if (inserted) assignedToday.add(selected.id);
+      });
+      return;
+    }
+
+    // Safe fallback: when 2 employees are available, prioritize one morning and one evening shift.
+    if (availableEmployees.length === 2) {
+      [
+        { ...MORNING_SHIFT, slot: 'morning' },
+        { ...EVENING_SHIFT, slot: 'evening' },
+      ].forEach((slotTemplate) => {
+        const preferred = slotTemplate.slot === 'morning'
+          ? [morningPrimary, eveningPrimary, intermediate]
+          : [eveningPrimary, morningPrimary, intermediate];
+
+        let selected = pickSlotCandidate({
+          slotTemplate,
+          preferred,
+          weekday,
+          assignedToday,
+          allowOverTarget: false,
+          excludedEmployeeIds: null,
+        });
+        if (!selected) {
+          selected = pickSlotCandidate({
+            slotTemplate,
+            preferred,
+            weekday,
+            assignedToday,
+            allowOverTarget: true,
+            excludedEmployeeIds: null,
+          });
+        }
+
+        if (!selected) {
+          warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${formatDateGreek(date)}.`);
+          return;
+        }
+
+        const inserted = addShiftForDay({
+          employee: selected,
+          date,
+          template: slotTemplate,
+          notes: 'Auto-generated 2-employee fallback coverage',
+        });
+        if (inserted) assignedToday.add(selected.id);
+      });
+      return;
+    }
 
     const slotTemplates = shouldEnforceTwoByTwoCoverage
       ? [
@@ -833,6 +1047,7 @@ export function generateSmartMonthSchedule({
       const sundayEligibleEmployees = activeEmployees.filter(canParticipateInSundayRotation);
       const candidates = sundayEligibleEmployees.filter((employee) => {
         if (manualEmployeeIds.has(employee.id)) return false;
+        if (hasFixedDayOffOnWeekday(employee, 0, normalizedRules)) return false;
         const dayOff = fixedOffById[employee.id];
         return dayOff !== 0;
       });
@@ -885,7 +1100,9 @@ export function generateSmartMonthSchedule({
       if (!employee) return;
       const hasManual = manualDayEntries.some((entry) => entry.employeeId === employee.id);
       const fixedOff = fixedOffById[employee.id];
-      const isOffDay = typeof fixedOff === 'number' && fixedOff === weekday;
+      const isOffDay =
+        hasFixedDayOffOnWeekday(employee, weekday, normalizedRules) ||
+        (typeof fixedOff === 'number' && fixedOff === weekday);
 
       if (hasManual) {
         const manualShift = manualDayEntries.find((entry) => entry.employeeId === employee.id);
@@ -919,16 +1136,14 @@ export function generateSmartMonthSchedule({
     if (intermediate && (!hasExactlyFourEmployees || shouldUseIntermediatePattern)) {
       const intermediateHasManual = manualDayEntries.some((entry) => entry.employeeId === intermediate.id);
       const fixedOff = fixedOffById[intermediate.id];
-      const shouldForceIntermediate = hasExactlyFourEmployees && shouldUseIntermediatePattern;
-      const isOffDay = typeof fixedOff === 'number' && fixedOff === weekday && !shouldForceIntermediate;
+      const isOffDay =
+        hasFixedDayOffOnWeekday(intermediate, weekday, normalizedRules) ||
+        (typeof fixedOff === 'number' && fixedOff === weekday);
 
       if (!intermediateHasManual && !isOffDay) {
-        const missingTemplate =
-          hasExactlyFourEmployees && shouldUseIntermediatePattern
-            ? null
-            : missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
+        const missingTemplate = missingCoreTypes.find((item) => !plannedTypes.includes(item.shiftType));
         const intermediateTemplate = missingTemplate || getPreferredIntermediateShift(intermediate, weekIndex);
-        const template = shouldForceIntermediate
+        const template = shouldUseIntermediatePattern
           ? intermediateTemplate
           : applyWeeklyShiftSideTemplate(intermediate, weekIndex, intermediateTemplate);
 
@@ -958,6 +1173,7 @@ export function generateSmartMonthSchedule({
     const additionalEmployees = activeEmployees.filter((employee) => {
       if (!employee?.id) return false;
       if (scheduledEmployeeIds.has(employee.id)) return false;
+      if (hasFixedDayOffOnWeekday(employee, weekday, normalizedRules)) return false;
       const fixedOff = fixedOffById[employee.id];
       return !(typeof fixedOff === 'number' && fixedOff === weekday);
     });
@@ -988,7 +1204,13 @@ export function generateSmartMonthSchedule({
           }
         }
       } else {
-        template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+        if (morningCount === 0) {
+          template = MORNING_SHIFT;
+        } else if (eveningCount === 0) {
+          template = EVENING_SHIFT;
+        } else {
+          template = getAdditionalEmployeeTemplate(employee, weekIndex, slotIndex);
+        }
         if (hasExactlyFourEmployees && shouldUseIntermediatePattern && template.shiftType === 'intermediate') {
           template = morningCount <= eveningCount ? MORNING_SHIFT : EVENING_SHIFT;
         }
@@ -1014,6 +1236,22 @@ export function generateSmartMonthSchedule({
 
     if (missingCoreTypes.length > 1 && !intermediate) {
       warnings.push(`Πολλαπλές κενές core βάρδιες στις ${formatDateGreek(date)} χωρίς διαθέσιμο intermediate.`);
+    }
+
+    const finalWorkEntries = [...manualDayEntries, ...generated.filter((entry) => entry.date === date)]
+      .filter((entry) => (entry.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK);
+    const hasMorning = finalWorkEntries.some((entry) => {
+      const shiftType = entry.shiftType || inferShiftTypeFromTimes(entry.startTime, entry.endTime);
+      return shiftType === 'morning';
+    });
+    const hasEvening = finalWorkEntries.some((entry) => {
+      const shiftType = entry.shiftType || inferShiftTypeFromTimes(entry.startTime, entry.endTime);
+      return shiftType === 'evening';
+    });
+    if (!hasMorning || !hasEvening) {
+      warnings.push(
+        `Ανεπαρκής κάλυψη στις ${formatDateGreek(date)}: ${!hasMorning ? 'χωρίς πρωινό' : ''}${!hasMorning && !hasEvening ? ' και ' : ''}${!hasEvening ? 'χωρίς απογευματινό' : ''}.`,
+      );
     }
   });
 

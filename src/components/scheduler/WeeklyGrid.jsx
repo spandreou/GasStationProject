@@ -10,6 +10,7 @@ import {
   groupAndSortShiftsByDay,
   inferShiftTypeFromTimes,
 } from '../../utils/scheduleUtils';
+import { hasTimeOverlap } from '../../utils/overlap';
 import { formatDateGreek, normalizeTimeLabel, parseGreekDateInputToIso, timeToMinutes } from '../../utils/time';
 import ConfirmDialog from '../feedback/ConfirmDialog';
 import StateNotice from '../feedback/StateNotice';
@@ -34,6 +35,25 @@ const SHIFT_TYPE_LABEL_MAP = SHIFT_TYPE_OPTIONS.reduce((acc, option) => {
   acc[option.value] = option.label;
   return acc;
 }, {});
+
+const SHIFT_TYPE_TIME_MAP = {
+  morning: { startTime: '06:00', endTime: '14:00' },
+  intermediate: { startTime: '09:00', endTime: '17:00' },
+  evening: { startTime: '14:00', endTime: '22:00' },
+};
+
+function applyShiftTypeTimes(draft, nextShiftType) {
+  const nextTimes = SHIFT_TYPE_TIME_MAP[nextShiftType];
+  if (!nextTimes) {
+    return { ...draft, shiftType: nextShiftType };
+  }
+  return {
+    ...draft,
+    shiftType: nextShiftType,
+    startTime: nextTimes.startTime,
+    endTime: nextTimes.endTime,
+  };
+}
 
 function getShiftLabelForDraft(draft) {
   if ((draft.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) {
@@ -724,6 +744,20 @@ export default function WeeklyGrid({
       label: getShiftLabelForDraft(dayEditorDraft),
     };
 
+    if (payload.type === SHIFT_TYPES.WORK) {
+      const conflict = hasTimeOverlap(shifts, {
+        id: dayEditor.editingShiftId || undefined,
+        employeeId: payload.employeeId,
+        date: payload.date,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+      });
+      if (conflict) {
+        setDayEditorValidationMessage('Υπάρχει επικάλυψη βάρδιας για τον ίδιο υπάλληλο. Διάλεξε άλλο υπάλληλο ή ώρες.');
+        return;
+      }
+    }
+
     setIsEditorSaving(true);
     try {
       if (dayEditor.editingShiftId) {
@@ -1302,7 +1336,9 @@ export default function WeeklyGrid({
                   Τύπος Βάρδιας
                   <select
                     value={dayEditorDraft.shiftType}
-                    onChange={(event) => setDayEditorDraft((prev) => ({ ...prev, shiftType: event.target.value }))}
+                    onChange={(event) =>
+                      setDayEditorDraft((prev) => applyShiftTypeTimes(prev, event.target.value))
+                    }
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                     disabled={!canManage || dayEditorDraft.type !== SHIFT_TYPES.WORK}
                   >

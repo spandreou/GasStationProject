@@ -1,9 +1,17 @@
-import { formatDateGreek, formatShiftTime } from './time';
+import { formatDateGreek, formatShiftTime } from './time.js';
 
 let xlsxModulePromise;
 let jsPdfModulePromise;
 let docxModulePromise;
 let robotoFontPromise;
+
+export const PDF_SCHEDULE_COLUMNS = [
+  { key: 'date', title: 'Ημερομηνία', widthRatio: 0.2 },
+  { key: 'afm', title: 'ΑΦΜ', widthRatio: 0.15 },
+  { key: 'fullName', title: 'Ονοματεπώνυμο', widthRatio: 0.29 },
+  { key: 'schedule', title: 'Ωράριο', widthRatio: 0.2 },
+  { key: 'workRest', title: 'Εργασία/Ανάπαυση', widthRatio: 0.16 },
+];
 
 function loadXlsx() {
   if (!xlsxModulePromise) {
@@ -28,7 +36,7 @@ function loadDocx() {
 
 function loadRobotoFont() {
   if (!robotoFontPromise) {
-    robotoFontPromise = import('../assets/fonts/robotoRegularBase64');
+    robotoFontPromise = import('../assets/fonts/robotoRegularBase64.js');
   }
   return robotoFontPromise;
 }
@@ -133,7 +141,6 @@ function getScheduleWorkLabel(shiftList = []) {
   };
 }
 
-
 function buildScheduleRows({ days, employees, shifts }) {
   const shiftMap = new Map();
   (shifts || []).forEach((shift) => {
@@ -168,6 +175,68 @@ function buildScheduleRows({ days, employees, shifts }) {
   return rows;
 }
 
+function getEmployeeDayWorkShifts(shiftMap, day, employeeId) {
+  return (shiftMap.get(`${day}__${employeeId}`) || [])
+    .filter((item) => (item.type || 'work') === 'work')
+    .sort((a, b) => {
+      const startDiff = (a.startTime || '').localeCompare(b.startTime || '');
+      if (startDiff !== 0) return startDiff;
+      return (a.endTime || '').localeCompare(b.endTime || '');
+    });
+}
+
+export function buildGroupedScheduleRows({ days, employees, shifts }) {
+  const shiftMap = new Map();
+  (shifts || []).forEach((shift) => {
+    const key = `${shift.date}__${shift.employeeId}`;
+    if (!shiftMap.has(key)) {
+      shiftMap.set(key, []);
+    }
+    shiftMap.get(key).push(shift);
+  });
+
+  const normalizedEmployees = [...(employees || [])].sort((a, b) =>
+    (a.fullName || '').localeCompare(b.fullName || '', 'el'),
+  );
+
+  return (days || []).map((day) => {
+    const orderedEmployees = normalizedEmployees
+      .map((employee) => {
+        const workShifts = getEmployeeDayWorkShifts(shiftMap, day, employee.id);
+        return {
+          employee,
+          workShifts,
+          firstStart: workShifts[0]?.startTime || '',
+        };
+      })
+      .sort((a, b) => {
+        const aWorks = a.workShifts.length > 0;
+        const bWorks = b.workShifts.length > 0;
+        if (aWorks !== bWorks) return aWorks ? -1 : 1;
+        if (aWorks && bWorks) {
+          const startDiff = a.firstStart.localeCompare(b.firstStart);
+          if (startDiff !== 0) return startDiff;
+        }
+        return (a.employee.fullName || '').localeCompare(b.employee.fullName || '', 'el');
+      });
+
+    return {
+      date: formatDateGreek(day),
+      afm: orderedEmployees.map(({ employee }) => employee.afm?.trim() || '-').join('\n'),
+      fullName: orderedEmployees
+        .map(({ employee }) => employee.fullName || 'Άγνωστος υπάλληλος')
+        .join('\n'),
+      schedule: orderedEmployees
+        .map(({ workShifts }) =>
+          workShifts.length
+            ? workShifts.map((item) => formatShiftTime(item.startTime, item.endTime)).join(' | ')
+            : '-',
+        )
+        .join('\n'),
+      workRest: orderedEmployees.map(({ workShifts }) => (workShifts.length ? 'ΕΡΓ' : 'ΑΝ')).join('\n'),
+    };
+  });
+}
 
 function drawPdfTable({
   doc,
@@ -178,13 +247,7 @@ function drawPdfTable({
   margin,
   rows,
 }) {
-  const columnDefs = [
-    { key: 'date', title: '\u0397\u03BC\u03B5\u03C1\u03BF\u03BC\u03B7\u03BD\u03AF\u03B1', widthRatio: 0.2 },
-    { key: 'afm', title: '\u0391\u03A6\u039C', widthRatio: 0.15 },
-    { key: 'fullName', title: '\u039F\u03BD\u03BF\u03BC\u03B1\u03C4\u03B5\u03C0\u03CE\u03BD\u03C5\u03BC\u03BF', widthRatio: 0.29 },
-    { key: 'schedule', title: '\u03A9\u03C1\u03AC\u03C1\u03B9\u03BF', widthRatio: 0.2 },
-    { key: 'workRest', title: '\u0395\u03C1\u03B3\u03B1\u03C3\u03AF\u03B1/\u03A1\u03B5\u03C0\u03CC', widthRatio: 0.16 },
-  ];
+  const columnDefs = PDF_SCHEDULE_COLUMNS;
 
   const tableWidth = pageWidth - margin * 2;
   const columnWidths = columnDefs.map((column) => tableWidth * column.widthRatio);
@@ -306,7 +369,7 @@ export async function exportScheduleToPdf({
     throw new Error('\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03B9 \u03B3\u03B9\u03B1 \u03B5\u03BE\u03B1\u03B3\u03C9\u03B3\u03AE PDF.');
   }
 
-  const rows = buildScheduleRows({ days: targetDays, employees, shifts });
+  const rows = buildGroupedScheduleRows({ days: targetDays, employees, shifts });
   const { default: jsPDFCtor } = await loadJsPdf();
   const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   await setupGreekFont(doc);
@@ -407,5 +470,3 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
   const blob = await Packer.toBlob(doc);
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
 }
-
-

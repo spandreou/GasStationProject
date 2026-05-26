@@ -3,6 +3,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { adminEmail, firebaseConfigErrorMessage, isDemoMode, isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
+import useResizableLayout from '../../hooks/useResizableLayout';
 import useToastQueue from '../../hooks/useToastQueue';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
@@ -24,6 +25,12 @@ const AdminLoginModal = lazy(() => import('./AdminLoginModal'));
 const AdminDndShell = lazy(() => import('./AdminDndShell'));
 const EmployeeProfileModal = lazy(() => import('./EmployeeProfileModal'));
 const WeekHistoryViewer = lazy(() => import('./WeekHistoryViewer'));
+
+const SHELL_WIDTH_MODE_OPTIONS = [
+  { value: 'narrow', label: 'Στενό' },
+  { value: 'normal', label: 'Κανονικό' },
+  { value: 'wide', label: 'Φαρδύ' },
+];
 
 let exportServicePromise;
 
@@ -170,6 +177,19 @@ export default function MainDashboard() {
     endTime: '14:00',
     type: SHIFT_TYPES.WORK,
   });
+  const {
+    sidebarWidth,
+    sidebarMinWidth,
+    sidebarMaxWidth,
+    isResizingSidebar,
+    mainPanelRef,
+    scheduleDensity,
+    shellWidthMode,
+    shellWidthClass,
+    setShellWidthMode,
+    handleSidebarResizeStart,
+    handleSidebarResizeKeyDown,
+  } = useResizableLayout();
   const [actionLoading, setActionLoading] = useState({});
   const [syncStatusOverride, setSyncStatusOverride] = useState({ status: 'saved', label: '' });
   const [lastSavedAt, setLastSavedAt] = useState(null);
@@ -847,7 +867,7 @@ export default function MainDashboard() {
 
   const dashboardContent = (
     <>
-      <main className="scheduler-layout-shell mx-auto flex w-full max-w-[1820px] flex-col gap-4 p-4 text-slate-900 sm:gap-5 md:p-6 lg:p-7 dark:text-slate-100">
+      <main className={`scheduler-layout-shell mx-auto flex w-full ${shellWidthClass} flex-col gap-4 px-3 py-4 text-slate-900 sm:gap-5 sm:px-4 lg:px-5 xl:w-[calc(100%-24px)] 2xl:px-6 dark:text-slate-100`}>
         <WeekToolbar
           weekDays={weekDays}
           weekTemplates={weekTemplates}
@@ -860,9 +880,6 @@ export default function MainDashboard() {
           onOpenAdminLogin={handleOpenAdminLogin}
           onLogoutAdmin={handleLogoutAdmin}
           onToggleTheme={toggleTheme}
-          onPrevWeek={goToPreviousWeek}
-          onNextWeek={goToNextWeek}
-          onCurrentWeek={goToCurrentWeek}
           onSaveWeek={handleSaveWeekFromToolbar}
           onSaveTemplate={handleSaveTemplateFromToolbar}
           onSelectTemplate={setSelectedTemplateId}
@@ -872,7 +889,6 @@ export default function MainDashboard() {
           onClearMonth={handleClearMonthFromToolbar}
           onFinalizeWeek={handleFinalizeFromToolbar}
           onMagicWand={handleMagicWeekFromToolbar}
-          onJumpToWeekDate={setWeekFromDate}
           onExportWeekPdf={handleExportWeekPdf}
           onExportMonthPdf={handleExportMonthPdf}
           onExportExcel={handleExportExcel}
@@ -881,6 +897,26 @@ export default function MainDashboard() {
           syncStatus={syncStatus}
           actionLoading={actionLoading}
         />
+
+        <div className="flex justify-end">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-slate-300/70 bg-white/55 p-1 text-xs font-semibold text-slate-800 shadow-sm backdrop-blur-sm dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-100">
+            {SHELL_WIDTH_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setShellWidthMode(option.value)}
+                className={`rounded-md px-2 py-1 transition ${
+                  shellWidthMode === option.value
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
+                }`}
+                aria-pressed={shellWidthMode === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {!isFirebaseConfigured ? (
           <MessageBanner
@@ -917,8 +953,11 @@ export default function MainDashboard() {
           />
         ) : null}
 
-        <div className="grid items-start gap-4 lg:gap-5 xl:grid-cols-[320px,minmax(0,1fr)] 2xl:grid-cols-[340px,minmax(0,1fr)]">
-          <div className="order-1 xl:order-1">
+        <div
+          className={`flex w-full min-w-0 flex-col items-stretch gap-4 lg:gap-5 xl:flex-row ${isResizingSidebar ? 'select-none' : ''}`}
+          style={{ '--scheduler-sidebar-width': `${sidebarWidth}px` }}
+        >
+          <div className="order-1 min-w-0 xl:order-1 xl:w-[var(--scheduler-sidebar-width)] xl:basis-[var(--scheduler-sidebar-width)] xl:shrink-0">
             <div className="hidden md:block">
               <SchedulerSidebar
                 employees={employees}
@@ -942,8 +981,25 @@ export default function MainDashboard() {
             </div>
           </div>
 
-          <div className="order-2 min-w-0 xl:order-2">
-            <div className="space-y-4 lg:space-y-5">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Αλλαγή πλάτους sidebar"
+            aria-valuemin={sidebarMinWidth}
+            aria-valuemax={sidebarMaxWidth}
+            aria-valuenow={sidebarWidth}
+            tabIndex={0}
+            onPointerDown={handleSidebarResizeStart}
+            onKeyDown={handleSidebarResizeKeyDown}
+            className={`order-2 hidden w-3 shrink-0 cursor-col-resize touch-none items-stretch justify-center rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-brand-300/70 xl:flex ${
+              isResizingSidebar ? 'bg-brand-500/15' : 'hover:bg-slate-900/5 dark:hover:bg-cyan-300/10'
+            }`}
+          >
+            <span className={`my-3 w-1 rounded-full transition ${isResizingSidebar ? 'bg-brand-500 dark:bg-cyan-300' : 'bg-slate-300 dark:bg-cyan-300/35'}`} />
+          </div>
+
+          <div ref={mainPanelRef} className="order-3 min-w-0 flex-1 xl:order-3">
+            <div className="min-w-0 space-y-4 lg:space-y-5">
               <WeeklyGrid
                 weekDays={weekDays}
                 monthDays={monthDays}
@@ -971,6 +1027,9 @@ export default function MainDashboard() {
                 onLoadSelectedTemplate={loadSelectedTemplateIntoCurrentWeek}
                 onMagicWand={generateMagicWeek}
                 onGenerateMonthlySchedule={handleGenerateMonthlySchedule}
+                onPrevWeek={goToPreviousWeek}
+                onCurrentWeek={goToCurrentWeek}
+                onNextWeek={goToNextWeek}
                 onJumpToWeekDate={setWeekFromDate}
                 onCreateShift={addShift}
                 onUpdateShift={updateShiftDetails}
@@ -981,6 +1040,7 @@ export default function MainDashboard() {
                 canManage={isAdmin}
                 isWeekLocked={isWeekEffectivelyLocked}
                 isSaving={isSaving}
+                density={scheduleDensity}
               />
 
               <AnnouncementBoard

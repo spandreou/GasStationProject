@@ -1,17 +1,16 @@
 import { useDroppable } from '@dnd-kit/core';
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Lock, Pencil, Plus, Save, Trash2, UserRound, X } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Lock, Pencil, Plus, RefreshCw, Save, Trash2, UserRound, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SHIFT_TYPE_OPTIONS, WEEKDAY_LABELS } from '../../data/constants';
 import { SHIFT_TYPES } from '../../utils/analytics';
 import {
-  formatGreekDate,
   getDurationLabel,
   groupAndSortShiftsByDay,
   inferShiftTypeFromTimes,
 } from '../../utils/scheduleUtils';
 import { hasTimeOverlap } from '../../utils/overlap';
-import { formatDateGreek, normalizeTimeLabel, parseGreekDateInputToIso, timeToMinutes } from '../../utils/time';
+import { formatDateGreek, getIsoDate, normalizeTimeLabel, parseGreekDateInputToIso, timeToMinutes } from '../../utils/time';
 import ConfirmDialog from '../feedback/ConfirmDialog';
 import StateNotice from '../feedback/StateNotice';
 import AssignedShiftItem from './AssignedShiftItem';
@@ -40,6 +39,42 @@ const SHIFT_TYPE_TIME_MAP = {
   morning: { startTime: '06:00', endTime: '14:00' },
   intermediate: { startTime: '09:00', endTime: '17:00' },
   evening: { startTime: '14:00', endTime: '22:00' },
+};
+
+const DENSITY_CLASSES = {
+  compact: {
+    dayBox: 'p-2',
+    dayHeader: 'px-2.5 py-2',
+    dayTitle: 'text-sm',
+    dayDate: 'text-[11px]',
+    dayGap: 'space-y-1',
+    helperText: 'text-[11px]',
+    weekGrid: 'gap-2 2xl:gap-2.5',
+    weekBlock: 'p-1.5 sm:p-2',
+    placeholderHeader: 'px-2.5 py-2',
+  },
+  comfortable: {
+    dayBox: 'p-2.5',
+    dayHeader: 'px-3 py-2.5',
+    dayTitle: 'text-[15px]',
+    dayDate: 'text-xs',
+    dayGap: 'space-y-1.5',
+    helperText: 'text-[12px]',
+    weekGrid: 'gap-2 2xl:gap-2.5',
+    weekBlock: 'p-2 sm:p-3',
+    placeholderHeader: 'px-3 py-2.5',
+  },
+  roomy: {
+    dayBox: 'p-3',
+    dayHeader: 'px-3 py-2.5',
+    dayTitle: 'text-base',
+    dayDate: 'text-xs',
+    dayGap: 'space-y-2',
+    helperText: 'text-[12px]',
+    weekGrid: 'gap-2.5 2xl:gap-3',
+    weekBlock: 'p-2.5 sm:p-3',
+    placeholderHeader: 'px-3 py-2.5',
+  },
 };
 
 function applyShiftTypeTimes(draft, nextShiftType) {
@@ -125,8 +160,51 @@ function getDaySpecialInfo(dayShifts, specialDayConfig) {
   return specialShift.isHoliday ? 'Αργία' : 'Ειδικό Ωράριο';
 }
 
-function getDayLabel(date) {
-  return new Intl.DateTimeFormat('el-GR', { weekday: 'long' }).format(new Date(`${date}T00:00:00`));
+function getMondayFirstIndex(dateValue) {
+  const day = new Date(`${dateValue}T00:00:00`).getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function addDaysIso(dateValue, daysToAdd) {
+  const date = new Date(`${dateValue}T00:00:00`);
+  date.setDate(date.getDate() + daysToAdd);
+  return getIsoDate(date);
+}
+
+function buildMonthWeekRows(monthDays = []) {
+  if (!monthDays.length) return [];
+
+  const monthDaySet = new Set(monthDays);
+  const firstWeekStart = addDaysIso(monthDays[0], -getMondayFirstIndex(monthDays[0]));
+  const lastMonthDay = monthDays[monthDays.length - 1];
+  const rows = [];
+  let cursor = firstWeekStart;
+  let guard = 0;
+
+  while (cursor <= lastMonthDay && guard < 8) {
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const date = addDaysIso(cursor, index);
+      return {
+        date,
+        isInMonth: monthDaySet.has(date),
+      };
+    });
+    const realDays = days.filter((item) => item.isInMonth);
+
+    if (realDays.length) {
+      rows.push({
+        key: cursor,
+        startDate: days[0].date,
+        endDate: days[6].date,
+        days,
+      });
+    }
+
+    cursor = addDaysIso(cursor, 7);
+    guard += 1;
+  }
+
+  return rows;
 }
 
 function getSnapshotSourceLabel(source) {
@@ -186,26 +264,6 @@ function buildConflictShiftIdSet(shifts) {
   return conflictIds;
 }
 
-function getDayWorkMinutes(dayShifts = []) {
-  return dayShifts.reduce((totalMinutes, shift) => {
-    if ((shift?.type || SHIFT_TYPES.WORK) !== SHIFT_TYPES.WORK) return totalMinutes;
-    const startMinutes = timeToMinutes(shift?.startTime);
-    const endMinutes = timeToMinutes(shift?.endTime);
-    if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes) || endMinutes <= startMinutes) {
-      return totalMinutes;
-    }
-    return totalMinutes + (endMinutes - startMinutes);
-  }, 0);
-}
-
-function formatCompactMinutes(totalMinutes) {
-  if (!totalMinutes) return '0ω';
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (!minutes) return `${hours}ω`;
-  return `${hours}ω ${minutes}λ`;
-}
-
 function DayStatusChip({ tone = 'neutral', icon: Icon = null, children }) {
   const toneClasses = {
     neutral: 'border-slate-300/70 bg-white/60 text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/55 dark:text-slate-200',
@@ -218,7 +276,7 @@ function DayStatusChip({ tone = 'neutral', icon: Icon = null, children }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${toneClasses[tone] || toneClasses.neutral}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${toneClasses[tone] || toneClasses.neutral}`}
     >
       {Icon ? <Icon size={11} /> : null}
       {children}
@@ -288,6 +346,7 @@ const DayBox = memo(function DayBox({
   onDeleteShiftTemplate,
   onOpenDayEditor,
   onClearDay,
+  density = 'comfortable',
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day-box-${day}`,
@@ -299,7 +358,6 @@ const DayBox = memo(function DayBox({
   const hasTemplates = dayTemplates.length > 0;
   const isEmptyDay = !hasShifts && !hasTemplates;
   const specialInfo = getDaySpecialInfo(dayShifts, specialDayConfig);
-  const manualCount = (dayShifts || []).filter((item) => item.isManualOverride).length;
   const isHoliday = Boolean(specialDayConfig?.isHoliday || dayShifts.some((item) => item.isHoliday));
   const isSpecialDay = Boolean(specialDayConfig?.isSpecialDay || dayShifts.some((item) => item.isSpecialDay));
   const conflictCount = dayShifts.filter((shift) => conflictShiftIds.has(shift.id)).length;
@@ -307,9 +365,7 @@ const DayBox = memo(function DayBox({
     (total, shift) => (getSundayViolationMessage(shift.id) ? total + 1 : total),
     0,
   );
-  const uniqueEmployees = new Set(dayShifts.map((item) => item.employeeId).filter(Boolean)).size;
-  const workMinutes = getDayWorkMinutes(dayShifts);
-
+  const densityClasses = DENSITY_CLASSES[density] || DENSITY_CLASSES.comfortable;
   const stateClasses = isOver && canManage
     ? 'border-brand-400 bg-brand-50/75 shadow-brand-500/20 dark:border-cyan-300 dark:bg-cyan-500/12'
     : conflictCount > 0 || warningCount > 0
@@ -328,60 +384,55 @@ const DayBox = memo(function DayBox({
       ref={setNodeRef}
       data-day-anchor={day}
       onDragOver={(event) => event.preventDefault()}
-      className={`group relative overflow-hidden rounded-2xl border p-3 shadow-sm backdrop-blur-sm transition-all duration-200 sm:p-4 ${stateClasses} ${interactionClasses} ${mobileActiveClasses}`}
+      className={`group relative overflow-hidden rounded-lg border shadow-sm backdrop-blur-sm transition-all duration-200 ${densityClasses.dayBox} ${stateClasses} ${interactionClasses} ${mobileActiveClasses}`}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-200/45 blur-2xl dark:bg-pink-400/20" />
-
-      <header className="relative mb-2.5 rounded-xl border border-slate-300/60 bg-slate-900/80 px-3 py-2 text-xs text-white dark:border-cyan-300/25 dark:bg-slate-950/85 dark:text-cyan-100">
+      <header className={`relative mb-2 rounded-md border border-slate-300/60 bg-slate-900/80 text-xs text-white dark:border-cyan-300/25 dark:bg-slate-950/85 dark:text-cyan-100 ${densityClasses.dayHeader}`}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-bold leading-tight">{title}</p>
-            <p className="text-[11px] font-medium text-white/85 dark:text-cyan-100/85">{subtitle}</p>
+            <p className={`font-bold leading-snug ${densityClasses.dayTitle}`}>{title}</p>
+            <p className={`font-medium leading-snug text-white/85 dark:text-cyan-100/85 ${densityClasses.dayDate}`}>{subtitle}</p>
           </div>
           {canManage ? (
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => onOpenDayEditor?.(day, title, subtitle)}
-                className="rounded p-1 text-white/85 transition hover:bg-sky-500/20 hover:text-sky-100"
+                className="rounded p-0.5 text-white/85 transition hover:bg-sky-500/20 hover:text-sky-100"
                 title="Edit day"
                 aria-label="Edit day"
               >
-                <Pencil size={14} />
+                <Pencil size={12} />
               </button>
               <button
                 type="button"
                 onClick={() => onClearDay(day)}
-                className="rounded p-1 text-white/85 transition hover:bg-red-500/20 hover:text-red-200"
+                className="rounded p-0.5 text-white/85 transition hover:bg-red-500/20 hover:text-red-200"
                 title="Clear day"
                 aria-label="Clear day"
               >
-                <Trash2 size={14} />
+                <Trash2 size={12} />
               </button>
             </div>
           ) : null}
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-1 flex flex-wrap gap-1">
           {isWeekLocked ? (
             <DayStatusChip tone="lock" icon={Lock}>
               Locked week
             </DayStatusChip>
           ) : null}
-          {!canManage ? <DayStatusChip tone="neutral">Read-only</DayStatusChip> : null}
           {isHoliday ? <DayStatusChip tone="warning">Holiday</DayStatusChip> : null}
           {isSpecialDay && !isHoliday ? <DayStatusChip tone="info">Special day</DayStatusChip> : null}
-          {manualCount > 0 ? <DayStatusChip tone="accent">Manual: {manualCount}</DayStatusChip> : null}
           {conflictCount > 0 ? (
             <DayStatusChip tone="danger" icon={AlertCircle}>
               Conflict: {conflictCount}
             </DayStatusChip>
           ) : null}
           {warningCount > 0 ? <DayStatusChip tone="warning">Warnings: {warningCount}</DayStatusChip> : null}
-          {isEmptyDay ? <DayStatusChip tone="neutral">No shifts</DayStatusChip> : null}
         </div>
       </header>
 
-      <div className="space-y-2.5">
+      <div className={densityClasses.dayGap}>
         {dayTemplates.map((template) => (
           <TemplateAssignmentCard
             key={template.id}
@@ -403,9 +454,10 @@ const DayBox = memo(function DayBox({
                 onEdit={() => onOpenDayEditor?.(day, title, subtitle, shift)}
                 onToggleManualOverride={onToggleManualOverride}
                 canManage={canManage}
+                density={density}
               />
               {sundayWarning ? (
-                <p className="rounded border border-amber-300/60 bg-amber-50/70 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/10 dark:text-amber-200">
+                <p className={`rounded border border-amber-300/60 bg-amber-50/70 px-1.5 py-0.5 text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/10 dark:text-amber-200 ${densityClasses.helperText}`}>
                   {sundayWarning}
                 </p>
               ) : null}
@@ -414,9 +466,9 @@ const DayBox = memo(function DayBox({
         })}
 
         {isEmptyDay ? (
-          <div className="rounded-xl border border-dashed border-slate-300/80 bg-white/55 px-3 py-3 text-xs text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-300">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">No shifts assigned for this day.</p>
-            <p className="mt-1 text-[11px]">
+          <div className={`rounded-md border border-dashed border-slate-300/80 bg-white/45 px-2.5 py-2 text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-300 ${densityClasses.helperText}`}>
+            <p className="font-semibold text-slate-800 dark:text-slate-100">No shifts</p>
+            <p className="mt-0.5">
               {isWeekLocked
                 ? 'This week is locked. You can only view this day.'
                 : canManage
@@ -427,9 +479,9 @@ const DayBox = memo(function DayBox({
               <button
                 type="button"
                 onClick={() => onOpenDayEditor?.(day, title, subtitle)}
-                className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-300/80 bg-white/70 px-2 py-1 text-[11px] font-semibold text-slate-800 transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/55 dark:text-slate-100 dark:hover:bg-slate-900/75"
+                className={`mt-1 inline-flex items-center gap-1 rounded-md border border-slate-300/80 bg-white/70 px-1.5 py-0.5 font-semibold text-slate-800 transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-900/55 dark:text-slate-100 dark:hover:bg-slate-900/75 ${densityClasses.helperText}`}
               >
-                <Plus size={12} />
+                <Plus size={10} />
                 Add shift
               </button>
             ) : null}
@@ -437,23 +489,19 @@ const DayBox = memo(function DayBox({
         ) : null}
       </div>
 
-      <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-300/60 pt-2 text-[11px] text-slate-700 dark:border-cyan-300/20 dark:text-slate-300">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{dayShifts.length} shifts</span>
-          <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{uniqueEmployees} employees</span>
-          {hasTemplates ? (
-            <span className="rounded-full bg-slate-100/80 px-2 py-0.5 dark:bg-slate-900/65">{dayTemplates.length} cards</span>
-          ) : null}
-        </div>
-        <span className="font-semibold text-slate-800 dark:text-slate-100">Work hours: {formatCompactMinutes(workMinutes)}</span>
-      </footer>
+      {(conflictCount > 0 || warningCount > 0) ? (
+        <footer className={`mt-1.5 flex flex-wrap items-center gap-1 border-t border-slate-300/50 pt-1 text-slate-700 dark:border-cyan-300/20 dark:text-slate-300 ${densityClasses.helperText}`}>
+          {conflictCount > 0 ? <span className="font-semibold text-red-700 dark:text-red-300">{conflictCount} conflicts</span> : null}
+          {warningCount > 0 ? <span className="font-semibold text-amber-800 dark:text-amber-200">{warningCount} warnings</span> : null}
+        </footer>
+      ) : null}
       {specialInfo ? (
-        <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-400">
+        <p className={`mt-1 truncate text-slate-600 dark:text-slate-400 ${densityClasses.helperText}`} title={specialInfo}>
           {isHoliday ? 'This day is marked as a holiday.' : `Day note: ${specialInfo}`}
         </p>
       ) : null}
       {isOver && canManage ? (
-        <p className="mt-1 text-[10px] font-semibold text-brand-700 dark:text-cyan-200">Drop here to assign.</p>
+        <p className={`mt-1 font-semibold text-brand-700 dark:text-cyan-200 ${densityClasses.helperText}`}>Drop here</p>
       ) : null}
     </section>
   );
@@ -502,6 +550,9 @@ export default function WeeklyGrid({
   onLoadSelectedTemplate,
   onMagicWand,
   onGenerateMonthlySchedule,
+  onPrevWeek,
+  onCurrentWeek,
+  onNextWeek,
   onJumpToWeekDate,
   onCreateShift,
   onUpdateShift,
@@ -512,7 +563,9 @@ export default function WeeklyGrid({
   canManage,
   isWeekLocked = false,
   isSaving = false,
+  density = 'comfortable',
 }) {
+  const densityClasses = DENSITY_CLASSES[density] || DENSITY_CLASSES.comfortable;
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const gridSectionRef = useRef(null);
   const scrollRef = useRef(null);
@@ -558,6 +611,7 @@ export default function WeeklyGrid({
     [employees],
   );
   const visibleDayOptions = scheduleMode === 'month' ? monthDays : weekDays;
+  const monthWeekRows = useMemo(() => buildMonthWeekRows(monthDays), [monthDays]);
 
   const [dayEditor, setDayEditor] = useState({
     open: false,
@@ -844,7 +898,12 @@ export default function WeeklyGrid({
   }
 
   return (
-    <section id="weekly-grid-export" ref={gridSectionRef} className="glass-panel relative overflow-hidden rounded-2xl p-3 sm:p-4 lg:p-5">
+    <section
+      id="weekly-grid-export"
+      ref={gridSectionRef}
+      data-density={density}
+      className="glass-panel relative w-full min-w-0 overflow-hidden rounded-2xl p-3 sm:p-4 lg:p-5"
+    >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Βαρδιών</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -862,6 +921,32 @@ export default function WeeklyGrid({
         <>
           <div className="mb-4 grid gap-3 md:grid-cols-2">
             <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-grid grid-cols-3 gap-1 rounded-lg border border-slate-300/70 bg-white/45 p-1 dark:border-cyan-300/35 dark:bg-slate-900/45">
+                <button
+                  type="button"
+                  onClick={onPrevWeek}
+                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                >
+                  <ChevronLeft size={14} />
+                  Προηγ.
+                </button>
+                <button
+                  type="button"
+                  onClick={onCurrentWeek}
+                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                >
+                  <RefreshCw size={14} />
+                  Τρέχουσα
+                </button>
+                <button
+                  type="button"
+                  onClick={onNextWeek}
+                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                >
+                  Επόμ.
+                  <ChevronRight size={14} />
+                </button>
+              </div>
               <input
                 type="text"
                 inputMode="numeric"
@@ -981,11 +1066,11 @@ export default function WeeklyGrid({
             </button>
           </div>
 
-          <div className="rounded-xl border border-white/45 bg-white/25 p-2 dark:border-cyan-300/20 dark:bg-slate-900/30 sm:p-3">
+          <div className={`w-full min-w-0 rounded-lg border border-white/45 bg-white/25 dark:border-cyan-300/20 dark:bg-slate-900/30 ${densityClasses.weekBlock}`}>
             <div
               ref={scrollRef}
               onScroll={handleScroll}
-              className="flex gap-2.5 overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:grid-cols-2 md:gap-3 md:snap-none lg:min-w-[1040px] xl:grid-cols-4"
+              className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-visible md:snap-none lg:grid-cols-4 xl:grid-cols-7 ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {
                 const dayShifts = grouped[day] || [];
@@ -1011,6 +1096,7 @@ export default function WeeklyGrid({
                       onDeleteShiftTemplate={onDeleteShiftTemplate}
                       onOpenDayEditor={openDayEditor}
                       onClearDay={clearDayWithConfirm}
+                      density={density}
                     />
                   </div>
                 );
@@ -1120,31 +1206,60 @@ export default function WeeklyGrid({
             </label>
           </div>
 
-          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 md:gap-3 xl:grid-cols-3">
-            {monthDays.map((day) => {
-              const dayShifts = grouped[day] || [];
-              return (
-                <DayBox
-                  key={day}
-                  day={day}
-                  title={getDayLabel(day)}
-                  subtitle={formatGreekDate(day)}
-                  dayShifts={dayShifts}
-                  dayTemplates={[]}
-                  specialDayConfig={specialDaysByDate?.[day]}
-                  canManage={canManage}
-                  isWeekLocked={false}
-                  getEmployeeById={getEmployeeById}
-                  getSundayViolationMessage={getSundayViolationMessage}
-                  conflictShiftIds={conflictShiftIds}
-                  onDeleteShift={onDeleteShift}
-                  onToggleManualOverride={onToggleManualOverride}
-                  onDeleteShiftTemplate={onDeleteShiftTemplate}
-                  onOpenDayEditor={openDayEditor}
-                  onClearDay={clearDayWithConfirm}
-                />
-              );
-            })}
+          <div className="space-y-4">
+            {monthWeekRows.map((weekRow) => (
+              <section
+                key={weekRow.key}
+                className={`rounded-xl border border-white/45 bg-white/25 dark:border-cyan-300/20 dark:bg-slate-900/30 ${densityClasses.weekBlock}`}
+              >
+                <header className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-300/50 pb-2 dark:border-cyan-300/20">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Εβδομάδα {formatDateGreek(weekRow.startDate)} - {formatDateGreek(weekRow.endDate)}
+                  </h3>
+                </header>
+                <div className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-visible md:snap-none lg:grid-cols-4 xl:grid-cols-7 ${densityClasses.weekGrid}`}>
+                  {weekRow.days.map(({ date, isInMonth }, index) => {
+                    if (!isInMonth) {
+                      return (
+                        <div key={`placeholder-${weekRow.key}-${index}`} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                          <div className={`h-full min-h-[120px] rounded-lg border border-dashed border-slate-300/45 bg-white/20 opacity-45 dark:border-cyan-300/20 dark:bg-slate-900/25 ${densityClasses.dayBox}`} aria-hidden="true">
+                            <div className={`rounded-md border border-slate-300/40 bg-slate-900/35 text-xs text-white/70 dark:border-cyan-300/15 dark:bg-slate-950/45 ${densityClasses.placeholderHeader}`}>
+                              <p className={`font-bold leading-snug ${densityClasses.dayTitle}`}>{WEEKDAY_LABELS[index]}</p>
+                              <p className={`font-medium leading-snug ${densityClasses.dayDate}`}>{formatDateGreek(date)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const dayShifts = grouped[date] || [];
+                    return (
+                      <div key={date} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                        <DayBox
+                          day={date}
+                          title={WEEKDAY_LABELS[index]}
+                          subtitle={formatDateGreek(date)}
+                          dayShifts={dayShifts}
+                          dayTemplates={[]}
+                          specialDayConfig={specialDaysByDate?.[date]}
+                          canManage={canManage}
+                          isWeekLocked={false}
+                          getEmployeeById={getEmployeeById}
+                          getSundayViolationMessage={getSundayViolationMessage}
+                          conflictShiftIds={conflictShiftIds}
+                          onDeleteShift={onDeleteShift}
+                          onToggleManualOverride={onToggleManualOverride}
+                          onDeleteShiftTemplate={onDeleteShiftTemplate}
+                          onOpenDayEditor={openDayEditor}
+                          onClearDay={clearDayWithConfirm}
+                          density={density}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
 
           {!monthDays.length ? (

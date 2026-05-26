@@ -2,7 +2,7 @@ import { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } fr
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
-import { formatDateGreek, formatShiftTime } from './time';
+import { formatDateGreek, formatShiftTime } from './time.js';
 
 function buildEmployeeDayMap(shifts) {
   const map = new Map();

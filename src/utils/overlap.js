@@ -1,4 +1,4 @@
-import { timeToMinutes } from './time';
+import { timeToMinutes } from './time.js';
 
 function rangesOverlap(startA, endA, startB, endB) {
   return startA < endB && startB < endA;

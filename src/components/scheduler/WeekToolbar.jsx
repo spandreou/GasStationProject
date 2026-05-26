@@ -1,8 +1,6 @@
 import {
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Circle,
   Copy,
   FileDown,
@@ -13,7 +11,6 @@ import {
   LockKeyhole,
   LogOut,
   MoonStar,
-  RefreshCw,
   Save,
   Sparkles,
   SunMedium,
@@ -191,9 +188,6 @@ export default function WeekToolbar({
   onOpenAdminLogin,
   onLogoutAdmin,
   onToggleTheme,
-  onPrevWeek,
-  onNextWeek,
-  onCurrentWeek,
   onSaveWeek,
   onSaveTemplate,
   onSelectTemplate,
@@ -203,7 +197,6 @@ export default function WeekToolbar({
   onClearMonth,
   onFinalizeWeek,
   onMagicWand,
-  onJumpToWeekDate,
   onExportWeekPdf,
   onExportMonthPdf,
   onExportExcel,
@@ -294,33 +287,7 @@ export default function WeekToolbar({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-4">
-          <ToolbarGroup title="Navigation">
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={onPrevWeek} className={neutralButtonClass}>
-                <ChevronLeft size={16} />
-                Προηγούμενη
-              </button>
-              <button type="button" onClick={onCurrentWeek} className={neutralButtonClass}>
-                <RefreshCw size={16} />
-                Τρέχουσα
-              </button>
-              <button type="button" onClick={onNextWeek} className={neutralButtonClass}>
-                Επόμενη
-                <ChevronRight size={16} />
-              </button>
-            </div>
-
-            <input
-              type="date"
-              lang="el-GR"
-              value={weekDays?.[0] || ''}
-              onChange={(event) => onJumpToWeekDate?.(event.target.value)}
-              className="input-glass w-full rounded-lg border border-white/35 bg-white/40 px-2.5 py-2 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
-              title="Μετάβαση σε εβδομάδα"
-            />
-          </ToolbarGroup>
-
+        <div className="mt-3 grid gap-3 xl:grid-cols-3">
           <ToolbarGroup title="Editing">
             {isAdmin ? (
               <>

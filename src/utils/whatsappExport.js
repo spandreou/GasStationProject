@@ -1,4 +1,4 @@
-import { formatDateGreek, formatShiftTime } from './time';
+import { formatDateGreek, formatShiftTime } from './time.js';
 
 export function buildWhatsappSummary({ shifts, employees, weekDays, weekdayLabels }) {
   const employeeNameById = new Map(employees.map((employee) => [employee.id, employee.fullName]));

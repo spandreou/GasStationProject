@@ -1,5 +1,5 @@
-import { inferShiftType } from './scheduleUtils';
-import { calculateShiftDurationMinutes, minutesToHours } from './time';
+import { inferShiftType } from './scheduleUtils.js';
+import { calculateShiftDurationMinutes, minutesToHours } from './time.js';
 
 export const SHIFT_TYPES = {
   WORK: 'work',

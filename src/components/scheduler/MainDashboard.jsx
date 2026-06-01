@@ -95,6 +95,38 @@ function humanizeStoreMessage(rawMessage) {
   return message;
 }
 
+function splitStoreMessages(message) {
+  return String(message || '')
+    .split(/\s+\|\s+|\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatToastMessage(message, maxItems = 5) {
+  const parts = splitStoreMessages(message);
+  if (parts.length <= 1) return message;
+  const visible = parts.slice(0, maxItems);
+  const hiddenCount = parts.length - visible.length;
+  return [
+    ...visible.map((item) => `• ${item}`),
+    ...(hiddenCount > 0 ? [`+${hiddenCount} ακόμη προειδοποιήσεις`] : []),
+  ].join('\n');
+}
+
+function normalizeDashboardScheduleRole(value) {
+  const token = `${value || ''}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+  if (token.includes('core1') || token.includes('core 1') || token.includes('core_a')) return 'core1';
+  if (token.includes('core2') || token.includes('core 2') || token.includes('core_b')) return 'core2';
+  if (token.includes('intermediate') || token.includes('coverage') || token.includes('ενδιαμεσ') || token.includes('καλυψ')) {
+    return 'intermediate';
+  }
+  if (token.includes('core') || token.includes('βασ') || token.includes('σταθερ')) return 'core';
+  return '';
+}
+
 function toActionError(error, fallbackMessage) {
   const rawMessage = error?.message || fallbackMessage;
   return humanizeStoreMessage(rawMessage) || fallbackMessage;
@@ -341,6 +373,15 @@ export default function MainDashboard() {
     [monthShifts, employees, monthDays],
   );
   const analytics = scheduleMode === 'month' ? monthlyAnalytics : weeklyAnalytics;
+  const hasExplicitEmployeeScheduleRoles = useMemo(
+    () =>
+      employees.some((employee) =>
+        ['core1', 'core2', 'core', 'intermediate'].includes(
+          normalizeDashboardScheduleRole(employee.scheduleRole || employee.roleType),
+        ),
+      ),
+    [employees],
+  );
 
   useEffect(() => {
     const activeEmployees = employees
@@ -668,7 +709,7 @@ export default function MainDashboard() {
         generateMagicMonth({
           month: selectedMonth,
           year: selectedYear,
-          roleConfig: monthlyRoleConfig,
+          roleConfig: hasExplicitEmployeeScheduleRoles ? {} : monthlyRoleConfig,
           rules: {
             ...generatorRules,
             specialDaysByDate,
@@ -790,6 +831,8 @@ export default function MainDashboard() {
   useEffect(() => {
     if (!warningMessage) return;
     const tone = classifyStoreFeedback(warningMessage);
+    const readableWarning = humanizeStoreMessage(warningMessage);
+    const warningParts = splitStoreMessages(readableWarning);
     pushToast({
       type: tone,
       title:
@@ -798,9 +841,12 @@ export default function MainDashboard() {
           : tone === 'error'
             ? 'Αποτυχία'
             : tone === 'warning'
-              ? 'Προσοχή'
+              ? warningParts.length > 1
+                ? `Προσοχή (${warningParts.length})`
+                : 'Προσοχή'
               : 'Ενημέρωση',
-      message: humanizeStoreMessage(warningMessage),
+      message: formatToastMessage(readableWarning),
+      duration: tone === 'warning' && warningParts.length > 1 ? 0 : undefined,
     });
   }, [pushToast, warningMessage]);
 

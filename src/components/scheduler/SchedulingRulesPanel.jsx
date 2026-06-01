@@ -13,9 +13,10 @@ const DAY_OFF_OPTIONS = [
 ];
 
 const ROLE_OPTIONS = [
-  { value: 'general', label: 'General / Custom' },
-  { value: 'core', label: 'Core' },
-  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'core1', label: 'Core 1' },
+  { value: 'core2', label: 'Core 2' },
+  { value: 'intermediate', label: 'Intermediate / Coverage' },
+  { value: 'custom', label: 'General / Custom' },
 ];
 
 const SHIFT_PREFERENCE_OPTIONS = [
@@ -27,9 +28,10 @@ const SHIFT_PREFERENCE_OPTIONS = [
 ];
 
 function buildEmployeeRuleDraft(employee) {
+  const legacyRole = employee.scheduleRole || employee.roleType || 'custom';
   return {
     employeeId: employee.id,
-    scheduleRole: employee.scheduleRole || 'general',
+    scheduleRole: legacyRole === 'general' ? 'custom' : legacyRole,
     fixedDayOff:
       typeof employee.fixedDayOff === 'number' && Number.isInteger(employee.fixedDayOff) ? employee.fixedDayOff : '',
     participatesInRotation: employee.participatesInRotation !== false,
@@ -70,20 +72,38 @@ export default function SchedulingRulesPanel({
   }, [generatorRules]);
 
   useEffect(() => {
-    const next = {};
-    activeEmployees.forEach((employee) => {
-      next[employee.id] = buildEmployeeRuleDraft(employee);
+    setEmployeeDraftMap((prev) => {
+      const next = {};
+      activeEmployees.forEach((employee) => {
+        next[employee.id] = prev[employee.id] || buildEmployeeRuleDraft(employee);
+      });
+      return next;
     });
-    setEmployeeDraftMap(next);
   }, [activeEmployees]);
 
   const isBusy = isSaving || isSavingGenerator || Boolean(savingEmployeeId);
+  const roleCounts = useMemo(() => {
+    const counts = { core1: 0, core2: 0 };
+    Object.values(employeeDraftMap).forEach((draft) => {
+      if (draft?.scheduleRole === 'core1') counts.core1 += 1;
+      if (draft?.scheduleRole === 'core2') counts.core2 += 1;
+    });
+    return counts;
+  }, [employeeDraftMap]);
 
   async function handleSaveGeneratorRules() {
-    if (typeof onSaveRules !== 'function') return;
+    if (typeof onSaveRules !== 'function' && typeof onSaveEmployeeRules !== 'function') return;
     setIsSavingGenerator(true);
     try {
-      await onSaveRules(rulesDraft);
+      if (typeof onSaveEmployeeRules === 'function') {
+        for (const employee of activeEmployees) {
+          const draft = employeeDraftMap[employee.id] || buildEmployeeRuleDraft(employee);
+          await onSaveEmployeeRules(draft);
+        }
+      }
+      if (typeof onSaveRules === 'function') {
+        await onSaveRules(rulesDraft);
+      }
     } finally {
       setIsSavingGenerator(false);
     }
@@ -159,10 +179,17 @@ export default function SchedulingRulesPanel({
         type="button"
         onClick={handleSaveGeneratorRules}
         disabled={isBusy}
+        data-testid="save-all-scheduler-rules"
         className="mb-4 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isSavingGenerator ? 'Αποθήκευση...' : 'Αποθήκευση κανόνων generator'}
       </button>
+
+      {roleCounts.core1 > 1 || roleCounts.core2 > 1 ? (
+        <div className="mb-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-3 py-2 text-xs font-semibold text-amber-900 dark:border-amber-300/40 dark:bg-amber-500/15 dark:text-amber-100">
+          Κάθε πρόγραμμα πρέπει να έχει μέχρι έναν Core 1 και μέχρι έναν Core 2.
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         {!activeEmployees.length ? (
@@ -176,13 +203,19 @@ export default function SchedulingRulesPanel({
         {activeEmployees.map((employee) => {
           const draft = employeeDraftMap[employee.id] || buildEmployeeRuleDraft(employee);
           return (
-            <article key={employee.id} className="glass-soft rounded-xl p-3">
+            <article
+              key={employee.id}
+              data-testid={`employee-rules-${employee.id}`}
+              data-employee-name={employee.fullName || ''}
+              className="glass-soft rounded-xl p-3"
+            >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">{employee.fullName}</p>
                 <button
                   type="button"
                   onClick={() => handleSaveEmployeeRules(employee.id, draft)}
                   disabled={isBusy}
+                  data-testid={`employee-rules-save-${employee.id}`}
                   className="rounded-lg border border-slate-300 bg-white/60 px-2 py-1 text-[11px] font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
                 >
                   {savingEmployeeId === employee.id ? 'Αποθήκευση...' : 'Αποθήκευση'}
@@ -194,6 +227,7 @@ export default function SchedulingRulesPanel({
                   Scheduling role
                   <select
                     value={draft.scheduleRole}
+                    data-testid={`employee-role-${employee.id}`}
                     onChange={(event) =>
                       setEmployeeDraftMap((prev) => ({
                         ...prev,
@@ -203,6 +237,9 @@ export default function SchedulingRulesPanel({
                     disabled={isBusy}
                     className="input-glass mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
                   >
+                    {draft.scheduleRole === 'core' ? (
+                      <option value="core">Legacy Core</option>
+                    ) : null}
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -215,6 +252,7 @@ export default function SchedulingRulesPanel({
                   Σταθερό ρεπό
                   <select
                     value={draft.fixedDayOff}
+                    data-testid={`employee-fixed-day-${employee.id}`}
                     onChange={(event) =>
                       setEmployeeDraftMap((prev) => ({
                         ...prev,

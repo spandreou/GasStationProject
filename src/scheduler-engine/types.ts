@@ -1,0 +1,158 @@
+export type ScheduleRole =
+  | 'CORE_A'
+  | 'CORE_B'
+  | 'FLEX_A'
+  | 'FLEX_B'
+  | 'EXTRA_A'
+  | 'EXTRA_B';
+
+export type Weekday =
+  | 'MONDAY'
+  | 'TUESDAY'
+  | 'WEDNESDAY'
+  | 'THURSDAY'
+  | 'FRIDAY'
+  | 'SATURDAY'
+  | 'SUNDAY';
+
+export type ShiftType =
+  | 'MORNING'
+  | 'INTERMEDIATE'
+  | 'AFTERNOON'
+  | 'SUNDAY_12H';
+
+export type ExtraEmployeeMode =
+  | 'DISABLED'
+  | 'SUBSTITUTE_ONLY'
+  | 'ACTIVE_SEASONAL';
+
+export type AbsenceType = 'LEAVE' | 'SICK' | 'OTHER';
+
+export type AbsenceScope =
+  | 'FULL_DAY'
+  | 'MORNING_ONLY'
+  | 'INTERMEDIATE_ONLY'
+  | 'AFTERNOON_ONLY'
+  | 'SUNDAY_12H_ONLY';
+
+export type ReplacementMode =
+  | 'AUTO'
+  | 'MANUAL'
+  | 'NO_REPLACEMENT';
+
+export type EmployeeScheduleConfig = {
+  employeeId: string;
+  fullName: string;
+  scheduleRole: ScheduleRole;
+  isEnabled: boolean;
+  fixedDayOff?: Weekday;
+  defaultShiftPreference?: 'AUTO' | 'MORNING' | 'INTERMEDIATE' | 'AFTERNOON';
+  participatesInWeeklyRotation: boolean;
+  participatesInSundayRotation: boolean;
+  extraMode?: ExtraEmployeeMode;
+  activeFrom?: string;
+  activeTo?: string;
+  canCoverLeaves?: boolean;
+  canWorkMorning?: boolean;
+  canWorkIntermediate?: boolean;
+  canWorkAfternoon?: boolean;
+  canWorkSunday?: boolean;
+};
+
+export type EmployeeAbsence = {
+  id: string;
+  employeeId: string;
+  type: AbsenceType;
+  startDate: string;
+  endDate: string;
+  scope: AbsenceScope;
+  replacementMode: ReplacementMode;
+  manualReplacementEmployeeId?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GeneratedShift = {
+  id: string;
+  date: string;
+  employeeId: string;
+  employeeName: string;
+  scheduleRole: ScheduleRole;
+  shiftType: ShiftType;
+  startTime: string;
+  endTime: string;
+  source:
+    | 'BASE'
+    | 'SUNDAY_ROTATION'
+    | 'ABSENCE_REPLACEMENT'
+    | 'MANUAL_OVERRIDE';
+  replacedEmployeeId?: string;
+  absenceId?: string;
+  warningIds?: string[];
+};
+
+export type ScheduleGap = {
+  id: string;
+  date: string;
+  shiftType: ShiftType;
+  startTime: string;
+  endTime: string;
+  missingRole?: ScheduleRole;
+  reason:
+    | 'ABSENCE'
+    | 'UNAVAILABLE'
+    | 'NO_EMPLOYEE'
+    | 'MANUAL_NO_REPLACEMENT';
+  originalEmployeeId?: string;
+  absenceId?: string;
+};
+
+export type ScheduleWarning = {
+  id: string;
+  severity: 'info' | 'warning' | 'error';
+  code: string;
+  message: string;
+  date?: string;
+  employeeId?: string;
+};
+
+export type ResolvedScheduleRoles = {
+  roles: Partial<Record<ScheduleRole, EmployeeScheduleConfig>>;
+  extras: EmployeeScheduleConfig[];
+  baseEmployees: EmployeeScheduleConfig[];
+  warnings: ScheduleWarning[];
+};
+
+export type DayPlan = {
+  date: string;
+  weekday: Weekday;
+  weekIndex: number;
+  plannedOffRoles: ScheduleRole[];
+  assignments: Array<{
+    scheduleRole: ScheduleRole;
+    shiftType: ShiftType;
+  }>;
+};
+
+export type GenerateScheduleInput = {
+  startDate: string;
+  endDate: string;
+  employees: EmployeeScheduleConfig[];
+  absences?: EmployeeAbsence[];
+  previousSundayEmployeeId?: string;
+};
+
+export type GenerateScheduleResult = {
+  shifts: GeneratedShift[];
+  warnings: ScheduleWarning[];
+  unresolvedGaps: ScheduleGap[];
+  validation: {
+    valid: boolean;
+    violations: ScheduleWarning[];
+  };
+  debug: {
+    resolvedRoles: ResolvedScheduleRoles;
+    dayPlans: DayPlan[];
+  };
+};

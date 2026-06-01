@@ -41,6 +41,21 @@ const SHIFT_TYPE_TIME_MAP = {
   evening: { startTime: '14:00', endTime: '22:00' },
 };
 
+function normalizeScheduleRole(value) {
+  const token = `${value || ''}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+  if (token.includes('core1') || token.includes('core 1') || token.includes('core_a')) return 'core1';
+  if (token.includes('core2') || token.includes('core 2') || token.includes('core_b')) return 'core2';
+  if (token.includes('intermediate') || token.includes('coverage') || token.includes('ενδιαμεσ') || token.includes('καλυψ')) {
+    return 'intermediate';
+  }
+  if (token.includes('core') || token.includes('βασ') || token.includes('σταθερ')) return 'core';
+  if (token.includes('custom') || token.includes('general')) return 'custom';
+  return '';
+}
+
 const DENSITY_CLASSES = {
   compact: {
     dayBox: 'p-2',
@@ -382,6 +397,8 @@ const DayBox = memo(function DayBox({
   return (
     <section
       ref={setNodeRef}
+      data-testid="day-box"
+      data-date={day}
       data-day-anchor={day}
       onDragOver={(event) => event.preventDefault()}
       className={`group relative overflow-hidden rounded-lg border shadow-sm backdrop-blur-sm transition-all duration-200 ${densityClasses.dayBox} ${stateClasses} ${interactionClasses} ${mobileActiveClasses}`}
@@ -514,6 +531,7 @@ function ScheduleModeSelector({ scheduleMode, onChange }) {
       <select
         className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
         value={scheduleMode}
+        data-testid="schedule-mode-select"
         onChange={(event) => onChange?.(event.target.value)}
       >
         <option value="week">Διαμόρφωση προγράμματος εβδομάδας</option>
@@ -610,6 +628,15 @@ export default function WeeklyGrid({
     () => (employees || []).filter((employee) => employee?.isActive !== false),
     [employees],
   );
+  const monthlyRoleSummary = useMemo(() => {
+    const core1 = activeEmployees.find((employee) => normalizeScheduleRole(employee.scheduleRole || employee.roleType) === 'core1');
+    const core2 = activeEmployees.find((employee) => normalizeScheduleRole(employee.scheduleRole || employee.roleType) === 'core2');
+    const intermediates = activeEmployees.filter(
+      (employee) => normalizeScheduleRole(employee.scheduleRole || employee.roleType) === 'intermediate',
+    );
+    const hasExplicitRoles = Boolean(core1 || core2 || intermediates.length);
+    return { core1, core2, intermediates, hasExplicitRoles };
+  }, [activeEmployees]);
   const visibleDayOptions = scheduleMode === 'month' ? monthDays : weekDays;
   const monthWeekRows = useMemo(() => buildMonthWeekRows(monthDays), [monthDays]);
 
@@ -1111,6 +1138,7 @@ export default function WeeklyGrid({
               Μήνας
               <select
                 value={selectedMonth}
+                data-testid="monthly-month-select"
                 onChange={(event) => onSelectMonth?.(Number(event.target.value))}
                 className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
               >
@@ -1126,6 +1154,7 @@ export default function WeeklyGrid({
               Έτος
               <select
                 value={selectedYear}
+                data-testid="monthly-year-select"
                 onChange={(event) => onSelectYear?.(Number(event.target.value))}
                 className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
               >
@@ -1141,69 +1170,55 @@ export default function WeeklyGrid({
               type="button"
               onClick={onGenerateMonthlySchedule}
               disabled={!canManage}
+              data-testid="generate-monthly-schedule"
               className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Αυτόματη δημιουργία μηνιαίου προγράμματος
             </button>
           </div>
 
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Βασικός Υπάλληλος Α
-              <select
-                value={monthlyRoleConfig?.coreAId || ''}
-                onChange={(event) =>
-                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, coreAId: event.target.value }))
-                }
-                disabled={!canManage}
-                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
-              >
-                <option value="">Επιλογή</option>
-                {activeEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Βασικός Υπάλληλος Β
-              <select
-                value={monthlyRoleConfig?.coreBId || ''}
-                onChange={(event) =>
-                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, coreBId: event.target.value }))
-                }
-                disabled={!canManage}
-                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
-              >
-                <option value="">Επιλογή</option>
-                {activeEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
-              Ενδιάμεσος Υπάλληλος
-              <select
-                value={monthlyRoleConfig?.intermediateId || ''}
-                onChange={(event) =>
-                  onChangeMonthlyRoleConfig?.((prev) => ({ ...prev, intermediateId: event.target.value }))
-                }
-                disabled={!canManage}
-                className="input-glass min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
-              >
-                <option value="">Επιλογή</option>
-                {activeEmployees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.fullName}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div
+            data-testid="monthly-role-summary"
+            className="mb-4 rounded-xl border border-slate-300/70 bg-white/45 px-3 py-2.5 text-xs text-slate-900 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-100"
+          >
+            <p className="mb-2 font-bold">Ρόλοι από κανόνες εργαζομένων</p>
+            {monthlyRoleSummary.hasExplicitRoles ? (
+              <div className="grid gap-2 md:grid-cols-3">
+                <div
+                  data-testid="monthly-role-core1"
+                  className="rounded-lg border border-slate-300/60 bg-white/50 px-2.5 py-2 dark:border-cyan-300/20 dark:bg-slate-950/30"
+                >
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">Core 1</p>
+                  <p className="mt-0.5 font-bold">{monthlyRoleSummary.core1?.fullName || 'Δεν έχει οριστεί'}</p>
+                </div>
+                <div
+                  data-testid="monthly-role-core2"
+                  className="rounded-lg border border-slate-300/60 bg-white/50 px-2.5 py-2 dark:border-cyan-300/20 dark:bg-slate-950/30"
+                >
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">Core 2</p>
+                  <p className="mt-0.5 font-bold">{monthlyRoleSummary.core2?.fullName || 'Δεν έχει οριστεί'}</p>
+                </div>
+                <div
+                  data-testid="monthly-role-intermediates"
+                  className="rounded-lg border border-slate-300/60 bg-white/50 px-2.5 py-2 dark:border-cyan-300/20 dark:bg-slate-950/30"
+                >
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">Intermediate / Coverage</p>
+                  {monthlyRoleSummary.intermediates.length ? (
+                    <ul className="mt-0.5 space-y-0.5 font-bold">
+                      {monthlyRoleSummary.intermediates.map((employee) => (
+                        <li key={employee.id}>{employee.fullName}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-0.5 font-bold">Δεν έχει οριστεί</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="font-semibold text-amber-900 dark:text-amber-100">
+                Δεν έχουν οριστεί ρόλοι ανά εργαζόμενο. Ο generator θα χρησιμοποιήσει legacy/fallback σειρά.
+              </p>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -1611,8 +1626,3 @@ export default function WeeklyGrid({
     </section>
   );
 }
-
-
-
-
-

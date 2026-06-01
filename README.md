@@ -19,6 +19,42 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 - Tailwind CSS
 - dnd-kit
 
+## Milestone: Scheduler Stabilization & Engine Integration
+
+Ολοκληρώθηκε το βασικό stabilization milestone για το scheduling module.
+
+Τι καλύπτει:
+
+- Compact weekly/monthly scheduler UI με stacked monthly weeks.
+- Resizable scheduler layout και πιο καθαρή ανάγνωση shift cards.
+- Source-of-truth fix για employee scheduling roles.
+- Νέος pure TypeScript scheduler engine στο `src/scheduler-engine/`.
+- Runtime σύνδεση του νέου engine στο weekly/monthly auto generation μέσω adapter.
+- Role logic με `CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B` και προαιρετικά `EXTRA_A`, `EXTRA_B`.
+- Fixed days off, absences/gaps, Sunday rotation και validation rules.
+- Regression tests για monthly role conflicts και generator correctness.
+
+Βασικοί κανόνες που πλέον ελέγχονται:
+
+- Core employees δεν μπαίνουν ποτέ στην ίδια βάρδια.
+- Core employees δεν μπαίνουν ως intermediate.
+- Intermediate/FLEX slot καλύπτεται από FLEX/coverage ρόλο.
+- Με 3 διαθέσιμους εργαζόμενους βγαίνει 1 πρωί, 1 ενδιάμεσος, 1 απόγευμα.
+- Με 4 διαθέσιμους σε full coverage ημέρα βγαίνει 2 πρωί και 2 απόγευμα.
+- Fixed day off τηρείται ως hard constraint.
+- Κυριακή έχει ακριβώς 1 βάρδια 08:00-20:00.
+
+Validation commands:
+
+```bash
+npm run qa:scheduler-engine
+npm run qa:scheduler
+npm run build
+npm run test:e2e:scheduler
+```
+
+Σημείωση: το UI των παλιών role labels (`Core 1`, `Core 2`, `Intermediate / Coverage`) συνεχίζει να υποστηρίζεται και μεταφράζεται από adapter στον νέο engine.
+
 ## Quick Start
 
 ```bash

@@ -7,7 +7,7 @@ const TOAST_STYLES = {
   error:
     'border-rose-300/70 bg-rose-50/95 text-rose-900 dark:border-rose-300/45 dark:bg-rose-500/20 dark:text-rose-100',
   warning:
-    'border-amber-300/70 bg-amber-50/95 text-amber-900 dark:border-amber-300/45 dark:bg-amber-500/20 dark:text-amber-100',
+    'border-amber-300/80 bg-amber-50 text-amber-950 dark:border-amber-300/60 dark:bg-amber-950/95 dark:text-amber-50',
   info:
     'border-slate-400/75 bg-slate-100/96 text-slate-950 ring-1 ring-slate-300/60 dark:border-cyan-300/45 dark:bg-slate-900/92 dark:text-slate-50 dark:ring-cyan-300/20',
 };
@@ -30,7 +30,7 @@ function ToastItem({ toast, onDismiss }) {
 
   return (
     <article
-      className={`pointer-events-auto flex items-start gap-2 rounded-xl border px-3 py-2.5 shadow-lg backdrop-blur-md ${
+      className={`pointer-events-auto flex items-start gap-2 rounded-xl border px-3.5 py-3 shadow-xl ${
         TOAST_STYLES[toast.type] || TOAST_STYLES.info
       }`}
       role="status"
@@ -41,7 +41,7 @@ function ToastItem({ toast, onDismiss }) {
         {toast.title ? (
           <p className={`text-xs font-semibold ${isInfoToast ? 'text-slate-950 dark:text-slate-50' : ''}`}>{toast.title}</p>
         ) : null}
-        <p className={`text-xs leading-relaxed ${isInfoToast ? 'text-slate-900/95 dark:text-slate-100/95' : ''}`}>
+        <p className={`whitespace-pre-line text-[12px] leading-relaxed ${isInfoToast ? 'text-slate-900/95 dark:text-slate-100/95' : ''}`}>
           {toast.message}
         </p>
         {toast.actionLabel && typeof toast.onAction === 'function' ? (
@@ -78,7 +78,7 @@ export default function ToastStack({ toasts = [], onDismiss }) {
   if (!toasts.length) return null;
 
   return (
-    <div className="pointer-events-none fixed right-3 top-3 z-[120] flex w-[min(360px,calc(100vw-1.5rem))] flex-col gap-2 sm:right-4 sm:top-4">
+    <div className="pointer-events-none fixed right-3 top-3 z-[120] flex w-[min(560px,calc(100vw-1.5rem))] flex-col gap-2 sm:right-5 sm:top-5">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}

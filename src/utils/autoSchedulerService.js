@@ -128,11 +128,17 @@ function ensureUnique(shifts) {
   });
 }
 
-function normalizeRole(value) {
+export function normalizeScheduleRole(value) {
   const token = `${value || ''}`
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}/gu, '');
+  if (/(^|[_\s-])core\s*1($|[_\s-])/.test(token) || token.includes('core1') || token.includes('core_a')) {
+    return 'core1';
+  }
+  if (/(^|[_\s-])core\s*2($|[_\s-])/.test(token) || token.includes('core2') || token.includes('core_b')) {
+    return 'core2';
+  }
   if (
     token.includes('intermediate') ||
     token.includes('coverage') ||
@@ -143,7 +149,12 @@ function normalizeRole(value) {
     return 'intermediate';
   }
   if (token.includes('core') || token.includes('βασ') || token.includes('σταθερ')) return 'core';
+  if (token.includes('custom') || token.includes('general')) return 'custom';
   return '';
+}
+
+function normalizeRole(value) {
+  return normalizeScheduleRole(value);
 }
 
 function sortEmployeesByName(employees) {
@@ -163,15 +174,38 @@ function canParticipateInSundayRotation(employee) {
   return employee?.participatesInSundayRotation !== false;
 }
 
-function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
+export function resolveSchedulerRoles(activeEmployees, roleConfig = {}, warnings = []) {
   const sorted = sortEmployeesByName(activeEmployees);
   const rotationEligible = sorted.filter(canParticipateInRotation);
-  const configuredCoreA = findEmployeeById(sorted, roleConfig.coreAId);
-  const configuredCoreBInitial = findEmployeeById(sorted, roleConfig.coreBId);
-  const configuredIntermediateIds = [
-    roleConfig.intermediateId,
-    ...(Array.isArray(roleConfig.intermediateIds) ? roleConfig.intermediateIds : []),
-  ].filter(Boolean);
+  const roleDetectedCore1 = rotationEligible.filter(
+    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core1',
+  );
+  const roleDetectedCore2 = rotationEligible.filter(
+    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core2',
+  );
+  const legacyCore = rotationEligible.filter(
+    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core',
+  );
+  const roleDetectedIntermediates = sorted.filter(
+    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'intermediate',
+  );
+  const hasExplicitEmployeeRoles =
+    roleDetectedCore1.length > 0 ||
+    roleDetectedCore2.length > 0 ||
+    legacyCore.length > 0 ||
+    roleDetectedIntermediates.length > 0;
+  const useConfiguredRoles = !hasExplicitEmployeeRoles;
+
+  const configuredCoreA = useConfiguredRoles ? findEmployeeById(sorted, roleConfig.core1Id || roleConfig.coreAId) : null;
+  const configuredCoreBInitial = useConfiguredRoles
+    ? findEmployeeById(sorted, roleConfig.core2Id || roleConfig.coreBId)
+    : null;
+  const configuredIntermediateIds = useConfiguredRoles
+    ? [
+        roleConfig.intermediateId,
+        ...(Array.isArray(roleConfig.intermediateIds) ? roleConfig.intermediateIds : []),
+      ].filter(Boolean)
+    : [];
 
   const configuredCoreB =
     configuredCoreBInitial && configuredCoreBInitial.id !== configuredCoreA?.id ? configuredCoreBInitial : null;
@@ -184,27 +218,29 @@ function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   const configuredUnique = [configuredCoreA, configuredCoreB, ...configuredIntermediates].filter(Boolean);
   const configuredSet = new Set(configuredUnique.map((employee) => employee.id));
 
-  const roleDetectedCore = rotationEligible.filter(
-    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'core',
-  );
-  const roleDetectedIntermediates = sorted.filter(
-    (employee) => normalizeRole(employee.scheduleRole || employee.roleType) === 'intermediate',
-  );
+  if (roleDetectedCore1.length > 1) {
+    pushWarningOnce(warnings, 'Έχουν οριστεί πολλοί Core 1 εργαζόμενοι. Χρησιμοποιήθηκε ο πρώτος με σταθερή σειρά.');
+  }
+  if (roleDetectedCore2.length > 1) {
+    pushWarningOnce(warnings, 'Έχουν οριστεί πολλοί Core 2 εργαζόμενοι. Χρησιμοποιήθηκε ο πρώτος με σταθερή σειρά.');
+  }
 
   const remaining = sorted.filter((employee) => !configuredSet.has(employee.id));
   const rotationRemaining = remaining.filter(canParticipateInRotation);
 
   const coreA =
+    roleDetectedCore1[0] ||
+    legacyCore[0] ||
     configuredCoreA ||
-    roleDetectedCore.find((employee) => employee.id !== configuredCoreB?.id) ||
     rotationRemaining[0] ||
     remaining[0] ||
     sorted[0] ||
     null;
 
   const coreB =
+    roleDetectedCore2.find((employee) => employee.id !== coreA?.id) ||
+    legacyCore.find((employee) => employee.id !== coreA?.id) ||
     configuredCoreB ||
-    roleDetectedCore.find((employee) => employee.id !== coreA?.id) ||
     rotationRemaining.find((employee) => employee.id !== coreA?.id) ||
     remaining.find((employee) => employee.id !== coreA?.id) ||
     sorted.find((employee) => employee.id !== coreA?.id) ||
@@ -225,7 +261,26 @@ function resolveMonthlyEmployees(activeEmployees, roleConfig = {}) {
   });
   const intermediate = intermediates[0] || null;
 
-  return { coreA, coreB, intermediate, intermediates };
+  if (!configuredCoreA && !roleDetectedCore1.length && !legacyCore.length) {
+    pushWarningOnce(warnings, 'Δεν έχει οριστεί Core 1. Χρησιμοποιήθηκε fallback.');
+  }
+  if (!configuredCoreB && !roleDetectedCore2.length && legacyCore.length < 2) {
+    pushWarningOnce(warnings, 'Δεν έχει οριστεί Core 2. Χρησιμοποιήθηκε fallback.');
+  }
+
+  return {
+    core1: coreA,
+    core2: coreB,
+    coreA,
+    coreB,
+    intermediate,
+    intermediates,
+    configuredIntermediateIds: configuredIntermediates.map((employee) => employee.id),
+  };
+}
+
+function resolveMonthlyEmployees(activeEmployees, roleConfig = {}, warnings = []) {
+  return resolveSchedulerRoles(activeEmployees, roleConfig, warnings);
 }
 
 const WEEKDAY_NAME_TO_INDEX = new Map([
@@ -481,8 +536,10 @@ function validateGeneratedSchedule({
   warnings,
   manualUnavailableByDate = new Map(),
   fixedOffById = {},
+  roleConfig = {},
 }) {
   const activeEmployees = sortEmployeesByName((employees || []).filter((employee) => employee?.isActive !== false));
+  const { coreA, coreB, intermediates, configuredIntermediateIds } = resolveSchedulerRoles(activeEmployees, roleConfig, []);
   const workShifts = (shifts || []).filter((shift) => (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK);
 
   (days || []).forEach((date) => {
@@ -514,7 +571,7 @@ function validateGeneratedSchedule({
     const intermediateCount = dayWorkShifts.filter((shift) => getShiftKind(shift) === 'intermediate').length;
     const eveningCount = dayWorkShifts.filter((shift) => getShiftKind(shift) === 'evening').length;
 
-    if ((weekday === 1 || weekday === 5) && availableCount >= 4) {
+    if ((weekday === 1 || weekday === 5 || weekday === 6) && availableCount >= 4) {
       if (morningCount !== 2 || eveningCount !== 2 || intermediateCount !== 0) {
         pushWarningOnce(
           warnings,
@@ -523,7 +580,7 @@ function validateGeneratedSchedule({
       }
     }
 
-    if (INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday) && availableCount === 3) {
+    if (weekday !== 0 && availableCount === 3) {
       if (morningCount !== 1 || intermediateCount !== 1 || eveningCount !== 1) {
         pushWarningOnce(
           warnings,
@@ -531,6 +588,42 @@ function validateGeneratedSchedule({
         );
       }
     }
+
+    const coreAShift = dayWorkShifts.find((shift) => shift.employeeId === coreA?.id);
+    const coreBShift = dayWorkShifts.find((shift) => shift.employeeId === coreB?.id);
+    if (coreAShift && coreBShift) {
+      const coreAShiftKind = getShiftKind(coreAShift);
+      const coreBShiftKind = getShiftKind(coreBShift);
+      const areOppositeCoreSlots =
+        (coreAShiftKind === 'morning' && coreBShiftKind === 'evening') ||
+        (coreAShiftKind === 'evening' && coreBShiftKind === 'morning');
+      if (!areOppositeCoreSlots) {
+        pushWarningOnce(
+          warnings,
+          `Core 1 και Core 2 πρέπει να είναι σε αντίθετες βάρδιες στις ${formatDateGreek(date)}.`,
+        );
+      }
+    }
+
+    [coreAShift, coreBShift].filter(Boolean).forEach((shift) => {
+      if (getShiftKind(shift) === 'intermediate') {
+        pushWarningOnce(
+          warnings,
+          `Core 1/Core 2 δεν επιτρέπεται να μπει ενδιάμεση βάρδια στις ${formatDateGreek(date)}.`,
+        );
+      }
+    });
+
+    dayWorkShifts.forEach((shift) => {
+      if (getShiftKind(shift) !== 'intermediate') return;
+      const employee = activeEmployees.find((item) => item.id === shift.employeeId);
+      if (!isIntermediateCoverageEmployee(employee, intermediates, configuredIntermediateIds)) {
+        pushWarningOnce(
+          warnings,
+          `Η ενδιάμεση βάρδια στις ${formatDateGreek(date)} πρέπει να ανατεθεί μόνο σε Intermediate / Coverage εργαζόμενο.`,
+        );
+      }
+    });
 
     if (weekday === 6 && availableCount >= 4 && intermediateCount > 0) {
       pushWarningOnce(warnings, `Το Σάββατο ${formatDateGreek(date)} δεν πρέπει να έχει άσκοπη ενδιάμεση βάρδια.`);
@@ -610,6 +703,149 @@ function applySpecialDayTemplate({
   return true;
 }
 
+function getCoreSlotTemplate(employee, coreA, coreB, coreAMorningThisWeek) {
+  if (!employee?.id) return null;
+  if (employee.id === coreA?.id) return coreAMorningThisWeek ? MORNING_SHIFT : EVENING_SHIFT;
+  if (employee.id === coreB?.id) return coreAMorningThisWeek ? EVENING_SHIFT : MORNING_SHIFT;
+  return null;
+}
+
+function isResolvedCoreEmployee(employee, coreA, coreB) {
+  return Boolean(employee?.id && (employee.id === coreA?.id || employee.id === coreB?.id));
+}
+
+function isIntermediateCoverageEmployee(employee, intermediates = [], configuredIntermediateIds = []) {
+  if (!employee?.id) return false;
+  if (configuredIntermediateIds.includes(employee.id)) return true;
+  const role = normalizeRole(employee.scheduleRole || employee.roleType);
+  if (role === 'intermediate') return true;
+  if (role === 'core1' || role === 'core2' || role === 'core' || role === 'custom') return false;
+  return intermediates.some((item) => item.id === employee.id);
+}
+
+function getIntermediateSlotTemplate(employee, weekIndex) {
+  const preference = `${employee?.defaultShiftPreference || ''}`.toLowerCase();
+  if (preference === 'intermediate_0900') return INTERMEDIATE_SHIFT_A;
+  if (preference === 'intermediate_1000') return INTERMEDIATE_SHIFT_B;
+  return getIntermediateShiftByWeek(weekIndex);
+}
+
+function pickCoverageCandidate(candidates, intermediates, shiftType, usedIds = new Set()) {
+  const ranked = [...(candidates || [])]
+    .filter((employee) => employee?.id && !usedIds.has(employee.id))
+    .sort((a, b) => {
+      const intermediateA = isIntermediateCoverageEmployee(a, intermediates);
+      const intermediateB = isIntermediateCoverageEmployee(b, intermediates);
+      if (intermediateA !== intermediateB) return intermediateA ? -1 : 1;
+
+      const prefA = `${a.defaultShiftPreference || ''}`.toLowerCase();
+      const prefB = `${b.defaultShiftPreference || ''}`.toLowerCase();
+      const preferenceScore = (preference) => {
+        if (shiftType === 'morning' && preference === 'morning') return -1;
+        if (shiftType === 'evening' && preference === 'evening') return -1;
+        if (shiftType === 'intermediate' && (preference === 'intermediate_0900' || preference === 'intermediate_1000')) return -1;
+        return 0;
+      };
+      const prefDiff = preferenceScore(prefA) - preferenceScore(prefB);
+      if (prefDiff !== 0) return prefDiff;
+
+      return (a.fullName || '').localeCompare(b.fullName || '', 'el');
+    });
+
+  return ranked[0] || null;
+}
+
+function assignThreeAvailableSlots({
+  availableEmployees,
+  date,
+  weekIndex,
+  coreA,
+  coreB,
+  coreAMorningThisWeek,
+  intermediates,
+  configuredIntermediateIds = [],
+  generated,
+  existingEntries,
+  warnings,
+  specialDay = null,
+  notes = 'Auto-generated 3-employee coverage',
+}) {
+  const assignments = { morning: null, intermediate: null, evening: null };
+  const usedIds = new Set();
+  const available = [...(availableEmployees || [])];
+
+  [coreA, coreB].forEach((coreEmployee) => {
+    if (!coreEmployee?.id || !available.some((employee) => employee.id === coreEmployee.id)) return;
+    const template = getCoreSlotTemplate(coreEmployee, coreA, coreB, coreAMorningThisWeek);
+    if (!template || assignments[template.shiftType]) return;
+    assignments[template.shiftType] = { employee: coreEmployee, template };
+    usedIds.add(coreEmployee.id);
+  });
+
+  const missingCoreTemplates = [coreA, coreB]
+    .filter((coreEmployee) => coreEmployee?.id && !available.some((employee) => employee.id === coreEmployee.id))
+    .map((coreEmployee) => getCoreSlotTemplate(coreEmployee, coreA, coreB, coreAMorningThisWeek))
+    .filter(Boolean);
+
+  const nonCoreCandidates = available.filter((employee) => !isResolvedCoreEmployee(employee, coreA, coreB));
+  const intermediateCandidates = nonCoreCandidates.filter((employee) =>
+    isIntermediateCoverageEmployee(employee, intermediates, configuredIntermediateIds),
+  );
+
+  missingCoreTemplates.forEach((template) => {
+    if (assignments[template.shiftType]) return;
+    const picked = pickCoverageCandidate(nonCoreCandidates, intermediates, template.shiftType, usedIds);
+    if (!picked) return;
+    assignments[template.shiftType] = { employee: picked, template };
+    usedIds.add(picked.id);
+  });
+
+  if (!assignments.intermediate) {
+    const picked = pickCoverageCandidate(intermediateCandidates, intermediates, 'intermediate', usedIds);
+    if (picked) {
+      assignments.intermediate = {
+        employee: picked,
+        template: getIntermediateSlotTemplate(picked, weekIndex),
+      };
+      usedIds.add(picked.id);
+    } else {
+      pushWarningOnce(
+        warnings,
+        `Δεν υπήρχε διαθέσιμος Intermediate / Coverage για ενδιάμεση βάρδια στις ${formatDateGreek(date)}.`,
+      );
+    }
+  }
+
+  ['morning', 'evening'].forEach((slot) => {
+    if (assignments[slot]) return;
+    const template = slot === 'morning' ? MORNING_SHIFT : EVENING_SHIFT;
+    const picked = pickCoverageCandidate(available, intermediates, slot, usedIds);
+    if (!picked) return;
+    assignments[slot] = { employee: picked, template };
+    usedIds.add(picked.id);
+  });
+
+  ['morning', 'intermediate', 'evening'].forEach((slot) => {
+    const assignment = assignments[slot];
+    if (!assignment) {
+      pushWarningOnce(warnings, `Ακάλυπτη ${slot} βάρδια στις ${formatDateGreek(date)} με 3 διαθέσιμους.`);
+      return;
+    }
+    const shift = buildShiftFromTemplate({
+      employee: assignment.employee,
+      date,
+      template: assignment.template,
+      notes,
+      specialDay,
+    });
+    if (hasOverlap([...existingEntries, ...generated], shift)) {
+      pushWarningOnce(warnings, `Overlap στη βάρδια ${slot} για ${assignment.employee.fullName} (${formatDateGreek(date)}).`);
+      return;
+    }
+    generated.push(shift);
+  });
+}
+
 export async function generateSmartWeekSchedule({
   weekDays,
   employees,
@@ -639,7 +875,11 @@ export async function generateSmartWeekSchedule({
   const generated = [];
   const warnings = [];
 
-  const { coreA, coreB, intermediate, intermediates } = resolveMonthlyEmployees(activeEmployees, {});
+  const { coreA, coreB, intermediate, intermediates, configuredIntermediateIds } = resolveMonthlyEmployees(
+    activeEmployees,
+    {},
+    warnings,
+  );
   if (!coreA || !coreB) {
     warnings.push('Δεν εντοπίστηκαν 2 core εργαζόμενοι. Εφαρμόστηκε best-effort fallback.');
   }
@@ -791,6 +1031,7 @@ export async function generateSmartWeekSchedule({
     const canAssignWithRule = (employee, ignoreWeeklyRule = false) => (
       !(excludedEmployeeIds?.has?.(employee?.id)) &&
       canAssignForDay(employee, weekday, assignedToday, allowOverTarget) &&
+      (!getCoreTemplate(employee) || getCoreTemplate(employee).shiftType === slotTemplate.shiftType) &&
       (ignoreWeeklyRule || respectsWeeklyShiftSideRule(employee, weekIndex, slotTemplate.shiftType))
     );
 
@@ -818,33 +1059,6 @@ export async function generateSmartWeekSchedule({
     return available[0] || null;
   }
 
-  function pickIntermediateCoverageEmployee(availableEmployees, weekday, assignedToday) {
-    if (!availableEmployees.length) return null;
-
-    const ranked = [...availableEmployees].sort((a, b) => {
-      const designatedA = intermediates.some((item) => item.id === a.id);
-      const designatedB = intermediates.some((item) => item.id === b.id);
-      if (designatedA !== designatedB) return designatedA ? -1 : 1;
-
-      const roleA = normalizeRole(a.scheduleRole || a.roleType) === 'intermediate';
-      const roleB = normalizeRole(b.scheduleRole || b.roleType) === 'intermediate';
-      if (roleA !== roleB) return roleA ? -1 : 1;
-
-      const scoreDiff = candidateScore(a, 'intermediate') - candidateScore(b, 'intermediate');
-      if (scoreDiff !== 0) return scoreDiff;
-      return (a.fullName || '').localeCompare(b.fullName || '', 'el');
-    });
-
-    const strict = ranked.find((employee) =>
-      canAssignIntermediateForPattern(employee, weekday, assignedToday, false),
-    );
-    if (strict) return strict;
-
-    return (
-      ranked.find((employee) => canAssignIntermediateForPattern(employee, weekday, assignedToday, true)) || null
-    );
-  }
-
   function pickRestCandidateForPrimaryDay(availableEmployees) {
     return [...availableEmployees].sort((a, b) => {
       const assignedDiff = (assignedCountByEmployee[b.id] || 0) - (assignedCountByEmployee[a.id] || 0);
@@ -857,6 +1071,107 @@ export async function generateSmartWeekSchedule({
       }
       return (a.fullName || '').localeCompare(b.fullName || '', 'el');
     })[0] || null;
+  }
+
+  function getCoreTemplate(employee) {
+    return getCoreSlotTemplate(employee, coreA, coreB, coreAMorningThisWeek);
+  }
+
+  function isCoreEmployee(employee) {
+    return isResolvedCoreEmployee(employee, coreA, coreB);
+  }
+
+  function pickCoverageEmployee(candidates, shiftType, excludeIds = new Set()) {
+    const ranked = [...candidates]
+      .filter((employee) => employee?.id && !excludeIds.has(employee.id))
+      .sort((a, b) => {
+        const intermediateA = intermediates.some((item) => item.id === a.id);
+        const intermediateB = intermediates.some((item) => item.id === b.id);
+        if (intermediateA !== intermediateB) return intermediateA ? -1 : 1;
+        const scoreDiff = candidateScore(a, shiftType) - candidateScore(b, shiftType);
+        if (scoreDiff !== 0) return scoreDiff;
+        return (a.fullName || '').localeCompare(b.fullName || '', 'el');
+      });
+    return ranked[0] || null;
+  }
+
+  function addPlannedShift({ employee, date, template, assignedToday, note }) {
+    const inserted = addShiftForDay({
+      employee,
+      date,
+      template,
+      notes: note,
+    });
+    if (inserted) assignedToday.add(employee.id);
+    return inserted;
+  }
+
+  function assignThreeEmployeePattern({ date, weekday, availableEmployees, assignedToday }) {
+    const note = 'Auto-generated 3-employee coverage';
+    const available = availableEmployees.filter((employee) => canAssignForDay(employee, weekday, assignedToday, true));
+    const assignments = { morning: null, intermediate: null, evening: null };
+    const usedIds = new Set();
+
+    [coreA, coreB].forEach((coreEmployee) => {
+      if (!coreEmployee?.id || !available.some((employee) => employee.id === coreEmployee.id)) return;
+      const template = getCoreTemplate(coreEmployee);
+      if (!template || assignments[template.shiftType]) return;
+      assignments[template.shiftType] = { employee: coreEmployee, template };
+      usedIds.add(coreEmployee.id);
+    });
+
+    const missingCoreTemplates = [coreA, coreB]
+      .filter((coreEmployee) => coreEmployee?.id && !available.some((employee) => employee.id === coreEmployee.id))
+      .map((coreEmployee) => getCoreTemplate(coreEmployee))
+      .filter(Boolean);
+
+    const nonCoreCandidates = available.filter((employee) => !isCoreEmployee(employee) && !usedIds.has(employee.id));
+    const intermediateCandidates = nonCoreCandidates.filter((employee) =>
+      isIntermediateCoverageEmployee(employee, intermediates, configuredIntermediateIds),
+    );
+
+    missingCoreTemplates.forEach((template) => {
+      if (assignments[template.shiftType]) return;
+      const picked = pickCoverageEmployee(nonCoreCandidates, template.shiftType, usedIds);
+      if (!picked) return;
+      assignments[template.shiftType] = { employee: picked, template };
+      usedIds.add(picked.id);
+    });
+
+    if (!assignments.intermediate) {
+      const picked = pickCoverageEmployee(intermediateCandidates, 'intermediate', usedIds);
+      if (picked) {
+        assignments.intermediate = {
+          employee: picked,
+          template: getIntermediateSlotTemplate(picked, weekIndex),
+        };
+        usedIds.add(picked.id);
+      } else {
+        pushWarningOnce(
+          warnings,
+          `Δεν υπήρχε διαθέσιμος Intermediate / Coverage για ενδιάμεση βάρδια στις ${formatDateGreek(date)}.`,
+        );
+      }
+    }
+
+    ['morning', 'evening'].forEach((slot) => {
+      if (assignments[slot]) return;
+      const template = slot === 'morning' ? MORNING_SHIFT : EVENING_SHIFT;
+      const picked = pickCoverageEmployee(available, slot, usedIds);
+      if (picked) {
+        assignments[slot] = { employee: picked, template };
+        usedIds.add(picked.id);
+      }
+    });
+
+    ['morning', 'intermediate', 'evening'].forEach((slot) => {
+      const assignment = assignments[slot];
+      if (!assignment) {
+        pushWarningOnce(warnings, `Ακάλυπτη ${slot} βάρδια στις ${formatDateGreek(date)} με 3 διαθέσιμους.`);
+        return;
+      }
+      addPlannedShift({ ...assignment, date, assignedToday, note });
+    });
   }
 
   weekDays.slice(0, 6).forEach((date) => {
@@ -885,113 +1200,15 @@ export async function generateSmartWeekSchedule({
 
     // Coverage priority: when exactly 3 employees are available, enforce 1 morning + 1 intermediate + 1 evening.
     if (shouldUseIntermediatePattern) {
-      const intermediateEmployee = pickIntermediateCoverageEmployee(availableEmployees, weekday, assignedToday);
-
-      if (intermediateEmployee) {
-        const insertedIntermediate = addShiftForDay({
-          employee: intermediateEmployee,
-          date,
-          template: getPreferredIntermediateShift(intermediateEmployee, weekIndex),
-          notes: 'Auto-generated 3-employee coverage',
-        });
-        if (insertedIntermediate) assignedToday.add(intermediateEmployee.id);
-      } else {
-        warnings.push(`Ακάλυπτη ενδιάμεση βάρδια στις ${formatDateGreek(date)}.`);
-      }
-
-      const excludedEmployeeIds = intermediateEmployee?.id ? new Set([intermediateEmployee.id]) : null;
-      [
-        { ...MORNING_SHIFT, slot: 'morning' },
-        { ...EVENING_SHIFT, slot: 'evening' },
-      ].forEach((slotTemplate) => {
-        const preferred = slotTemplate.slot === 'morning'
-          ? [morningPrimary, eveningPrimary, ...intermediates]
-          : [eveningPrimary, morningPrimary, ...intermediates];
-
-        let selected = pickSlotCandidate({
-          slotTemplate,
-          preferred,
-          weekday,
-          assignedToday,
-          allowOverTarget: false,
-          excludedEmployeeIds,
-        });
-
-        if (!selected) {
-          selected = pickSlotCandidate({
-            slotTemplate,
-            preferred,
-            weekday,
-            assignedToday,
-            allowOverTarget: true,
-            excludedEmployeeIds,
-          });
-        }
-
-        if (!selected && excludedEmployeeIds?.size) {
-          selected = pickSlotCandidate({
-            slotTemplate,
-            preferred,
-            weekday,
-            assignedToday,
-            allowOverTarget: true,
-            excludedEmployeeIds: null,
-          });
-        }
-
-        if (!selected) {
-          warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${formatDateGreek(date)}.`);
-          return;
-        }
-
-        const inserted = addShiftForDay({
-          employee: selected,
-          date,
-          template: slotTemplate,
-          notes: 'Auto-generated 3-employee coverage',
-        });
-        if (inserted) assignedToday.add(selected.id);
-      });
+      assignThreeEmployeePattern({ date, weekday, availableEmployees, assignedToday });
       return;
     }
 
     if (availableEmployees.length === 3) {
-      [
-        { ...MORNING_SHIFT, slot: 'morning' },
-        { ...EVENING_SHIFT, slot: 'evening' },
-        { ...(weekIndex % 2 === 0 ? MORNING_SHIFT : EVENING_SHIFT), slot: weekIndex % 2 === 0 ? 'morning' : 'evening' },
-      ].forEach((slotTemplate) => {
-        const preferred = slotTemplate.slot === 'morning'
-          ? [morningPrimary, ...intermediates, eveningPrimary]
-          : [eveningPrimary, ...intermediates, morningPrimary];
-
-        const selected = pickSlotCandidate({
-          slotTemplate,
-          preferred,
-          weekday,
-          assignedToday,
-          allowOverTarget: true,
-          excludedEmployeeIds: null,
-        });
-
-        if (!selected) {
-          warnings.push(`Ακάλυπτη ${slotTemplate.label} στις ${formatDateGreek(date)}.`);
-          return;
-        }
-
-        const inserted = addShiftForDay({
-          employee: selected,
-          date,
-          template: slotTemplate,
-          notes: 'Auto-generated best-effort coverage',
-        });
-        if (inserted) assignedToday.add(selected.id);
-      });
-      if (weekday === 6) {
-        warnings.push(`Best-effort Σάββατο στις ${formatDateGreek(date)} με 3 διαθέσιμους υπαλλήλους.`);
-      }
+      assignThreeEmployeePattern({ date, weekday, availableEmployees, assignedToday });
       return;
     }
+
 
     // Safe fallback: when 2 employees are available, prioritize one morning and one evening shift.
     if (availableEmployees.length === 2) {
@@ -1141,6 +1358,7 @@ export async function generateSmartWeekSchedule({
     warnings,
     manualUnavailableByDate,
     fixedOffById,
+    roleConfig: {},
   });
 
   return {
@@ -1175,7 +1393,11 @@ export function generateSmartMonthSchedule({
     return { shifts: [], warnings: ['Δεν βρέθηκαν ενεργοί υπάλληλοι.'], meta: { monthDays } };
   }
 
-  const { coreA, coreB, intermediate, intermediates } = resolveMonthlyEmployees(activeEmployees, roleConfig);
+  const { coreA, coreB, intermediate, intermediates, configuredIntermediateIds } = resolveMonthlyEmployees(
+    activeEmployees,
+    roleConfig,
+    warnings,
+  );
   if (!coreA || !coreB || !intermediate) {
     warnings.push('Δεν βρέθηκαν 3 εργαζόμενοι για πλήρες pattern (core A/B + intermediate). Εφαρμόστηκε best-effort fallback.');
   }
@@ -1210,14 +1432,20 @@ export function generateSmartMonthSchedule({
 
   monthDays.forEach((date) => {
     const weekday = toDate(date).getDay();
-    const shouldUseIntermediatePattern =
-      hasExactlyFourEmployees && INTERMEDIATE_PRIMARY_WEEKDAYS.has(weekday);
-    const shouldEnforceTwoByTwoCoverage =
-      hasExactlyFourEmployees && INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday);
     const weekIndex = weekIndexByKey[getWeekStartFromDate(date)] || 0;
     const manualDayEntries = manualOverridesByDate.get(date) || [];
     const hasManualForDate = normalizedRules.allowManualOverride && manualDayEntries.length > 0;
     const existingForOverlap = [...manualDayEntries, ...generated];
+    const manualEmployeeIdsForAvailability = new Set(manualDayEntries.map((entry) => entry.employeeId).filter(Boolean));
+    const availableEmployeesForDate = activeEmployees.filter((employee) => {
+      if (!employee?.id || manualEmployeeIdsForAvailability.has(employee.id)) return false;
+      if (hasFixedDayOffOnWeekday(employee, weekday, normalizedRules)) return false;
+      const fixedOff = fixedOffById[employee.id];
+      return !(typeof fixedOff === 'number' && fixedOff === weekday);
+    });
+    const shouldUseIntermediatePattern = weekday !== 0 && availableEmployeesForDate.length === 3;
+    const shouldEnforceTwoByTwoCoverage =
+      hasExactlyFourEmployees && INTERMEDIATE_EXTRA_WEEKDAYS.has(weekday) && availableEmployeesForDate.length === 4;
 
     const specialDay = normalizedRules.specialDaysByDate?.[date];
     if (!hasManualForDate && specialDay) {
@@ -1283,18 +1511,36 @@ export function generateSmartMonthSchedule({
     }
 
     const coreAMorningWeek = normalizedRules.weeklyRotationEnabled
-      ? weekIndex % 2 === 0
+      ? (normalizedRules.startWithCoreAMorning ? weekIndex % 2 === 0 : weekIndex % 2 !== 0)
       : Boolean(normalizedRules.startWithCoreAMorning);
 
     const coreAShift = coreAMorningWeek ? MORNING_SHIFT : EVENING_SHIFT;
     const coreBShift = coreAMorningWeek ? EVENING_SHIFT : MORNING_SHIFT;
 
+    if (shouldUseIntermediatePattern && !hasManualForDate) {
+      assignThreeAvailableSlots({
+        availableEmployees: availableEmployeesForDate,
+        date,
+        weekIndex,
+        coreA,
+        coreB,
+        coreAMorningThisWeek: coreAMorningWeek,
+        intermediates,
+        configuredIntermediateIds,
+        generated,
+        existingEntries: existingForOverlap,
+        warnings,
+        specialDay,
+      });
+      return;
+    }
+
     const plannedTypes = [];
     const missingCoreTypes = [];
 
     const corePlan = [
-      { employee: coreA, template: applyWeeklyShiftSideTemplate(coreA, weekIndex, coreAShift) },
-      { employee: coreB, template: applyWeeklyShiftSideTemplate(coreB, weekIndex, coreBShift) },
+      { employee: coreA, template: coreAShift },
+      { employee: coreB, template: coreBShift },
     ];
 
     corePlan.forEach(({ employee, template }) => {
@@ -1468,6 +1714,7 @@ export function generateSmartMonthSchedule({
     warnings,
     manualUnavailableByDate,
     fixedOffById,
+    roleConfig,
   });
 
   return {

@@ -81,6 +81,13 @@ export default function AssignedShiftItem({
   return (
     <article
       title={manualNote || undefined}
+      data-testid="assigned-shift"
+      data-date={shift.date || ''}
+      data-employee-id={shift.employeeId || ''}
+      data-employee-name={employee?.fullName || ''}
+      data-shift-type={shift.shiftType || type}
+      data-start-time={shift.startTime || ''}
+      data-end-time={shift.endTime || ''}
       className={`relative rounded-md border leading-snug shadow-sm backdrop-blur-sm ${densityClasses.card} ${
         typeClass ||
         (hasConflict

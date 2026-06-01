@@ -27,6 +27,25 @@ export const DEFAULT_SHIFT_DEFINITIONS: Record<ShiftType, {
   },
 };
 
+export function getShiftDefinition(
+  shiftType: ShiftType,
+  employee?: { defaultShiftPreference?: string },
+): {
+  shiftType: ShiftType;
+  startTime: string;
+  endTime: string;
+} {
+  if (shiftType === 'INTERMEDIATE') {
+    if (employee?.defaultShiftPreference === 'INTERMEDIATE_0900') {
+      return { shiftType, startTime: '09:00', endTime: '17:00' };
+    }
+    if (employee?.defaultShiftPreference === 'INTERMEDIATE_1000') {
+      return { shiftType, startTime: '10:00', endTime: '18:00' };
+    }
+  }
+  return DEFAULT_SHIFT_DEFINITIONS[shiftType];
+}
+
 export const DEFAULT_DAYS_OFF: Partial<Record<ScheduleRole, Weekday>> = {
   CORE_A: 'WEDNESDAY',
   CORE_B: 'THURSDAY',

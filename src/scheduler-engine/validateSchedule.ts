@@ -101,9 +101,11 @@ export function validateSchedule(params: {
     }
 
     if (hasGapForDate(params.unresolvedGaps, date)) continue;
-    if (weekday === 'MONDAY' || weekday === 'SATURDAY') {
+    const dayShifts = shiftsOn(params.shifts, date);
+    const isFullCoverageDay = weekday === 'MONDAY' || weekday === 'SATURDAY' || (weekday === 'FRIDAY' && dayShifts.length >= 4);
+    if (isFullCoverageDay) {
       if (countType(params.shifts, date, 'MORNING') !== 2 || countType(params.shifts, date, 'AFTERNOON') !== 2 || countType(params.shifts, date, 'INTERMEDIATE') !== 0) {
-        violations.push(violation('INVALID_FULL_COVERAGE', 'Δευτέρα/Σάββατο πρέπει να έχουν 2 πρωί και 2 απόγευμα.', date));
+        violations.push(violation('INVALID_FULL_COVERAGE', 'Ημέρα πλήρους κάλυψης πρέπει να έχει 2 πρωί και 2 απόγευμα.', date));
       }
     } else {
       if (countType(params.shifts, date, 'MORNING') !== 1 || countType(params.shifts, date, 'INTERMEDIATE') !== 1 || countType(params.shifts, date, 'AFTERNOON') !== 1) {

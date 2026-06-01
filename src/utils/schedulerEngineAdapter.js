@@ -91,9 +91,19 @@ function toEngineWeekday(value) {
 function mapShiftPreference(value) {
   const token = normalizeRoleToken(value);
   if (token.includes('MORNING')) return 'MORNING';
+  if (token.includes('INTERMEDIATE_0900') || token.includes('0900') || token.includes('09_00')) return 'INTERMEDIATE_0900';
+  if (token.includes('INTERMEDIATE_1000') || token.includes('1000') || token.includes('10_00')) return 'INTERMEDIATE_1000';
   if (token.includes('INTERMEDIATE')) return 'INTERMEDIATE';
   if (token.includes('EVENING') || token.includes('AFTERNOON')) return 'AFTERNOON';
   return 'AUTO';
+}
+
+function toEngineRules(rules = {}) {
+  return {
+    weeklyRotationEnabled: rules.weeklyRotationEnabled !== false,
+    avoidConsecutiveSundays: rules.avoidConsecutiveSundays !== false,
+    startWithCoreAMorning: rules.startWithCoreAMorning !== false,
+  };
 }
 
 function toEngineEmployee(employee, scheduleRole, rules = {}) {
@@ -107,6 +117,7 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
     defaultShiftPreference: mapShiftPreference(employee.defaultShiftPreference),
     participatesInWeeklyRotation: employee.participatesInRotation !== false,
     participatesInSundayRotation: employee.participatesInSundayRotation !== false,
+    weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
     extraMode: employee.extraMode || (scheduleRole.startsWith('EXTRA') ? 'SUBSTITUTE_ONLY' : undefined),
     activeFrom: employee.activeFrom || undefined,
     activeTo: employee.activeTo || undefined,
@@ -229,6 +240,7 @@ export async function generateEngineWeekSchedule({
     endDate: weekDays[weekDays.length - 1],
     employees: engineEmployees,
     absences: toEngineAbsences(allShifts, weekDays),
+    rules: toEngineRules(rules),
   });
 
   return {
@@ -257,6 +269,7 @@ export function generateEngineMonthSchedule({
     endDate: monthDays[monthDays.length - 1],
     employees: engineEmployees,
     absences: toEngineAbsences([...allShifts, ...existingMonthShifts], monthDays),
+    rules: toEngineRules(rules),
   });
 
   return {

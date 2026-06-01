@@ -14,6 +14,7 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
     startDate: normalized.startDate,
     endDate: normalized.endDate,
     resolvedRoles,
+    rules: normalized.rules,
   });
   const afterAbsences = applyAbsences({
     shifts: base.shifts,
@@ -33,6 +34,7 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
     employees: normalized.employees,
     absences: normalized.absences,
     previousSundayEmployeeId: normalized.previousSundayEmployeeId,
+    avoidConsecutiveSundays: normalized.rules.avoidConsecutiveSundays,
   });
   const warnings = [...resolvedRoles.warnings, ...filled.warnings, ...withSundays.warnings];
   const validation = validateSchedule({

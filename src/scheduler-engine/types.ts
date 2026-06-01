@@ -46,9 +46,10 @@ export type EmployeeScheduleConfig = {
   scheduleRole: ScheduleRole;
   isEnabled: boolean;
   fixedDayOff?: Weekday;
-  defaultShiftPreference?: 'AUTO' | 'MORNING' | 'INTERMEDIATE' | 'AFTERNOON';
+  defaultShiftPreference?: 'AUTO' | 'MORNING' | 'INTERMEDIATE' | 'INTERMEDIATE_0900' | 'INTERMEDIATE_1000' | 'AFTERNOON';
   participatesInWeeklyRotation: boolean;
   participatesInSundayRotation: boolean;
+  weeklyFixedShiftSideRotation?: boolean;
   extraMode?: ExtraEmployeeMode;
   activeFrom?: string;
   activeTo?: string;
@@ -141,6 +142,11 @@ export type GenerateScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences?: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
+  rules?: {
+    weeklyRotationEnabled?: boolean;
+    avoidConsecutiveSundays?: boolean;
+    startWithCoreAMorning?: boolean;
+  };
 };
 
 export type GenerateScheduleResult = {

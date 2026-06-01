@@ -63,6 +63,21 @@ function assertNoConsecutiveSundays(shifts) {
   }
 }
 
+function sundayAssignments(shifts) {
+  return shifts
+    .filter((shift) => shift.shiftType === 'SUNDAY_12H')
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((shift) => ({ date: shift.date, employeeId: shift.employeeId }));
+}
+
+function assertSundayRotationUsesAllEligible(shifts, expectedCount, label) {
+  const assignedEmployees = new Set(sundayAssignments(shifts).map((shift) => shift.employeeId));
+  assert(
+    assignedEmployees.size === expectedCount,
+    `${label}: expected ${expectedCount} Sunday employees, got ${assignedEmployees.size}`,
+  );
+}
+
 function basicEmployees() {
   return [
     {
@@ -151,6 +166,69 @@ try {
   assertNoDoubleShift(basicWeek.shifts);
   assertCoreRules(basicWeek, fourEmployees);
 
+  const coreBMorningWeek = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    employees: fourEmployees,
+    absences: [],
+    rules: { startWithCoreAMorning: false },
+  });
+  assert(employeeShift(coreBMorningWeek.shifts, '2026-06-01', 'core-a')?.shiftType === 'AFTERNOON', 'startWithCoreAMorning=false puts CORE_A afternoon');
+  assert(employeeShift(coreBMorningWeek.shifts, '2026-06-01', 'core-b')?.shiftType === 'MORNING', 'startWithCoreAMorning=false puts CORE_B morning');
+
+  const noWeeklyRotation = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-14',
+    employees: fourEmployees,
+    absences: [],
+    rules: { weeklyRotationEnabled: false, startWithCoreAMorning: true },
+  });
+  assert(employeeShift(noWeeklyRotation.shifts, '2026-06-01', 'core-a')?.shiftType === 'MORNING', 'rotation disabled week A CORE_A morning');
+  assert(employeeShift(noWeeklyRotation.shifts, '2026-06-08', 'core-a')?.shiftType === 'MORNING', 'rotation disabled week B CORE_A still morning');
+
+  const intermediate0900Employees = fourEmployees.map((employee) =>
+    employee.employeeId === 'flex-b' ? { ...employee, defaultShiftPreference: 'INTERMEDIATE_0900' } : employee,
+  );
+  const intermediate0900Week = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    employees: intermediate0900Employees,
+    absences: [],
+  });
+  const flexBTuesday = employeeShift(intermediate0900Week.shifts, '2026-06-02', 'flex-b');
+  assert(flexBTuesday?.shiftType === 'INTERMEDIATE', 'flex-b is Tuesday intermediate');
+  assert(flexBTuesday?.startTime === '09:00' && flexBTuesday?.endTime === '17:00', 'intermediate_0900 preference sets 09:00-17:00');
+
+  const noFridayOffEmployees = fourEmployees.map((employee) => ({ ...employee, fixedDayOff: 'SUNDAY' }));
+  const fullCoverageFriday = generateSchedule({
+    startDate: '2026-06-05',
+    endDate: '2026-06-05',
+    employees: noFridayOffEmployees,
+    absences: [],
+  });
+  assert(countShiftType(fullCoverageFriday.shifts, '2026-06-05', 'MORNING') === 2, 'Friday with 4 available has 2 morning');
+  assert(countShiftType(fullCoverageFriday.shifts, '2026-06-05', 'AFTERNOON') === 2, 'Friday with 4 available has 2 afternoon');
+  assert(countShiftType(fullCoverageFriday.shifts, '2026-06-05', 'INTERMEDIATE') === 0, 'Friday with 4 available has 0 intermediate');
+  assert(fullCoverageFriday.validation.valid, 'Friday full coverage validates');
+
+  const noWeeklyParticipantEmployees = fourEmployees.map((employee) =>
+    employee.employeeId === 'flex-b' ? { ...employee, participatesInWeeklyRotation: false } : employee,
+  );
+  const noWeeklyParticipant = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    employees: noWeeklyParticipantEmployees,
+    absences: [],
+  });
+  assert(
+    !noWeeklyParticipant.shifts.some((shift) => shift.employeeId === 'flex-b' && shift.shiftType !== 'SUNDAY_12H'),
+    'participatesInWeeklyRotation=false excludes employee from weekday generated shifts',
+  );
+  assert(
+    noWeeklyParticipant.warnings.some((warning) => warning.code === 'MISSING_REQUIRED_ROLE'),
+    'missing weekly participant role creates warning',
+  );
+
   const basicMonth = generateSchedule({
     startDate: '2026-06-01',
     endDate: '2026-06-30',
@@ -159,8 +237,42 @@ try {
   });
   assert(basicMonth.validation.valid, 'basic full month is valid');
   assertNoConsecutiveSundays(basicMonth.shifts);
+  assertSundayRotationUsesAllEligible(basicMonth.shifts, 4, 'June 2026 Sunday rotation');
   assertNoDoubleShift(basicMonth.shifts);
   assertCoreRules(basicMonth, fourEmployees);
+
+  const mayMonth = generateSchedule({
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    employees: fourEmployees,
+    absences: [],
+  });
+  const maySundays = sundayAssignments(mayMonth.shifts);
+  const juneSundays = sundayAssignments(basicMonth.shifts);
+  assert(maySundays.length === 5, 'May 2026 has five generated Sundays');
+  assert(juneSundays.length === 4, 'June 2026 has four generated Sundays');
+  assert(
+    maySundays[maySundays.length - 1].employeeId !== juneSundays[0].employeeId,
+    'Sunday rotation continues across separate month generation',
+  );
+  assert(
+    new Set([...maySundays.slice(-3), juneSundays[0]].map((shift) => shift.employeeId)).size === 4,
+    'Sunday rotation does not restart at the next month boundary',
+  );
+
+  const sundayExcludedEmployees = fourEmployees.map((employee) =>
+    employee.employeeId === 'core-a' ? { ...employee, participatesInSundayRotation: false } : employee,
+  );
+  const sundayExcludedMonth = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-30',
+    employees: sundayExcludedEmployees,
+    absences: [],
+  });
+  assert(
+    !sundayExcludedMonth.shifts.some((shift) => shift.shiftType === 'SUNDAY_12H' && shift.employeeId === 'core-a'),
+    'participatesInSundayRotation=false excludes employee from Sunday shifts',
+  );
 
   const extraEmployees = [
     ...fourEmployees,

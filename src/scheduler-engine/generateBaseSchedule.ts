@@ -1,11 +1,16 @@
-import { BASE_ROLES, DEFAULT_SHIFT_DEFINITIONS } from './constants';
+import { BASE_ROLES, getShiftDefinition } from './constants';
 import { eachDateInclusive, getWeekIndex, getWeekday } from './dateUtils';
 import type { DayPlan, GeneratedShift, ResolvedScheduleRoles, ScheduleRole, ShiftType } from './types';
+
+type BaseScheduleRules = {
+  weeklyRotationEnabled: boolean;
+  startWithCoreAMorning: boolean;
+};
 
 function shiftForRole(date: string, role: ScheduleRole, shiftType: ShiftType, resolvedRoles: ResolvedScheduleRoles): GeneratedShift | null {
   const employee = resolvedRoles.roles[role];
   if (!employee) return null;
-  const definition = DEFAULT_SHIFT_DEFINITIONS[shiftType];
+  const definition = getShiftDefinition(shiftType, employee);
   return {
     id: `base-${date}-${role}-${shiftType}`,
     date,
@@ -19,26 +24,40 @@ function shiftForRole(date: string, role: ScheduleRole, shiftType: ShiftType, re
   };
 }
 
-function getCoreSides(weekIndex: number): { morningCore: ScheduleRole; afternoonCore: ScheduleRole } {
-  const isEvenWeek = weekIndex % 2 === 0;
+function getCoreSides(weekIndex: number, rules: BaseScheduleRules): { morningCore: ScheduleRole; afternoonCore: ScheduleRole } {
+  const coreAMorning = rules.weeklyRotationEnabled
+    ? (rules.startWithCoreAMorning ? weekIndex % 2 === 0 : weekIndex % 2 !== 0)
+    : rules.startWithCoreAMorning;
   return {
-    morningCore: isEvenWeek ? 'CORE_A' : 'CORE_B',
-    afternoonCore: isEvenWeek ? 'CORE_B' : 'CORE_A',
+    morningCore: coreAMorning ? 'CORE_A' : 'CORE_B',
+    afternoonCore: coreAMorning ? 'CORE_B' : 'CORE_A',
   };
 }
 
-function getFlexSides(weekIndex: number): { morningFlex: ScheduleRole; afternoonFlex: ScheduleRole } {
-  const swapFlex = weekIndex % 4 >= 2;
+function getFlexSides(weekIndex: number, resolvedRoles: ResolvedScheduleRoles): { morningFlex: ScheduleRole; afternoonFlex: ScheduleRole } {
+  const hasWeeklySideRotation =
+    resolvedRoles.roles.FLEX_A?.weeklyFixedShiftSideRotation === true ||
+    resolvedRoles.roles.FLEX_B?.weeklyFixedShiftSideRotation === true;
+  const swapFlex = hasWeeklySideRotation ? weekIndex % 2 !== 0 : weekIndex % 4 >= 2;
   return {
     morningFlex: swapFlex ? 'FLEX_B' : 'FLEX_A',
     afternoonFlex: swapFlex ? 'FLEX_A' : 'FLEX_B',
   };
 }
 
-function chooseWeekdayAssignments(date: string, weekIndex: number, resolvedRoles: ResolvedScheduleRoles): DayPlan['assignments'] {
+function getFixedOffRole(date: string, resolvedRoles: ResolvedScheduleRoles): ScheduleRole | undefined {
   const weekday = getWeekday(date);
-  const { morningCore, afternoonCore } = getCoreSides(weekIndex);
-  const offRole = BASE_ROLES.find((role) => resolvedRoles.roles[role]?.fixedDayOff === weekday);
+  return BASE_ROLES.find((role) => resolvedRoles.roles[role]?.fixedDayOff === weekday);
+}
+
+function chooseWeekdayAssignments(
+  date: string,
+  weekIndex: number,
+  resolvedRoles: ResolvedScheduleRoles,
+  rules: BaseScheduleRules,
+): DayPlan['assignments'] {
+  const { morningCore, afternoonCore } = getCoreSides(weekIndex, rules);
+  const offRole = getFixedOffRole(date, resolvedRoles);
   const availableRoles = BASE_ROLES.filter((role) => role !== offRole);
 
   if (availableRoles.includes(morningCore) && availableRoles.includes(afternoonCore)) {
@@ -68,6 +87,7 @@ export function generateBaseSchedule(params: {
   startDate: string;
   endDate: string;
   resolvedRoles: ResolvedScheduleRoles;
+  rules: BaseScheduleRules;
 }): { shifts: GeneratedShift[]; dayPlans: DayPlan[] } {
   const shifts: GeneratedShift[] = [];
   const dayPlans: DayPlan[] = [];
@@ -82,9 +102,10 @@ export function generateBaseSchedule(params: {
 
     let assignments: DayPlan['assignments'];
     let plannedOffRoles: ScheduleRole[] = [];
-    if (weekday === 'MONDAY' || weekday === 'SATURDAY') {
-      const { morningCore, afternoonCore } = getCoreSides(weekIndex);
-      const { morningFlex, afternoonFlex } = getFlexSides(weekIndex);
+    const fixedOffRole = getFixedOffRole(date, params.resolvedRoles);
+    if (weekday === 'MONDAY' || weekday === 'SATURDAY' || (weekday === 'FRIDAY' && !fixedOffRole)) {
+      const { morningCore, afternoonCore } = getCoreSides(weekIndex, params.rules);
+      const { morningFlex, afternoonFlex } = getFlexSides(weekIndex, params.resolvedRoles);
       assignments = [
         { scheduleRole: morningCore, shiftType: 'MORNING' },
         { scheduleRole: morningFlex, shiftType: 'MORNING' },
@@ -92,7 +113,7 @@ export function generateBaseSchedule(params: {
         { scheduleRole: afternoonFlex, shiftType: 'AFTERNOON' },
       ];
     } else {
-      assignments = chooseWeekdayAssignments(date, weekIndex, params.resolvedRoles);
+      assignments = chooseWeekdayAssignments(date, weekIndex, params.resolvedRoles, params.rules);
       plannedOffRoles = BASE_ROLES.filter((role) => !assignments.some((assignment) => assignment.scheduleRole === role));
     }
 

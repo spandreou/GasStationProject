@@ -1,4 +1,4 @@
-import { DEFAULT_SHIFT_DEFINITIONS, EXTRA_ROLES } from './constants';
+import { EXTRA_ROLES, getShiftDefinition } from './constants';
 import { isEmployeeAvailable } from './availability';
 import type {
   EmployeeAbsence,
@@ -61,7 +61,7 @@ function candidatePriority(employee: EmployeeScheduleConfig): number {
 }
 
 function buildReplacementShift(gap: ScheduleGap, employee: EmployeeScheduleConfig): GeneratedShift {
-  const definition = DEFAULT_SHIFT_DEFINITIONS[gap.shiftType];
+  const definition = getShiftDefinition(gap.shiftType, employee);
   return {
     id: `replacement-${gap.date}-${gap.shiftType}-${employee.employeeId}`,
     date: gap.date,

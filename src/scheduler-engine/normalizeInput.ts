@@ -7,6 +7,11 @@ export type NormalizedScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
+  rules: {
+    weeklyRotationEnabled: boolean;
+    avoidConsecutiveSundays: boolean;
+    startWithCoreAMorning: boolean;
+  };
 };
 
 export function normalizeInput(input: GenerateScheduleInput): NormalizedScheduleInput {
@@ -18,6 +23,7 @@ export function normalizeInput(input: GenerateScheduleInput): NormalizedSchedule
       defaultShiftPreference: employee.defaultShiftPreference || 'AUTO',
       participatesInWeeklyRotation: employee.participatesInWeeklyRotation !== false,
       participatesInSundayRotation: employee.participatesInSundayRotation !== false,
+      weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
       extraMode: employee.extraMode || (employee.scheduleRole.startsWith('EXTRA') ? 'DISABLED' : undefined),
       canCoverLeaves: employee.canCoverLeaves !== false,
       canWorkMorning: employee.canWorkMorning !== false,
@@ -33,5 +39,10 @@ export function normalizeInput(input: GenerateScheduleInput): NormalizedSchedule
     employees,
     absences: [...(input.absences || [])].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)),
     previousSundayEmployeeId: input.previousSundayEmployeeId,
+    rules: {
+      weeklyRotationEnabled: input.rules?.weeklyRotationEnabled !== false,
+      avoidConsecutiveSundays: input.rules?.avoidConsecutiveSundays !== false,
+      startWithCoreAMorning: input.rules?.startWithCoreAMorning !== false,
+    },
   };
 }

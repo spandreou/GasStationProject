@@ -6,7 +6,9 @@ function warning(id: string, code: string, message: string): ScheduleWarning {
 }
 
 export function resolveScheduleRoles(employees: EmployeeScheduleConfig[]): ResolvedScheduleRoles {
-  const enabledEmployees = employees.filter((employee) => employee.isEnabled !== false);
+  const enabledEmployees = employees.filter(
+    (employee) => employee.isEnabled !== false && employee.participatesInWeeklyRotation !== false,
+  );
   const warnings: ScheduleWarning[] = [];
   const roles: Partial<Record<ScheduleRole, EmployeeScheduleConfig>> = {};
 

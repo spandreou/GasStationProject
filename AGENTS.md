@@ -50,3 +50,8 @@ GasStation Shift Manager
 - Business rules: `docs/scheduler-rules.md`
 - UI/export rules: `docs/scheduler-ui-export-rules.md`
 - QA checklist: `docs/scheduler-qa-checklist.md`
+
+## Project Brain And Security
+
+- Project brain: `docs/project-brain.md`
+- Security guidelines: `docs/SECURITY_GUIDELINES.md`

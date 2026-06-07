@@ -9,7 +9,7 @@ export default defineConfig({
         manualChunks: {
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/analytics'],
           dnd: ['@dnd-kit/core', '@dnd-kit/utilities'],
-          exports: ['docx', 'html2canvas', 'jspdf', 'xlsx'],
+          exports: ['docx', 'html2canvas', 'jspdf', '@e965/xlsx'],
           visualFx: ['three', 'postprocessing'],
         },
       },

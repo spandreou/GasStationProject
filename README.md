@@ -53,6 +53,16 @@ npm run build
 npm run test:e2e:scheduler
 ```
 
+Security checks:
+
+```bash
+npm run security:audit
+npm run security:cve
+npm run security:scan
+```
+
+CI also runs npm audit, OWASP CVE Lite, Trivy, and report-only Semgrep through `.github/workflows/security-scan.yml`.
+
 Σημείωση: το UI των παλιών role labels (`Core 1`, `Core 2`, `Intermediate / Coverage`) συνεχίζει να υποστηρίζεται και μεταφράζεται από adapter στον νέο engine.
 
 ## Quick Start

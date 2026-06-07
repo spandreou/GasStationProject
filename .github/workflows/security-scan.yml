@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  node-dependencies:
+    name: Node dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit HIGH/CRITICAL gate
+        run: npm run security:audit
+
+      - name: OWASP CVE Lite HIGH/CRITICAL gate
+        run: npm run security:cve
+
+  repository-scan:
+    name: Trivy repository scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy HIGH/CRITICAL gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
+
+  semgrep:
+    name: Semgrep static analysis report
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # TODO: Review initial findings before turning Semgrep into a blocking gate.
+      - name: Semgrep CE report-only scan
+        run: semgrep scan --config auto .

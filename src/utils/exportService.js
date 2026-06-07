@@ -15,7 +15,7 @@ export const PDF_SCHEDULE_COLUMNS = [
 
 function loadXlsx() {
   if (!xlsxModulePromise) {
-    xlsxModulePromise = import('xlsx');
+    xlsxModulePromise = import('@e965/xlsx');
   }
   return xlsxModulePromise;
 }

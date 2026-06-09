@@ -13,6 +13,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from './config';
 
@@ -25,9 +26,11 @@ const ANNOUNCEMENTS_COLLECTION = 'announcements';
 const WEEK_HISTORY_COLLECTION = 'week_history';
 const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 const SCHEDULER_SETTINGS_COLLECTION = 'scheduler_settings';
+const AUDIT_LOGS_COLLECTION = 'audit_logs';
 const DEFAULT_SCHEDULER_SETTINGS_DOC = 'default';
 
 const MAX_IN_QUERY_VALUES = 10;
+const MAX_BATCH_WRITES = 450;
 
 function createLocalUnsubscribe() {
   return () => {};
@@ -84,6 +87,25 @@ function chunkValues(values, size = MAX_IN_QUERY_VALUES) {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
+}
+
+async function commitBatchChunks(items, applyOperation, size = MAX_BATCH_WRITES) {
+  const values = Array.isArray(items) ? items : [];
+  if (!values.length) return;
+
+  for (const chunk of chunkValues(values, size)) {
+    const batch = writeBatch(db);
+    chunk.forEach((item) => applyOperation(batch, item));
+    await withFirestoreWrite(() => batch.commit());
+  }
+}
+
+function timestampedPayload(payload, { includeCreatedAt = true } = {}) {
+  return {
+    ...payload,
+    ...(includeCreatedAt ? { createdAt: serverTimestamp() } : {}),
+    updatedAt: serverTimestamp(),
+  };
 }
 
 function toDataWithId(snapshot) {
@@ -233,11 +255,9 @@ export async function removeShiftsByEmployee(employeeId) {
   );
 
   const removed = shiftsSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-  await Promise.all(
-    shiftsSnapshot.docs.map((item) =>
-      withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id))),
-    ),
-  );
+  await commitBatchChunks(shiftsSnapshot.docs, (batch, item) => {
+    batch.delete(doc(db, SHIFTS_COLLECTION, item.id));
+  });
 
   return removed;
 }
@@ -263,9 +283,9 @@ export async function removeShiftsByDates(dates) {
   const matchedDocs = [...matchedDocsById.values()];
   const removed = matchedDocs.map((item) => ({ id: item.id, ...item.data() }));
 
-  await Promise.all(
-    matchedDocs.map((item) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, item.id)))),
-  );
+  await commitBatchChunks(matchedDocs, (batch, item) => {
+    batch.delete(doc(db, SHIFTS_COLLECTION, item.id));
+  });
 
   return removed;
 }
@@ -347,28 +367,31 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
   }
 
   const validEntries = (entries || []).filter((item) => item?.employeeId && item?.date);
+  const operations = [
+    ...validEntries.map((item) => ({ type: 'attendance', item })),
+    { type: 'week_lock' },
+  ];
 
-  for (const item of validEntries) {
-    await withFirestoreWrite(() =>
-      addDoc(collection(db, ATTENDANCE_HISTORY_COLLECTION), {
-        ...item,
+  await commitBatchChunks(operations, (batch, operation) => {
+    if (operation.type === 'attendance') {
+      batch.set(doc(collection(db, ATTENDANCE_HISTORY_COLLECTION)), {
+        ...operation.item,
         weekStart,
         finalizedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      }),
-    );
-  }
+      });
+      return;
+    }
 
-  await withFirestoreWrite(() =>
-    setDoc(doc(db, WEEK_LOCKS_COLLECTION, weekStart), {
+    batch.set(doc(db, WEEK_LOCKS_COLLECTION, weekStart), {
       weekStart,
       weekDays,
       finalizedBy: adminEmail || '',
       finalizedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    }),
-  );
+    });
+  });
 
   return { alreadyFinalized: false, created: validEntries.length };
 }
@@ -555,27 +578,41 @@ export async function fetchWeekTemplates() {
 export async function removeWeekShifts(weekDays) {
   ensureFirestoreReady();
 
-  const existing = await fetchShiftsByDates(weekDays);
-  await Promise.all(
-    existing.map((shift) => withFirestoreWrite(() => deleteDoc(doc(db, SHIFTS_COLLECTION, shift.id)))),
-  );
+  await removeShiftsByDates(weekDays);
 }
 
 export async function createManyShifts(shifts) {
   ensureFirestoreReady();
 
   if (!Array.isArray(shifts) || !shifts.length) return;
-  await Promise.all(
-    shifts.map((shift) =>
-      withFirestoreWrite(() =>
-        addDoc(collection(db, SHIFTS_COLLECTION), {
-          ...shift,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }),
-      ),
-    ),
-  );
+  await commitBatchChunks(shifts, (batch, shift) => {
+    batch.set(doc(collection(db, SHIFTS_COLLECTION)), timestampedPayload(shift));
+  });
+}
+
+export async function replaceShiftsBatch({ shiftsToRemove = [], shiftsToCreate = [] }) {
+  ensureFirestoreReady();
+
+  const removeItems = (shiftsToRemove || []).filter((shift) => shift?.id).map((shift) => ({ operation: 'delete', shift }));
+  const createItems = (shiftsToCreate || []).filter(Boolean).map((shift) => ({ operation: 'create', shift }));
+  const operations = [...removeItems, ...createItems];
+  const created = [];
+
+  await commitBatchChunks(operations, (batch, item) => {
+    if (item.operation === 'delete') {
+      batch.delete(doc(db, SHIFTS_COLLECTION, item.shift.id));
+      return;
+    }
+
+    const shiftDoc = doc(collection(db, SHIFTS_COLLECTION));
+    created.push({ id: shiftDoc.id, ...item.shift });
+    batch.set(shiftDoc, timestampedPayload(item.shift));
+  });
+
+  return {
+    removed: removeItems.map((item) => item.shift),
+    created,
+  };
 }
 
 export async function upsertSchedulerSettings(payload = {}) {
@@ -592,4 +629,43 @@ export async function upsertSchedulerSettings(payload = {}) {
       { merge: true },
     ),
   );
+}
+
+export async function writeAuditLog({
+  action,
+  actor = {},
+  target = {},
+  before = null,
+  after = null,
+  metadata = {},
+  generationRunId = '',
+}) {
+  ensureFirestoreReady();
+  if (!action) return null;
+
+  const safeActor = actor && typeof actor === 'object' ? actor : {};
+  const safeTarget = target && typeof target === 'object' ? target : {};
+  const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
+
+  const docRef = await withFirestoreWrite(() =>
+    addDoc(collection(db, AUDIT_LOGS_COLLECTION), {
+      action,
+      actor: {
+        uid: safeActor.uid || '',
+        email: safeActor.email || '',
+      },
+      target: {
+        collection: safeTarget.collection || '',
+        id: safeTarget.id || '',
+        scope: safeTarget.scope || '',
+      },
+      before,
+      after,
+      metadata: safeMetadata,
+      generationRunId: generationRunId || '',
+      createdAt: serverTimestamp(),
+    }),
+  );
+
+  return { id: docRef.id };
 }

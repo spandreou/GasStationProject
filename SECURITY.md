@@ -73,3 +73,14 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - Added basic Firestore field allowlists and type/date checks for scheduler collections.
 - Added Vercel security headers: HSTS, nosniff, frame deny, referrer policy, and permissions policy.
 - CSP is intentionally not enabled yet because Firebase Auth, Firestore, Analytics, dynamic chunks, and inline style behavior need a dedicated browser compatibility pass.
+
+## Phase 2 Firestore Integrity And Audit Trail
+
+- Schedule generation, clear operations, template/history loads, and week finalization use Firestore batch/chunked writes where practical to reduce partial-write risk.
+- Generated shifts include a `generationRunId` so a schedule can be tied back to the generation event that created it.
+- Admin actions write an immutable audit log entry in the `audit_logs` collection when practical.
+- The audit log captures action, actor uid/email, target collection/scope/id, before/after data where practical, metadata, timestamp, and `generationRunId` for generation-related actions.
+- Firestore rules allow audit log reads and creates only for authenticated admins.
+- Firestore rules deny audit log update and delete from the client.
+
+Remaining limitation: without a backend or Cloud Function, audit log creation is initiated by the trusted admin client. Firestore rules protect who may create/read logs and prevent client edits/deletes, but they cannot guarantee that every allowed write is accompanied by a matching audit entry. A server-side write layer or Firestore trigger is the future hardening path for fully enforced audit logging.

@@ -130,3 +130,20 @@ await admin.auth().setCustomUserClaims(uid, { admin: true });
 - Προστέθηκαν βασικά Firestore field validations για κρίσιμες συλλογές.
 - Προστέθηκαν Vercel security headers.
 - Το CSP μένει για επόμενο focused pass επειδή χρειάζεται browser verification με Firebase Auth/Firestore/Analytics.
+
+## Phase 2 Firestore Data Integrity & Audit Logs
+
+- Τα μαζικά Firestore writes για generate/clear/load schedule flows χρησιμοποιούν batch/chunked writes αντί για ανεξάρτητα `Promise.all` writes.
+- Κάθε αυτόματη δημιουργία εβδομάδας ή μήνα δημιουργεί `generationRunId` και το αποθηκεύει στα generated shifts.
+- Το `generationRunId` συνδέει τις βάρδιες με το αντίστοιχο generation event, ώστε να μπορεί να γίνει μελλοντικό audit ή rollback ανά run.
+- Προστέθηκε immutable Firestore collection `audit_logs` για βασικές admin ενέργειες:
+  - schedule generation
+  - clear day/week/month
+  - manual shift create/update/move/delete
+  - employee create/update/delete
+  - generator/settings changes
+  - week finalization και snapshot/template actions
+  - announcements
+- Τα audit logs γράφονται μόνο από authenticated admins και δεν επιτρέπεται client-side update/delete μέσω Firestore rules.
+
+Περιορισμός: επειδή δεν υπάρχει backend/Cloud Function σε αυτή τη φάση, το audit log γράφεται από trusted admin client code και προστατεύεται από Firestore rules. Για πλήρως server-enforced audit trail χρειάζεται μελλοντικό backend ή Firestore trigger.

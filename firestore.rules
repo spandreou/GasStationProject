@@ -79,7 +79,7 @@ service cloud.firestore {
       return [
         'employeeId', 'date', 'startTime', 'endTime', 'type', 'label', 'shiftType',
         'customLabel', 'notes', 'duration', 'isManualOverride', 'isHoliday',
-        'isSpecialDay', 'specialDayLabel', 'createdAt', 'updatedAt'
+        'isSpecialDay', 'specialDayLabel', 'generationRunId', 'createdAt', 'updatedAt'
       ];
     }
 
@@ -95,6 +95,7 @@ service cloud.firestore {
         isOptionalString('shiftType') &&
         isOptionalString('customLabel') &&
         isOptionalString('notes') &&
+        isOptionalString('generationRunId') &&
         isOptionalBool('isManualOverride') &&
         isOptionalBool('isHoliday') &&
         isOptionalBool('isSpecialDay') &&
@@ -142,10 +143,24 @@ service cloud.firestore {
     }
 
     function validAnnouncement() {
-      return request.resource.data.keys().hasOnly(['title', 'body', 'message', 'createdBy', 'createdAt', 'updatedAt']) &&
+      return request.resource.data.keys().hasOnly(['title', 'body', 'message', 'createdBy', 'authorEmail', 'createdAt', 'updatedAt']) &&
         (('title' in request.resource.data && request.resource.data.title is string) ||
           ('message' in request.resource.data && request.resource.data.message is string) ||
           ('body' in request.resource.data && request.resource.data.body is string));
+    }
+
+    function validAuditLog() {
+      return request.resource.data.keys().hasAll(['action', 'actor', 'target', 'createdAt']) &&
+        request.resource.data.keys().hasOnly([
+          'action', 'actor', 'target', 'before', 'after', 'metadata',
+          'generationRunId', 'createdAt'
+        ]) &&
+        request.resource.data.action is string &&
+        request.resource.data.action.size() > 0 &&
+        request.resource.data.actor is map &&
+        request.resource.data.target is map &&
+        (!('metadata' in request.resource.data) || request.resource.data.metadata is map) &&
+        isOptionalString('generationRunId');
     }
 
     function validAttendanceHistory() {
@@ -213,6 +228,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create, update: if isAdmin() && validSchedulerSettings();
       allow delete: if isAdmin();
+    }
+
+    match /audit_logs/{auditLogId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validAuditLog();
+      allow update, delete: if false;
     }
 
     match /{document=**} {

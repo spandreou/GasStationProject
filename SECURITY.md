@@ -84,3 +84,25 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - Firestore rules deny audit log update and delete from the client.
 
 Remaining limitation: without a backend or Cloud Function, audit log creation is initiated by the trusted admin client. Firestore rules protect who may create/read logs and prevent client edits/deletes, but they cannot guarantee that every allowed write is accompanied by a matching audit entry. A server-side write layer or Firestore trigger is the future hardening path for fully enforced audit logging.
+
+## Phase 4 Content Security Policy
+
+Vercel sends a conservative Content-Security-Policy for the deployed app.
+
+Allowed runtime origins are scoped to:
+
+- `self` for Vite app shell, chunks, CSS, local images, and local fonts.
+- `https://*.googleapis.com`, `https://*.firebaseio.com`, `https://*.firebaseapp.com`, and `https://*.appspot.com` for Firebase Auth, Firestore, and related Firebase APIs.
+- Google Analytics / Firebase Analytics endpoints such as `https://www.googletagmanager.com`, Google Analytics hosts, and `https://app-measurement.com`.
+- `data:` and `blob:` for browser-generated images/download/export flows and embedded fonts.
+
+Temporary compatibility trade-off:
+
+- `style-src 'unsafe-inline'` remains enabled because the React UI uses inline/dynamic styles in several places.
+- `script-src` does not allow `'unsafe-inline'`; scripts are limited to `self` and Google Tag Manager for Firebase Analytics compatibility.
+
+Browser QA checklist:
+
+- See `docs/csp-qa-checklist.md`.
+- Re-run browser QA after adding auth providers, external media/fonts, new Firebase products, export libraries, or deployment header changes.
+- Check console and network panels for CSP violations or blocked Firebase/Google endpoints.

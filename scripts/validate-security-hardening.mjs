@@ -39,8 +39,27 @@ const headerKeys = new Set(allHeaders.map((header) => header.key));
   'X-Frame-Options',
   'Referrer-Policy',
   'Permissions-Policy',
+  'Content-Security-Policy',
 ].forEach((header) => {
   assert(headerKeys.has(header), `Vercel security header missing: ${header}`);
+});
+
+const cspHeader = allHeaders.find((header) => header.key === 'Content-Security-Policy')?.value || '';
+[
+  "default-src 'self'",
+  "script-src 'self'",
+  'connect-src',
+  'https://*.googleapis.com',
+  'https://*.firebaseio.com',
+  'https://*.firebaseapp.com',
+  'https://*.appspot.com',
+  'https://www.googletagmanager.com',
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  'upgrade-insecure-requests',
+].forEach((directive) => {
+  assert(cspHeader.includes(directive), `Content-Security-Policy missing directive/origin: ${directive}`);
 });
 
 console.log('Security hardening checks passed');

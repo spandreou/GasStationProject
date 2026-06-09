@@ -1,6 +1,6 @@
-import { BASE_ROLES, getShiftDefinition } from './constants';
-import { eachDateInclusive, getWeekIndex, getWeekday } from './dateUtils';
-import type { DayPlan, GeneratedShift, ResolvedScheduleRoles, ScheduleRole, ShiftType } from './types';
+import { BASE_ROLES, getShiftDefinition } from './constants.ts';
+import { eachDateInclusive, getWeekIndex, getWeekday } from './dateUtils.ts';
+import type { DayPlan, GeneratedShift, ResolvedScheduleRoles, ScheduleRole, ShiftType } from './types.ts';
 
 type BaseScheduleRules = {
   weeklyRotationEnabled: boolean;

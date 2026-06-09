@@ -1,5 +1,5 @@
-import { getWeekday, isDateInRange } from './dateUtils';
-import type { AbsenceScope, EmployeeAbsence, EmployeeScheduleConfig, ShiftType } from './types';
+import { getWeekday, isDateInRange } from './dateUtils.ts';
+import type { AbsenceScope, EmployeeAbsence, EmployeeScheduleConfig, ShiftType } from './types.ts';
 
 export function absenceAffectsShift(scope: AbsenceScope, shiftType: ShiftType): boolean {
   if (scope === 'FULL_DAY') return true;

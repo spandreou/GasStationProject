@@ -1,5 +1,5 @@
-import type { Weekday } from './types';
-import { WEEKDAYS } from './constants';
+import type { Weekday } from './types.ts';
+import { WEEKDAYS } from './constants.ts';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 

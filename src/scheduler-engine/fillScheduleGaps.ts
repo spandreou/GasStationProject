@@ -1,12 +1,12 @@
-import { EXTRA_ROLES, getShiftDefinition } from './constants';
-import { isEmployeeAvailable } from './availability';
+import { EXTRA_ROLES, getShiftDefinition } from './constants.ts';
+import { isEmployeeAvailable } from './availability.ts';
 import type {
   EmployeeAbsence,
   EmployeeScheduleConfig,
   GeneratedShift,
   ScheduleGap,
   ScheduleWarning,
-} from './types';
+} from './types.ts';
 
 function createWarning(code: string, message: string, gap: ScheduleGap): ScheduleWarning {
   return {

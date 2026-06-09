@@ -1,11 +1,11 @@
-import { assignSundayShift } from './assignSundayShift';
-import { applyAbsences } from './applyAbsences';
-import { fillScheduleGaps } from './fillScheduleGaps';
-import { generateBaseSchedule } from './generateBaseSchedule';
-import { normalizeInput } from './normalizeInput';
-import { resolveScheduleRoles } from './resolveRoles';
-import { validateSchedule } from './validateSchedule';
-import type { GenerateScheduleInput, GenerateScheduleResult } from './types';
+import { assignSundayShift } from './assignSundayShift.ts';
+import { applyAbsences } from './applyAbsences.ts';
+import { fillScheduleGaps } from './fillScheduleGaps.ts';
+import { generateBaseSchedule } from './generateBaseSchedule.ts';
+import { normalizeInput } from './normalizeInput.ts';
+import { resolveScheduleRoles } from './resolveRoles.ts';
+import { validateSchedule } from './validateSchedule.ts';
+import type { GenerateScheduleInput, GenerateScheduleResult } from './types.ts';
 
 export function generateSchedule(input: GenerateScheduleInput): GenerateScheduleResult {
   const normalized = normalizeInput(input);

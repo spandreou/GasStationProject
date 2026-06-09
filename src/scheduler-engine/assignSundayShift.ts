@@ -1,7 +1,7 @@
-import { DEFAULT_SHIFT_DEFINITIONS } from './constants';
-import { eachDateInclusive, getWeekday, parseIsoDate } from './dateUtils';
-import { isEmployeeAvailable } from './availability';
-import type { EmployeeAbsence, EmployeeScheduleConfig, GeneratedShift, ScheduleWarning } from './types';
+import { DEFAULT_SHIFT_DEFINITIONS } from './constants.ts';
+import { eachDateInclusive, getWeekday, parseIsoDate } from './dateUtils.ts';
+import { isEmployeeAvailable } from './availability.ts';
+import type { EmployeeAbsence, EmployeeScheduleConfig, GeneratedShift, ScheduleWarning } from './types.ts';
 
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
 const SUNDAY_ROTATION_EPOCH = '1970-01-04';

@@ -1,13 +1,13 @@
-import { EXTRA_ROLES, REQUIRED_BASE_ROLES } from './constants';
-import { eachDateInclusive, getWeekday, isDateInRange } from './dateUtils';
-import { getAffectingAbsence } from './availability';
+import { EXTRA_ROLES, REQUIRED_BASE_ROLES } from './constants.ts';
+import { eachDateInclusive, getWeekday, isDateInRange } from './dateUtils.ts';
+import { getAffectingAbsence } from './availability.ts';
 import type {
   EmployeeAbsence,
   EmployeeScheduleConfig,
   GeneratedShift,
   ScheduleGap,
   ScheduleWarning,
-} from './types';
+} from './types.ts';
 
 function violation(code: string, message: string, date?: string, employeeId?: string): ScheduleWarning {
   return { id: `${code}-${date || 'global'}-${employeeId || 'all'}`, severity: 'error', code, message, date, employeeId };

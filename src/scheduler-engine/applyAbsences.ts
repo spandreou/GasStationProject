@@ -1,7 +1,7 @@
-import { DEFAULT_SHIFT_DEFINITIONS } from './constants';
-import { getWeekday } from './dateUtils';
-import { getAffectingAbsence } from './availability';
-import type { EmployeeAbsence, EmployeeScheduleConfig, GeneratedShift, ScheduleGap } from './types';
+import { DEFAULT_SHIFT_DEFINITIONS } from './constants.ts';
+import { getWeekday } from './dateUtils.ts';
+import { getAffectingAbsence } from './availability.ts';
+import type { EmployeeAbsence, EmployeeScheduleConfig, GeneratedShift, ScheduleGap } from './types.ts';
 
 export function applyAbsences(params: {
   shifts: GeneratedShift[];

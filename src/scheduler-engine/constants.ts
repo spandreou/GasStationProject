@@ -1,4 +1,4 @@
-import type { ScheduleRole, ShiftType, Weekday } from './types';
+import type { ScheduleRole, ShiftType, Weekday } from './types.ts';
 
 export const DEFAULT_SHIFT_DEFINITIONS: Record<ShiftType, {
   shiftType: ShiftType;

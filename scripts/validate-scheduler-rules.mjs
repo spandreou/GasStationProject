@@ -124,8 +124,22 @@ function weekdayFromDate(date) {
   return new Date(`${date}T00:00:00`).getDay();
 }
 
+function effectiveFixedDayOff(employee, employeesForMonth) {
+  if (typeof employee.fixedDayOff === 'number') return employee.fixedDayOff;
+  const role = employee.scheduleRole || employee.roleType;
+  if (role === 'core1') return 3;
+  if (role === 'core2') return 4;
+  if (role === 'intermediate') {
+    const intermediates = employeesForMonth
+      .filter((item) => (item.scheduleRole || item.roleType) === 'intermediate')
+      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', 'el') || a.id.localeCompare(b.id));
+    return intermediates.findIndex((item) => item.id === employee.id) === 0 ? 2 : 5;
+  }
+  return null;
+}
+
 function countMonthAvailability(employeesForMonth, weekday) {
-  return employeesForMonth.filter((employee) => employee.fixedDayOff !== weekday).length;
+  return employeesForMonth.filter((employee) => effectiveFixedDayOff(employee, employeesForMonth) !== weekday).length;
 }
 
 function assertMonthInvariants({
@@ -480,6 +494,16 @@ const workRestColumn = PDF_SCHEDULE_COLUMNS.find((column) => column.key === 'wor
 assert(workRestColumn?.title === 'Εργασία/Ανάπαυση', 'PDF work/rest column should be Εργασία/Ανάπαυση');
 
 const schedulerStoreSource = readFileSync(new URL('../src/hooks/useSchedulerStore.js', import.meta.url), 'utf8');
+const legacySchedulerSource = readFileSync(new URL('../src/utils/autoSchedulerService.js', import.meta.url), 'utf8');
+assert(
+  legacySchedulerSource.includes('schedulerEngineAdapter'),
+  'Legacy autoSchedulerService must delegate generation to schedulerEngineAdapter',
+);
+assert(
+  !legacySchedulerSource.includes('function assignThreeAvailableSlots') &&
+    !legacySchedulerSource.includes('function validateGeneratedSchedule'),
+  'Legacy autoSchedulerService must not contain duplicated scheduling engine logic',
+);
 assert(
   schedulerStoreSource.includes('const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet]);'),
   'Monthly magic generation must refetch saved month shifts after writing to persistence',

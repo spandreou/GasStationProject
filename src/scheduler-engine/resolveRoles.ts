@@ -1,5 +1,5 @@
-import { EXTRA_ROLES, REQUIRED_BASE_ROLES } from './constants';
-import type { EmployeeScheduleConfig, ResolvedScheduleRoles, ScheduleRole, ScheduleWarning } from './types';
+import { EXTRA_ROLES, REQUIRED_BASE_ROLES } from './constants.ts';
+import type { EmployeeScheduleConfig, ResolvedScheduleRoles, ScheduleRole, ScheduleWarning } from './types.ts';
 
 function warning(id: string, code: string, message: string): ScheduleWarning {
   return { id, severity: 'error', code, message };

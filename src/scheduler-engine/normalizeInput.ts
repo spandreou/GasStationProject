@@ -1,5 +1,5 @@
-import { DEFAULT_DAYS_OFF } from './constants';
-import type { EmployeeAbsence, EmployeeScheduleConfig, GenerateScheduleInput } from './types';
+import { DEFAULT_DAYS_OFF } from './constants.ts';
+import type { EmployeeAbsence, EmployeeScheduleConfig, GenerateScheduleInput } from './types.ts';
 
 export type NormalizedScheduleInput = {
   startDate: string;

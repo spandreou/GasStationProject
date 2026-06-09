@@ -1,5 +1,5 @@
 import { generateSchedule } from '../scheduler-engine/index.ts';
-import { SHIFT_TYPES } from './analytics';
+import { SHIFT_TYPES } from './analytics.js';
 
 const APP_SHIFT_TYPES = {
   MORNING: 'morning',

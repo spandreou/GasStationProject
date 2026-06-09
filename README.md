@@ -147,3 +147,22 @@ await admin.auth().setCustomUserClaims(uid, { admin: true });
 - Τα audit logs γράφονται μόνο από authenticated admins και δεν επιτρέπεται client-side update/delete μέσω Firestore rules.
 
 Περιορισμός: επειδή δεν υπάρχει backend/Cloud Function σε αυτή τη φάση, το audit log γράφεται από trusted admin client code και προστατεύεται από Firestore rules. Για πλήρως server-enforced audit trail χρειάζεται μελλοντικό backend ή Firestore trigger.
+
+## Service Layer Architecture
+
+Η πρόσβαση σε Firebase/Firestore περνάει από dedicated service layer στο `src/firebase/`.
+
+Services:
+
+- `config.js`: Firebase app/Auth/Firestore initialization και env validation.
+- `authService.js`: admin sign-in/sign-out/reset και Firebase custom claim checks.
+- `firestoreCore.js`: shared Firestore helpers, collection names, batch/chunk helpers και common error handling.
+- `employeeService.js`: employee subscribe/create/update/delete.
+- `shiftService.js`: shifts, shift templates, batch replacements, date/employee deletes και Sunday lookup.
+- `settingsService.js`: scheduler settings subscribe/upsert.
+- `announcementService.js`: announcement subscribe/create/delete.
+- `weekService.js`: attendance history, week locks, week history και week templates.
+- `auditLogService.js`: immutable audit log writes.
+- `schedulerService.js`: deprecated compatibility barrel για παλιά imports. Νέος κώδικας να χρησιμοποιεί τα domain services.
+
+Κανόνας συντήρησης: components και Zustand store δεν πρέπει να μιλάνε απευθείας σε Firestore όταν υπάρχει service. Το store λειτουργεί ως state/orchestration layer, ενώ persistence και Firebase communication ανήκουν στα services.

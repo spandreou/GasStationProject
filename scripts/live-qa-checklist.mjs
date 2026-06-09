@@ -3,6 +3,8 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const APP_URL = process.env.QA_URL || 'https://gas-station-project-coral.vercel.app';
+const QA_ADMIN_EMAIL = process.env.QA_ADMIN_EMAIL || '';
+const QA_ADMIN_PASSWORD = process.env.QA_ADMIN_PASSWORD || '';
 const OUTPUT_PATH = path.resolve(process.cwd(), 'qa-live-report.json');
 const DOWNLOAD_DIR = path.resolve(process.cwd(), 'qa-downloads');
 
@@ -73,11 +75,15 @@ async function getWeekRangeLabel(page) {
 }
 
 async function loginAsAdmin(page) {
+  if (!QA_ADMIN_EMAIL || !QA_ADMIN_PASSWORD) {
+    throw new Error('Set QA_ADMIN_EMAIL and QA_ADMIN_PASSWORD to run admin live QA.');
+  }
+
   await clickVisibleButtonByText(page, 'Είσοδος Διαχειριστή', { index: 0 });
   const modal = page.locator('.fixed.inset-0.z-50').filter({ has: page.locator('input[type="password"]') }).first();
   await modal.waitFor({ state: 'visible', timeout: 10000 });
-  await modal.locator('input[type="email"]').fill('admin@example.com');
-  await modal.locator('input[type="password"]').fill('admin123');
+  await modal.locator('input[type="email"]').fill(QA_ADMIN_EMAIL);
+  await modal.locator('input[type="password"]').fill(QA_ADMIN_PASSWORD);
   await modal.locator('button[type="submit"]').click();
   await page.waitForTimeout(2000);
 }
@@ -300,7 +306,7 @@ async function run() {
   await runStep('Admin login', async () => {
     await loginAsAdmin(page);
     await assertButtonVisible(page, 'Αποσύνδεση');
-    return 'Logged in as admin@example.com';
+    return `Logged in as ${QA_ADMIN_EMAIL}`;
   });
 
   await runStep('Toolbar: previous/next/current week', async () => {

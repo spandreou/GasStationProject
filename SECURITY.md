@@ -16,6 +16,7 @@ MEDIUM and LOW findings should be reviewed during maintenance, but they are not 
 Run the Node dependency checks locally:
 
 ```bash
+npm run security:hardening
 npm run security:audit
 npm run security:cve
 npm run security:scan
@@ -56,7 +57,19 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 ## Application Security Baseline
 
 - Do not trust frontend-only validation for production authorization decisions.
+- Production admin authorization uses Firebase Auth plus a Firebase custom claim `admin=true`.
+- Demo email allowlists are allowed only in `VITE_APP_MODE=demo` and must not be treated as production authorization.
+- Do not put admin passwords in Vite env vars. Vite env vars are included in the frontend bundle.
+- Firestore protected data must require authentication for reads and custom-claim admin authorization for writes.
 - Server-side data access must use parameterized queries or a trusted SDK/ORM.
 - Passwords must be hashed with a strong password hashing function such as Argon2id or bcrypt.
 - JWT/session secrets must be high-entropy values stored only in environment-specific secret storage.
 - Login, admin, and write-heavy endpoints must use rate limiting when production backend services are introduced.
+
+## Phase 1 Production Hardening Notes
+
+- Removed client-side admin password checks and fallback credentials from the frontend.
+- Removed hardcoded demo admin authorization from Firestore rules.
+- Added basic Firestore field allowlists and type/date checks for scheduler collections.
+- Added Vercel security headers: HSTS, nosniff, frame deny, referrer policy, and permissions policy.
+- CSP is intentionally not enabled yet because Firebase Auth, Firestore, Analytics, dynamic chunks, and inline style behavior need a dedicated browser compatibility pass.

@@ -1,62 +1,218 @@
-﻿rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdminByClaim() {
+    function isAdmin() {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    // DEMO-only fallback until production hardening enables strict custom-claims flow.
-    function isAdminByEmail() {
-      return isSignedIn() && request.auth.token.email in ['admin@example.com'];
+    function isIsoDate(value) {
+      return value is string && value.matches('^\\d{4}-\\d{2}-\\d{2}$');
     }
 
-    function isAdmin() {
-      return isAdminByClaim() || isAdminByEmail();
+    function isTime(value) {
+      return value is string && value.matches('^\\d{2}:\\d{2}$');
+    }
+
+    function isOptionalString(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is string;
+    }
+
+    function isOptionalBool(field) {
+      return !(field in request.resource.data) || request.resource.data[field] is bool;
+    }
+
+    function isOptionalIntOrNull(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == null ||
+        request.resource.data[field] is int;
+    }
+
+    function onlyChanged(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+
+    function employeeFields() {
+      return [
+        'fullName', 'role', 'color', 'afm', 'phone', 'email', 'hireDate', 'isActive',
+        'scheduleRole', 'roleType', 'fixedDayOff', 'fixedDaysOff', 'defaultShiftPreference',
+        'participatesInRotation', 'participatesInSundayRotation', 'weeklyFixedShiftSideRotation',
+        'fixedStartTime', 'fixedEndTime', 'staticStartTime', 'staticEndTime',
+        'extraMode', 'activeFrom', 'activeTo', 'canCoverLeaves', 'canWorkMorning',
+        'canWorkIntermediate', 'canWorkAfternoon', 'canWorkSunday', 'createdAt', 'updatedAt'
+      ];
+    }
+
+    function validEmployee() {
+      return request.resource.data.keys().hasAll(['fullName']) &&
+        request.resource.data.keys().hasOnly(employeeFields()) &&
+        request.resource.data.fullName is string &&
+        request.resource.data.fullName.size() > 0 &&
+        isOptionalString('role') &&
+        isOptionalString('color') &&
+        isOptionalString('afm') &&
+        isOptionalString('phone') &&
+        isOptionalString('email') &&
+        isOptionalString('hireDate') &&
+        isOptionalString('scheduleRole') &&
+        isOptionalString('roleType') &&
+        isOptionalString('defaultShiftPreference') &&
+        isOptionalString('extraMode') &&
+        isOptionalString('activeFrom') &&
+        isOptionalString('activeTo') &&
+        isOptionalBool('isActive') &&
+        isOptionalBool('participatesInRotation') &&
+        isOptionalBool('participatesInSundayRotation') &&
+        isOptionalBool('weeklyFixedShiftSideRotation') &&
+        isOptionalBool('canCoverLeaves') &&
+        isOptionalBool('canWorkMorning') &&
+        isOptionalBool('canWorkIntermediate') &&
+        isOptionalBool('canWorkAfternoon') &&
+        isOptionalBool('canWorkSunday') &&
+        isOptionalIntOrNull('fixedDayOff');
+    }
+
+    function shiftFields() {
+      return [
+        'employeeId', 'date', 'startTime', 'endTime', 'type', 'label', 'shiftType',
+        'customLabel', 'notes', 'duration', 'isManualOverride', 'isHoliday',
+        'isSpecialDay', 'specialDayLabel', 'createdAt', 'updatedAt'
+      ];
+    }
+
+    function validShift() {
+      return request.resource.data.keys().hasAll(['employeeId', 'date', 'startTime', 'endTime']) &&
+        request.resource.data.keys().hasOnly(shiftFields()) &&
+        request.resource.data.employeeId is string &&
+        isIsoDate(request.resource.data.date) &&
+        isTime(request.resource.data.startTime) &&
+        isTime(request.resource.data.endTime) &&
+        isOptionalString('type') &&
+        isOptionalString('label') &&
+        isOptionalString('shiftType') &&
+        isOptionalString('customLabel') &&
+        isOptionalString('notes') &&
+        isOptionalBool('isManualOverride') &&
+        isOptionalBool('isHoliday') &&
+        isOptionalBool('isSpecialDay') &&
+        isOptionalString('specialDayLabel');
+    }
+
+    function settingsFields() {
+      return ['generatorRules', 'specialDaysByDate', 'createdAt', 'updatedAt'];
+    }
+
+    function validSchedulerSettings() {
+      return request.resource.data.keys().hasOnly(settingsFields()) &&
+        (!( 'generatorRules' in request.resource.data) || request.resource.data.generatorRules is map) &&
+        (!( 'specialDaysByDate' in request.resource.data) || request.resource.data.specialDaysByDate is map);
+    }
+
+    function validWeekLock() {
+      return request.resource.data.keys().hasAll(['weekStart', 'weekDays']) &&
+        request.resource.data.keys().hasOnly(['weekStart', 'weekDays', 'finalizedBy', 'finalizedAt', 'createdAt', 'updatedAt']) &&
+        isIsoDate(request.resource.data.weekStart) &&
+        request.resource.data.weekDays is list &&
+        isOptionalString('finalizedBy');
+    }
+
+    function validWeekHistory() {
+      return request.resource.data.keys().hasAll(['weekId', 'weekStart', 'weekEnd', 'shifts']) &&
+        request.resource.data.keys().hasOnly([
+          'weekId', 'weekStart', 'weekEnd', 'source', 'shifts', 'shiftCount',
+          'createdBy', 'savedBy', 'savedAt', 'metadata', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.weekId is string &&
+        isIsoDate(request.resource.data.weekStart) &&
+        isIsoDate(request.resource.data.weekEnd) &&
+        request.resource.data.shifts is list &&
+        isOptionalString('source') &&
+        isOptionalString('createdBy') &&
+        isOptionalString('savedBy');
+    }
+
+    function validTemplate() {
+      return request.resource.data.keys().hasOnly([
+        'name', 'label', 'weekStart', 'shifts', 'createdBy', 'createdAt', 'updatedAt',
+        'startTime', 'endTime', 'type', 'shiftType', 'customLabel', 'notes', 'color'
+      ]);
+    }
+
+    function validAnnouncement() {
+      return request.resource.data.keys().hasOnly(['title', 'body', 'message', 'createdBy', 'createdAt', 'updatedAt']) &&
+        (('title' in request.resource.data && request.resource.data.title is string) ||
+          ('message' in request.resource.data && request.resource.data.message is string) ||
+          ('body' in request.resource.data && request.resource.data.body is string));
+    }
+
+    function validAttendanceHistory() {
+      return request.resource.data.keys().hasAll(['employeeId', 'date']) &&
+        request.resource.data.keys().hasOnly([
+          'employeeId', 'employeeName', 'date', 'weekStart', 'startTime', 'endTime',
+          'type', 'label', 'shiftType', 'hours', 'notes', 'finalizedAt',
+          'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.employeeId is string &&
+        isIsoDate(request.resource.data.date);
     }
 
     match /employees/{employeeId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validEmployee();
+      allow update: if isAdmin() && onlyChanged(employeeFields()) && validEmployee();
+      allow delete: if isAdmin();
     }
 
     match /shifts/{shiftId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validShift();
+      allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
+      allow delete: if isAdmin();
     }
 
     match /shiftTemplates/{templateId} {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validTemplate();
+      allow delete: if isAdmin();
     }
 
     match /announcements/{announcementId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validAnnouncement();
+      allow delete: if isAdmin();
     }
 
     match /attendance_history/{historyId} {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validAttendanceHistory();
+      allow delete: if isAdmin();
     }
 
     match /week_locks/{weekId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validWeekLock();
+      allow delete: if isAdmin();
     }
 
     match /week_history/{historyId} {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validWeekHistory();
+      allow delete: if isAdmin();
     }
 
     match /week_templates/{templateId} {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validTemplate();
+      allow delete: if isAdmin();
     }
 
     match /scheduler_settings/{settingsId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validSchedulerSettings();
+      allow delete: if isAdmin();
     }
 
     match /{document=**} {

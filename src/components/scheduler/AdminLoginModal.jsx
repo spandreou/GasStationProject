@@ -104,12 +104,15 @@ export default function AdminLoginModal({
 
         <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
           {isFirebaseConfigured
-            ? `Χρησιμοποίησε λογαριασμό Firebase Auth με email admin (${defaultEmail || 'admin@example.com'}).`
+            ? isDemoMode
+              ? `Χρησιμοποίησε τον configured Firebase Auth demo admin λογαριασμό${defaultEmail ? ` (${defaultEmail})` : ''}.`
+              : 'Χρησιμοποίησε Firebase Auth λογαριασμό που έχει custom claim admin=true.'
             : 'Το Firebase Auth δεν είναι διαθέσιμο στο τρέχον περιβάλλον.'}
         </p>
         {isDemoMode ? (
           <p className="mb-3 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-300">
-            Demo στοιχεία: <strong>admin@example.com</strong> / <strong>admin123</strong>
+            Δεν υπάρχουν fallback demo credentials. Ο demo admin πρέπει να οριστεί στο Firebase Auth και στο
+            περιβάλλον με `VITE_ADMIN_EMAIL`.
           </p>
         ) : null}
 
@@ -122,7 +125,7 @@ export default function AdminLoginModal({
                 type="email"
                 value={credentials.email}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, email: event.target.value }))}
-                placeholder="admin@example.com"
+                placeholder="admin email"
                 className="w-full border-none bg-transparent p-0 text-sm font-semibold text-slate-950 outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400"
                 autoFocus
                 required

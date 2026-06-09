@@ -8,8 +8,9 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 
 - Admin-only πρόσβαση
 - Firebase config μέσω env vars
-- Demo-safe ονομασίες και sample δεδομένα
-- Χωρίς production credentials μέσα στον κώδικα
+- Production authorization μέσω Firebase custom claim `admin=true`
+- Demo admin email allowlist μόνο όταν `VITE_APP_MODE=demo`
+- Χωρίς fallback admin credentials μέσα στον κώδικα
 
 ## Tech Stack
 
@@ -56,6 +57,7 @@ npm run test:e2e:scheduler
 Security checks:
 
 ```bash
+npm run security:hardening
 npm run security:audit
 npm run security:cve
 npm run security:scan
@@ -88,25 +90,43 @@ VITE_FIREBASE_MEASUREMENT_ID=
 
 VITE_APP_MODE=demo
 VITE_ADMIN_EMAIL=
-VITE_ADMIN_PASSWORD=
 ```
 
-## Demo Auth Model
+## Admin Auth Model
 
 - Υποστηρίζεται μόνο **admin login**.
-- Το `VITE_ADMIN_EMAIL` είναι allowlist email για demo admin.
-- Το `VITE_ADMIN_PASSWORD` είναι ο demo κωδικός.
+- Σε production, admin δικαιώματα αποδίδονται μόνο από Firebase custom claim `admin=true`.
+- Σε demo mode, το `VITE_ADMIN_EMAIL` λειτουργεί ως πρόσθετο email allowlist για παρουσίαση.
+- Δεν υπάρχει client-side admin password env var ή fallback credential.
 - Δεν υπάρχει employee login flow στο τρέχον scope.
+
+## Production Admin Setup
+
+Για production deployment:
+
+1. Δημιούργησε τον admin χρήστη στο Firebase Auth.
+2. Από ασφαλές admin περιβάλλον, απόδωσε custom claim:
+
+```js
+await admin.auth().setCustomUserClaims(uid, { admin: true });
+```
+
+3. Κάνε sign out / sign in ώστε το ID token να ανανεωθεί.
+4. Κράτα το `VITE_APP_MODE=production`.
+5. Μην ορίζεις admin passwords σε Vite env vars. Τα Vite env vars είναι client-visible.
 
 ## Demo-only Σημεία
 
-- Demo admin allowlist/fallback logic
+- Demo admin email allowlist μέσω `VITE_ADMIN_EMAIL`
 - Demo employee/sample ονομασίες
 - Presentation-safe κείμενα/labels
 
-## Τι Θα Αλλάξει Σε Production Hardening (Επόμενη Φάση)
+## Phase 1 Production Security Hardening
 
-- Κατάργηση demo fallback admin email
-- Production admin identity management (χωρίς demo defaults)
-- Tightening rules/policies με πραγματικά business constraints
-- Operational monitoring και incident-ready security checks
+- Καταργήθηκαν client-side admin password checks.
+- Καταργήθηκαν fallback demo credentials.
+- Τα Firestore reads απαιτούν authenticated user.
+- Τα Firestore writes απαιτούν custom claim `admin=true`.
+- Προστέθηκαν βασικά Firestore field validations για κρίσιμες συλλογές.
+- Προστέθηκαν Vercel security headers.
+- Το CSP μένει για επόμενο focused pass επειδή χρειάζεται browser verification με Firebase Auth/Firestore/Analytics.

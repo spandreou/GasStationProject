@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "security:audit": "npm audit --audit-level=high",
     "security:cve": "npx --yes cve-lite-cli@1 . --all --verbose --fail-on high",
-    "security:scan": "npm run security:audit && npm run security:cve"
+    "security:hardening": "node scripts/validate-security-hardening.mjs",
+    "security:scan": "npm run security:hardening && npm run security:audit && npm run security:cve"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.2.0",

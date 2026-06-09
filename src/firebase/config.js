@@ -12,9 +12,6 @@ const REQUIRED_FIREBASE_ENV_KEYS = [
   'VITE_FIREBASE_APP_ID',
 ];
 
-const DEMO_ADMIN_EMAIL_FALLBACK = 'admin@example.com';
-const DEMO_ADMIN_PASSWORD_FALLBACK = 'admin123';
-
 function getEnvValue(name) {
   const value = import.meta.env[name];
   return typeof value === 'string' ? value.trim() : '';
@@ -54,12 +51,9 @@ const firebaseEnv = {
 export const missingFirebaseEnvKeys = REQUIRED_FIREBASE_ENV_KEYS.filter((key) => !getEnvValue(key));
 export const isFirebaseConfigured = missingFirebaseEnvKeys.length === 0;
 
-export const appMode = (getEnvValue('VITE_APP_MODE') || 'demo').toLowerCase();
+export const appMode = (getEnvValue('VITE_APP_MODE') || 'production').toLowerCase();
 export const isDemoMode = appMode !== 'production';
-export const adminEmail = (getEnvValue('VITE_ADMIN_EMAIL') || DEMO_ADMIN_EMAIL_FALLBACK).toLowerCase();
-export const adminPassword = getEnvValue('VITE_ADMIN_PASSWORD') || DEMO_ADMIN_PASSWORD_FALLBACK;
-export const isUsingDemoAdminFallback = !getEnvValue('VITE_ADMIN_EMAIL');
-export const isUsingDemoPasswordFallback = !getEnvValue('VITE_ADMIN_PASSWORD');
+export const adminEmail = getEnvValue('VITE_ADMIN_EMAIL').toLowerCase();
 export const isAdminEmailConfigured = Boolean(adminEmail);
 
 export const firebaseConfigErrorMessage = isFirebaseConfigured

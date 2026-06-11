@@ -4,6 +4,7 @@ import { db } from './config';
 export const EMPLOYEES_COLLECTION = 'employees';
 export const SHIFTS_COLLECTION = 'shifts';
 export const SHIFT_TEMPLATES_COLLECTION = 'shiftTemplates';
+export const EMPLOYEE_ABSENCES_COLLECTION = 'employeeAbsences';
 export const ATTENDANCE_HISTORY_COLLECTION = 'attendance_history';
 export const WEEK_LOCKS_COLLECTION = 'week_locks';
 export const ANNOUNCEMENTS_COLLECTION = 'announcements';

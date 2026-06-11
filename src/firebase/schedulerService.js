@@ -10,3 +10,4 @@ export * from './settingsService.js';
 export * from './announcementService.js';
 export * from './weekService.js';
 export * from './auditLogService.js';
+export * from './absenceService.js';

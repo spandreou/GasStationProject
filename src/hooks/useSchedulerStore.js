@@ -7,6 +7,13 @@ import {
   subscribeAdminAuth,
 } from '../firebase/authService';
 import { createAnnouncement, removeAnnouncement, subscribeAnnouncements } from '../firebase/announcementService';
+import {
+  cancelEmployeeAbsence,
+  createEmployeeAbsence,
+  removeEmployeeAbsence,
+  subscribeEmployeeAbsences,
+  updateEmployeeAbsence,
+} from '../firebase/absenceService';
 import { createEmployee, removeEmployee, subscribeEmployees, updateEmployee } from '../firebase/employeeService';
 import {
   createShift,
@@ -173,6 +180,15 @@ function sortShiftsByDateAndStart(shifts = []) {
   );
 }
 
+function sortAbsencesByDate(absences = []) {
+  return [...absences].sort(
+    (a, b) =>
+      `${a.startDate || ''}_${a.endDate || ''}_${a.employeeId || ''}`.localeCompare(
+        `${b.startDate || ''}_${b.endDate || ''}_${b.employeeId || ''}`,
+      ),
+  );
+}
+
 function hasWeekShiftData(shifts = [], weekDays = []) {
   if (!Array.isArray(shifts) || !Array.isArray(weekDays) || !weekDays.length) return false;
   const weekSet = new Set(weekDays);
@@ -181,6 +197,53 @@ function hasWeekShiftData(shifts = [], weekDays = []) {
 
 function isWeekEditingLocked(state, weekDays = getWeekDays(state.weekStart)) {
   return Boolean(state.isWeekLocked && hasWeekShiftData(state.shifts, weekDays));
+}
+
+function isIsoDateString(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function dateRangesOverlap(startA, endA, startB, endB) {
+  return isIsoDateString(startA) && isIsoDateString(endA) && isIsoDateString(startB) && isIsoDateString(endB) && startA <= endB && endA >= startB;
+}
+
+function getAbsencesForRange(absences = [], startDate, endDate) {
+  return (absences || []).filter(
+    (absence) => absence?.status !== 'CANCELLED' && dateRangesOverlap(absence.startDate, absence.endDate, startDate, endDate),
+  );
+}
+
+function normalizeAbsenceInput(input = {}, current = {}) {
+  const employeeId = `${input.employeeId ?? current.employeeId ?? ''}`.trim();
+  const type = `${input.type ?? current.type ?? 'LEAVE'}`.trim();
+  const startDate = `${input.startDate ?? current.startDate ?? ''}`.trim();
+  const endDate = `${input.endDate ?? current.endDate ?? startDate}`.trim();
+  const replacementMode = `${input.replacementMode ?? current.replacementMode ?? 'AUTO'}`.trim();
+  const manualReplacementEmployeeId = `${input.manualReplacementEmployeeId ?? current.manualReplacementEmployeeId ?? ''}`.trim();
+
+  if (!employeeId) throw new Error('Επίλεξε υπάλληλο για την άδεια.');
+  if (!['LEAVE', 'SICK', 'OTHER'].includes(type)) throw new Error('Επίλεξε έγκυρο τύπο απουσίας.');
+  if (!isIsoDateString(startDate) || !isIsoDateString(endDate)) throw new Error('Επίλεξε έγκυρο εύρος ημερομηνιών.');
+  if (startDate > endDate) throw new Error('Η ημερομηνία έναρξης πρέπει να είναι πριν ή ίδια με τη λήξη.');
+  if (!['AUTO', 'MANUAL', 'NO_REPLACEMENT'].includes(replacementMode)) throw new Error('Επίλεξε έγκυρη αντικατάσταση.');
+  if (replacementMode === 'MANUAL' && !manualReplacementEmployeeId) {
+    throw new Error('Επίλεξε χειροκίνητο αντικαταστάτη.');
+  }
+  if (manualReplacementEmployeeId && manualReplacementEmployeeId === employeeId) {
+    throw new Error('Ο αντικαταστάτης πρέπει να είναι διαφορετικός υπάλληλος.');
+  }
+
+  return {
+    employeeId,
+    type,
+    startDate,
+    endDate,
+    scope: input.scope || current.scope || 'FULL_DAY',
+    replacementMode,
+    manualReplacementEmployeeId: replacementMode === 'MANUAL' ? manualReplacementEmployeeId : '',
+    note: `${input.note ?? current.note ?? ''}`.trim(),
+    status: input.status || current.status || 'ACTIVE',
+  };
 }
 
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
@@ -194,6 +257,14 @@ const defaultGeneratorRules = {
 const ATTENDANCE_HISTORY_TTL_MS = 60 * 1000;
 const WEEK_HISTORY_TTL_MS = 60 * 1000;
 const WEEK_TEMPLATES_TTL_MS = 5 * 60 * 1000;
+const SHIFT_TEMPLATES_LOAD_WARNING =
+  'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.';
+const SHIFT_TEMPLATES_RETRY_LIMIT = 2;
+const SHIFT_TEMPLATES_RETRY_DELAY_MS = 1200;
+
+function isShiftTemplatesLoadWarning(message) {
+  return String(message || '') === SHIFT_TEMPLATES_LOAD_WARNING;
+}
 
 function normalizeGeneratorRules(value = {}) {
   const mode = value?.generationMode;
@@ -211,6 +282,7 @@ export const useSchedulerStore = create((set, get) => ({
   employees: [],
   shifts: [],
   shiftTemplates: [],
+  absences: [],
   announcements: [],
   attendanceHistory: [],
   weekHistory: [],
@@ -225,6 +297,7 @@ export const useSchedulerStore = create((set, get) => ({
     yearMonth: getCurrentYearMonth(),
   },
   isHistoryLoading: false,
+  isAbsencesLoading: true,
   isWeekLocked: false,
   isLoading: true,
   isAuthLoading: true,
@@ -239,15 +312,75 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeEmployees: null,
   _unsubscribeShifts: null,
   _unsubscribeTemplates: null,
+  _unsubscribeAbsences: null,
   _unsubscribeAnnouncements: null,
   _unsubscribeSchedulerSettings: null,
   _unsubscribeAuth: null,
+  _shiftTemplatesRetryTimer: null,
+  _shiftTemplatesRetryCount: 0,
   _attendanceHistoryCacheKey: '',
   _attendanceHistoryFetchedAt: 0,
   _attendanceHistoryInflightKey: '',
   _attendanceHistoryInflightPromise: null,
   _weekHistoryFetchedAt: 0,
   _weekTemplatesFetchedAt: 0,
+
+  startShiftTemplatesSubscription: () => {
+    if (!isFirebaseConfigured) return null;
+
+    const existingTimer = get()._shiftTemplatesRetryTimer;
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const existingUnsubscribe = get()._unsubscribeTemplates;
+    existingUnsubscribe?.();
+
+    const unsubscribeTemplates = subscribeShiftTemplates(
+      (shiftTemplates) => {
+        const retryTimer = get()._shiftTemplatesRetryTimer;
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+        }
+
+        set((state) => ({
+          shiftTemplates,
+          _shiftTemplatesRetryTimer: null,
+          _shiftTemplatesRetryCount: 0,
+          errorMessage: isShiftTemplatesLoadWarning(state.errorMessage) ? '' : state.errorMessage,
+          warningMessage: isShiftTemplatesLoadWarning(state.warningMessage) ? '' : state.warningMessage,
+        }));
+      },
+      () => {
+        const retryCount = get()._shiftTemplatesRetryCount || 0;
+
+        if (retryCount < SHIFT_TEMPLATES_RETRY_LIMIT) {
+          const retryTimer = setTimeout(() => {
+            set({ _shiftTemplatesRetryTimer: null });
+            get().startShiftTemplatesSubscription();
+          }, SHIFT_TEMPLATES_RETRY_DELAY_MS);
+
+          set({
+            _shiftTemplatesRetryTimer: retryTimer,
+            _shiftTemplatesRetryCount: retryCount + 1,
+          });
+          return;
+        }
+
+        set({
+          _shiftTemplatesRetryTimer: null,
+          warningMessage: SHIFT_TEMPLATES_LOAD_WARNING,
+        });
+      },
+    );
+
+    set({
+      _unsubscribeTemplates: unsubscribeTemplates,
+      _shiftTemplatesRetryTimer: null,
+    });
+
+    return unsubscribeTemplates;
+  },
 
   initializeData: () => {
     if (!isFirebaseConfigured) {
@@ -269,13 +402,11 @@ export const useSchedulerStore = create((set, get) => ({
       () => set({ errorMessage: 'Αποτυχία φόρτωσης βαρδιών.', isLoading: false }),
     );
 
-    const unsubscribeTemplates = subscribeShiftTemplates(
-      (shiftTemplates) => set({ shiftTemplates }),
-      () =>
-        set({
-          errorMessage:
-            'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.',
-        }),
+    const unsubscribeTemplates = get().startShiftTemplatesSubscription();
+
+    const unsubscribeAbsences = subscribeEmployeeAbsences(
+      (absences) => set({ absences, isAbsencesLoading: false }),
+      () => set({ warningMessage: 'Δεν ήταν δυνατή η φόρτωση των αδειών.', isAbsencesLoading: false }),
     );
 
     const unsubscribeAnnouncements = subscribeAnnouncements(
@@ -305,6 +436,9 @@ export const useSchedulerStore = create((set, get) => ({
         });
 
         if (user) {
+          if ((get()._shiftTemplatesRetryCount || 0) > 0) {
+            get().startShiftTemplatesSubscription();
+          }
           await get().refreshWeekLockStatus();
           await Promise.all([
             get().loadAttendanceHistory({ force: false }),
@@ -332,6 +466,7 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeEmployees: unsubscribeEmployees,
       _unsubscribeShifts: unsubscribeShifts,
       _unsubscribeTemplates: unsubscribeTemplates,
+      _unsubscribeAbsences: unsubscribeAbsences,
       _unsubscribeAnnouncements: unsubscribeAnnouncements,
       _unsubscribeSchedulerSettings: unsubscribeSchedulerSettings,
       _unsubscribeAuth: unsubscribeAuth,
@@ -343,16 +478,26 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeEmployees,
       _unsubscribeShifts,
       _unsubscribeTemplates,
+      _unsubscribeAbsences,
       _unsubscribeAnnouncements,
       _unsubscribeSchedulerSettings,
       _unsubscribeAuth,
+      _shiftTemplatesRetryTimer,
     } = get();
+    if (_shiftTemplatesRetryTimer) {
+      clearTimeout(_shiftTemplatesRetryTimer);
+    }
     _unsubscribeEmployees?.();
     _unsubscribeShifts?.();
     _unsubscribeTemplates?.();
+    _unsubscribeAbsences?.();
     _unsubscribeAnnouncements?.();
     _unsubscribeSchedulerSettings?.();
     _unsubscribeAuth?.();
+    set({
+      _shiftTemplatesRetryTimer: null,
+      _shiftTemplatesRetryCount: 0,
+    });
   },
 
   openLoginModal: () => set({ isLoginModalOpen: true }),
@@ -498,6 +643,142 @@ export const useSchedulerStore = create((set, get) => ({
 
   setWarningMessage: (warningMessage) => set({ warningMessage }),
   clearMessages: () => set({ warningMessage: '', errorMessage: '' }),
+
+  createAbsence: async (input) => {
+    if (!requireAdmin(get, set)) return false;
+
+    set({ isSaving: true });
+    try {
+      const payload = normalizeAbsenceInput(input);
+      const createdBy = get().adminUser?.email || '';
+      const created = await createEmployeeAbsence({
+        ...payload,
+        createdBy,
+        updatedBy: createdBy,
+      });
+      const existingImpact = get().shifts.some(
+        (shift) =>
+          shift.employeeId === payload.employeeId &&
+          shift.date >= payload.startDate &&
+          shift.date <= payload.endDate,
+      );
+      await recordAuditLog(get, {
+        action: 'absence.create',
+        target: { collection: 'employeeAbsences', id: created.id },
+        before: null,
+        after: { ...payload, id: created.id },
+      });
+      set((state) => ({
+        absences: sortAbsencesByDate([...state.absences, { ...created, ...payload }]),
+      }));
+      set({
+        warningMessage: existingImpact
+          ? 'Η άδεια καταχωρήθηκε επιτυχώς. Υπάρχει ήδη πρόγραμμα για αυτό το διάστημα και θα προσαρμοστεί στο επόμενο regenerate.'
+          : 'Η άδεια καταχωρήθηκε επιτυχώς.',
+      });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία καταχώρησης άδειας.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  updateAbsence: async (absenceId, patch) => {
+    if (!requireAdmin(get, set)) return false;
+    const current = get().absences.find((absence) => absence.id === absenceId);
+    if (!current) {
+      set({ warningMessage: 'Δεν βρέθηκε η άδεια για ενημέρωση.' });
+      return false;
+    }
+
+    set({ isSaving: true });
+    try {
+      const payload = normalizeAbsenceInput(patch, current);
+      const updatedBy = get().adminUser?.email || '';
+      await updateEmployeeAbsence(absenceId, {
+        ...payload,
+        updatedBy,
+      });
+      await recordAuditLog(get, {
+        action: 'absence.update',
+        target: { collection: 'employeeAbsences', id: absenceId },
+        before: current,
+        after: { ...current, ...payload, updatedBy },
+      });
+      set((state) => ({
+        absences: sortAbsencesByDate(
+          state.absences.map((absence) =>
+            absence.id === absenceId ? { ...absence, ...payload, updatedBy } : absence,
+          ),
+        ),
+      }));
+      set({ warningMessage: 'Η άδεια ενημερώθηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία ενημέρωσης άδειας.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  cancelAbsence: async (absenceId) => {
+    if (!requireAdmin(get, set)) return false;
+    const current = get().absences.find((absence) => absence.id === absenceId);
+    if (!current) return false;
+
+    set({ isSaving: true });
+    try {
+      await cancelEmployeeAbsence(absenceId);
+      await recordAuditLog(get, {
+        action: 'absence.cancel',
+        target: { collection: 'employeeAbsences', id: absenceId },
+        before: current,
+        after: { ...current, status: 'CANCELLED' },
+      });
+      set((state) => ({
+        absences: state.absences.map((absence) =>
+          absence.id === absenceId ? { ...absence, status: 'CANCELLED' } : absence,
+        ),
+      }));
+      set({ warningMessage: 'Η άδεια ακυρώθηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία ακύρωσης άδειας.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  deleteAbsence: async (absenceId) => {
+    if (!requireAdmin(get, set)) return false;
+    const current = get().absences.find((absence) => absence.id === absenceId);
+    if (!current) return false;
+
+    set({ isSaving: true });
+    try {
+      await removeEmployeeAbsence(absenceId);
+      await recordAuditLog(get, {
+        action: 'absence.delete',
+        target: { collection: 'employeeAbsences', id: absenceId },
+        before: current,
+        after: null,
+      });
+      set((state) => ({
+        absences: state.absences.filter((absence) => absence.id !== absenceId),
+      }));
+      set({ warningMessage: 'Η άδεια διαγράφηκε.' });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία διαγραφής άδειας.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
 
   saveGeneratorRules: async (partialRules = {}) => {
     if (!requireAdmin(get, set)) return false;
@@ -1779,6 +2060,7 @@ export const useSchedulerStore = create((set, get) => ({
         weekDays,
         employees: get().employees,
         allShifts: get().shifts,
+        absences: getAbsencesForRange(get().absences, weekDays[0], weekDays[weekDays.length - 1]),
         rules: weeklyRules,
       });
 
@@ -1843,6 +2125,7 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const monthDateSet = getMonthDateSet(year, month);
+    const monthDatesForGeneration = [...monthDateSet].sort();
     const monthShifts = get().shifts.filter((shift) => monthDateSet.has(shift.date));
     const baseRules = normalizeGeneratorRules(get().generatorRules);
     const mergedRules = {
@@ -1875,6 +2158,11 @@ export const useSchedulerStore = create((set, get) => ({
         employees: get().employees,
         allShifts: allShiftsForGeneration,
         existingMonthShifts: existingMonthShiftsForGeneration,
+        absences: getAbsencesForRange(
+          get().absences,
+          monthDatesForGeneration[0],
+          monthDatesForGeneration[monthDatesForGeneration.length - 1],
+        ),
         rules: mergedRules,
         roleConfig,
       });

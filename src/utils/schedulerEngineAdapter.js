@@ -153,12 +153,36 @@ function toEngineAbsence(shift) {
   };
 }
 
+function toEngineStoredAbsence(absence) {
+  return {
+    id: absence.id || `stored-absence-${absence.employeeId}-${absence.startDate}-${absence.endDate}`,
+    employeeId: absence.employeeId,
+    type: ['LEAVE', 'SICK', 'OTHER'].includes(absence.type) ? absence.type : 'OTHER',
+    startDate: absence.startDate,
+    endDate: absence.endDate || absence.startDate,
+    scope: absence.scope || 'FULL_DAY',
+    replacementMode: absence.replacementMode || 'AUTO',
+    manualReplacementEmployeeId: absence.manualReplacementEmployeeId || undefined,
+    note: absence.note || '',
+    createdAt: absence.createdAt || `${absence.startDate}T00:00:00.000Z`,
+    updatedAt: absence.updatedAt || `${absence.startDate}T00:00:00.000Z`,
+  };
+}
+
 function toEngineAbsences(shifts = [], visibleDates = []) {
   const visibleSet = new Set(visibleDates);
   return (shifts || [])
     .filter((shift) => visibleSet.has(shift.date))
     .filter((shift) => shift?.employeeId && (shift.type === SHIFT_TYPES.REST || shift.type === SHIFT_TYPES.LEAVE || shift.type === SHIFT_TYPES.SICK))
     .map(toEngineAbsence);
+}
+
+function toEngineStoredAbsences(absences = [], startDate, endDate) {
+  return (absences || [])
+    .filter((absence) => absence?.status !== 'CANCELLED')
+    .filter((absence) => absence?.employeeId && absence?.startDate && absence?.endDate)
+    .filter((absence) => absence.startDate <= endDate && absence.endDate >= startDate)
+    .map(toEngineStoredAbsence);
 }
 
 function toAppWarning(warning) {
@@ -228,6 +252,7 @@ export async function generateEngineWeekSchedule({
   weekDays,
   employees,
   allShifts = [],
+  absences = [],
   rules = {},
 }) {
   if (!Array.isArray(weekDays) || weekDays.length !== 7) {
@@ -235,11 +260,15 @@ export async function generateEngineWeekSchedule({
   }
 
   const engineEmployees = toEngineEmployees(employees, rules);
+  const engineAbsences = [
+    ...toEngineAbsences(allShifts, weekDays),
+    ...toEngineStoredAbsences(absences, weekDays[0], weekDays[weekDays.length - 1]),
+  ];
   const engineResult = generateSchedule({
     startDate: weekDays[0],
     endDate: weekDays[weekDays.length - 1],
     employees: engineEmployees,
-    absences: toEngineAbsences(allShifts, weekDays),
+    absences: engineAbsences,
     rules: toEngineRules(rules),
   });
 
@@ -260,15 +289,20 @@ export function generateEngineMonthSchedule({
   employees,
   allShifts = [],
   existingMonthShifts = [],
+  absences = [],
   rules = {},
 }) {
   const monthDays = getMonthDays(year, month);
   const engineEmployees = toEngineEmployees(employees, rules);
+  const engineAbsences = [
+    ...toEngineAbsences([...allShifts, ...existingMonthShifts], monthDays),
+    ...toEngineStoredAbsences(absences, monthDays[0], monthDays[monthDays.length - 1]),
+  ];
   const engineResult = generateSchedule({
     startDate: monthDays[0],
     endDate: monthDays[monthDays.length - 1],
     employees: engineEmployees,
-    absences: toEngineAbsences([...allShifts, ...existingMonthShifts], monthDays),
+    absences: engineAbsences,
     rules: toEngineRules(rules),
   });
 

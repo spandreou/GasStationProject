@@ -205,6 +205,7 @@ export async function generateSmartWeekSchedule({
   weekDays,
   employees,
   allShifts = [],
+  absences = [],
   rules = {},
   roleConfig = {},
 }) {
@@ -213,6 +214,7 @@ export async function generateSmartWeekSchedule({
     weekDays,
     employees: effectiveEmployees,
     allShifts,
+    absences,
     rules,
   });
 
@@ -231,6 +233,7 @@ export function generateSmartMonthSchedule({
   employees,
   allShifts = [],
   existingMonthShifts = [],
+  absences = [],
   rules = {},
   roleConfig = {},
 }) {
@@ -241,6 +244,7 @@ export function generateSmartMonthSchedule({
     employees: effectiveEmployees,
     allShifts,
     existingMonthShifts,
+    absences,
     rules,
   });
 

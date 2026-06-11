@@ -1,5 +1,6 @@
-import { BarChart3, ChevronDown, ChevronUp, LayoutPanelTop, Sparkles, UsersRound } from 'lucide-react';
+import { BarChart3, CalendarDays, ChevronDown, ChevronUp, LayoutPanelTop, Sparkles, UsersRound } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import AbsencesPanel from './AbsencesPanel';
 import AnalyticsPanel from './AnalyticsPanel';
 import EmployeeSidebar from './EmployeeSidebar';
 import ManualShiftForm from './ManualShiftForm';
@@ -11,6 +12,7 @@ function SidebarSection({ id, title, icon: Icon, activeId, onToggle, children, h
     <section className="rounded-2xl border border-white/35 bg-white/22 p-2.5 backdrop-blur-sm dark:border-cyan-300/18 dark:bg-slate-900/22">
       <button
         type="button"
+        data-testid={`${id}-nav`}
         onClick={() => onToggle(id)}
         className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition hover:bg-white/25 dark:hover:bg-slate-900/35"
         aria-expanded={isOpen}
@@ -35,9 +37,12 @@ function SidebarSection({ id, title, icon: Icon, activeId, onToggle, children, h
 export default function SchedulerSidebar({
   employees,
   shiftTemplates,
+  absences,
+  isAbsencesLoading,
   weekDays,
   visibleDays,
   isAdmin,
+  isSaving,
   scheduleMode,
   onModeChange,
   selectedMonth,
@@ -47,6 +52,10 @@ export default function SchedulerSidebar({
   onDeleteEmployee,
   onOpenAdminLogin,
   onOpenProfile,
+  onCreateAbsence,
+  onUpdateAbsence,
+  onCancelAbsence,
+  onDeleteAbsence,
   onAddShiftTemplate,
   onDeleteShiftTemplate,
   onCreateShift,
@@ -88,6 +97,29 @@ export default function SchedulerSidebar({
           view="employees"
           compact={compact}
           className="border-white/30 bg-white/18 dark:border-cyan-300/16 dark:bg-slate-900/20"
+        />
+      </SidebarSection>
+
+      <SidebarSection
+        id="absences"
+        title="Άδειες"
+        icon={CalendarDays}
+        activeId={activeSection}
+        onToggle={handleToggle}
+        helperText="Άδειες, ασθένειες και άλλες απουσίες που επηρεάζουν το πρόγραμμα."
+      >
+        <AbsencesPanel
+          employees={employees}
+          absences={absences}
+          isLoading={isAbsencesLoading}
+          isAdmin={isAdmin}
+          isSaving={isSaving}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          onCreateAbsence={onCreateAbsence}
+          onUpdateAbsence={onUpdateAbsence}
+          onCancelAbsence={onCancelAbsence}
+          onDeleteAbsence={onDeleteAbsence}
         />
       </SidebarSection>
 

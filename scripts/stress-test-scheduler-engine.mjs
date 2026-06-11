@@ -422,6 +422,68 @@ try {
   assert(countShiftType(adapterWeek.shifts, '2026-06-02', 'intermediate') === 1, 'adapter Tuesday has 1 app intermediate shift');
   assert(!adapterWeek.warnings.some((message) => String(message).includes('MISSING_REQUIRED_ROLE')), 'legacy roles map to required engine roles');
 
+  const adapterStoredAbsenceWeek = await generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: legacyEmployees,
+    allShifts: [],
+    absences: [
+      {
+        id: 'stored-leave-loulakakis',
+        employeeId: 'loulakakis',
+        type: 'LEAVE',
+        startDate: '2026-06-01',
+        endDate: '2026-06-03',
+        scope: 'FULL_DAY',
+        replacementMode: 'NO_REPLACEMENT',
+        status: 'ACTIVE',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+    rules: {},
+  });
+  assert(
+    !adapterStoredAbsenceWeek.shifts.some((shift) => shift.employeeId === 'loulakakis' && shift.date >= '2026-06-01' && shift.date <= '2026-06-03'),
+    'stored multi-day absence prevents employee shifts for every absence date',
+  );
+  assert(adapterStoredAbsenceWeek.warnings.some((message) => String(message).includes('χωρίς αντικατάσταση')), 'stored NO_REPLACEMENT absence creates warning');
+
+  const adapterManualReplacementWeek = await generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: [
+      ...legacyEmployees,
+      {
+        id: 'extra-manual',
+        fullName: 'Extra Manual',
+        isActive: true,
+        scheduleRole: 'custom',
+        extraMode: 'SUBSTITUTE_ONLY',
+        canCoverLeaves: true,
+      },
+    ],
+    allShifts: [],
+    absences: [
+      {
+        id: 'stored-manual-leave-core',
+        employeeId: 'loulakakis',
+        type: 'SICK',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        scope: 'FULL_DAY',
+        replacementMode: 'MANUAL',
+        manualReplacementEmployeeId: 'extra-manual',
+        status: 'ACTIVE',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+    rules: {},
+  });
+  assert(
+    adapterManualReplacementWeek.shifts.some((shift) => shift.employeeId === 'extra-manual' && shift.date === '2026-06-01'),
+    'stored MANUAL absence uses selected replacement when available',
+  );
+
   const adapterMonth = generateEngineMonthSchedule({
     month: 5,
     year: 2026,
@@ -433,6 +495,33 @@ try {
   assert(adapterMonth.meta.monthDays.length === 30, 'adapter month includes monthDays metadata');
   assert(countShiftType(adapterMonth.shifts, '2026-06-01', 'morning') === 2, 'adapter month uses engine base pattern');
   assert(!adapterMonth.shifts.some((shift) => shift.employeeId === 'loulakakis' && shift.date === '2026-06-04'), 'adapter respects fixed day off');
+
+  const adapterFutureLeaveMonth = generateEngineMonthSchedule({
+    month: 7,
+    year: 2026,
+    employees: legacyEmployees,
+    allShifts: [],
+    existingMonthShifts: [],
+    absences: [
+      {
+        id: 'future-leave-drossi',
+        employeeId: 'drossi',
+        type: 'LEAVE',
+        startDate: '2026-08-05',
+        endDate: '2026-08-15',
+        scope: 'FULL_DAY',
+        replacementMode: 'AUTO',
+        status: 'ACTIVE',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+    rules: {},
+  });
+  assert(
+    !adapterFutureLeaveMonth.shifts.some((shift) => shift.employeeId === 'drossi' && shift.date >= '2026-08-05' && shift.date <= '2026-08-15'),
+    'future stored absence is applied when that month is generated',
+  );
 
   console.log('Scheduler engine stress QA passed');
 } finally {

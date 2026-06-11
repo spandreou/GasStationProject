@@ -237,6 +237,7 @@ export default function MainDashboard() {
     employees,
     shifts,
     shiftTemplates,
+    absences,
     weekHistory,
     weekTemplates,
     generatorRules,
@@ -248,6 +249,7 @@ export default function MainDashboard() {
     attendanceHistory,
     historyFilters,
     isHistoryLoading,
+    isAbsencesLoading,
     isWeekLocked,
     weekStart,
     isLoading,
@@ -263,6 +265,10 @@ export default function MainDashboard() {
     addEmployee,
     editEmployee,
     deleteEmployee,
+    createAbsence,
+    updateAbsence,
+    cancelAbsence,
+    deleteAbsence,
     addShift,
     updateShiftDetails,
     deleteShift,
@@ -1008,9 +1014,12 @@ export default function MainDashboard() {
               <SchedulerSidebar
                 employees={employees}
                 shiftTemplates={shiftTemplates}
+                absences={absences}
+                isAbsencesLoading={isAbsencesLoading}
                 weekDays={weekDays}
                 visibleDays={visibleDays}
                 isAdmin={isAdmin}
+                isSaving={isSaving}
                 scheduleMode={scheduleMode}
                 onModeChange={setScheduleMode}
                 selectedMonth={selectedMonth}
@@ -1020,6 +1029,10 @@ export default function MainDashboard() {
                 onDeleteEmployee={deleteEmployee}
                 onOpenAdminLogin={handleOpenAdminLogin}
                 onOpenProfile={setProfileEmployee}
+                onCreateAbsence={createAbsence}
+                onUpdateAbsence={updateAbsence}
+                onCancelAbsence={cancelAbsence}
+                onDeleteAbsence={deleteAbsence}
                 onAddShiftTemplate={addShiftTemplate}
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onCreateShift={addShift}
@@ -1191,9 +1204,12 @@ export default function MainDashboard() {
                 <SchedulerSidebar
                   employees={employees}
                   shiftTemplates={shiftTemplates}
+                  absences={absences}
+                  isAbsencesLoading={isAbsencesLoading}
                   weekDays={weekDays}
                   visibleDays={visibleDays}
                   isAdmin={isAdmin}
+                  isSaving={isSaving}
                   scheduleMode={scheduleMode}
                   onModeChange={setScheduleMode}
                   selectedMonth={selectedMonth}
@@ -1203,6 +1219,10 @@ export default function MainDashboard() {
                   onDeleteEmployee={deleteEmployee}
                   onOpenAdminLogin={handleOpenAdminLogin}
                   onOpenProfile={setProfileEmployee}
+                  onCreateAbsence={createAbsence}
+                  onUpdateAbsence={updateAbsence}
+                  onCancelAbsence={cancelAbsence}
+                  onDeleteAbsence={deleteAbsence}
                   onAddShiftTemplate={addShiftTemplate}
                   onDeleteShiftTemplate={deleteShiftTemplate}
                   onCreateShift={addShift}

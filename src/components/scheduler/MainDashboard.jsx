@@ -1,11 +1,11 @@
 import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, ShieldCheck, WifiOff } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
-import { adminEmail, firebaseConfigErrorMessage, isDemoMode, isFirebaseConfigured } from '../../firebase/config';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import useResizableLayout from '../../hooks/useResizableLayout';
 import useToastQueue from '../../hooks/useToastQueue';
 import { useThemeMode } from '../../hooks/useThemeMode';
+import { runtimeEnvironmentRepository } from '../../repositories';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { getMonthDays } from '../../utils/scheduleUtils';
 import { formatDateGreek, getWeekDays } from '../../utils/time';
@@ -25,6 +25,11 @@ const AdminLoginModal = lazy(() => import('./AdminLoginModal'));
 const AdminDndShell = lazy(() => import('./AdminDndShell'));
 const EmployeeProfileModal = lazy(() => import('./EmployeeProfileModal'));
 const WeekHistoryViewer = lazy(() => import('./WeekHistoryViewer'));
+
+const isFirebaseConfigured = runtimeEnvironmentRepository.isPersistenceConfigured();
+const firebaseConfigErrorMessage = runtimeEnvironmentRepository.getPersistenceErrorMessage();
+const adminEmail = runtimeEnvironmentRepository.getConfiguredAdminEmail();
+const isDemoMode = runtimeEnvironmentRepository.isDemoMode();
 
 const SHELL_WIDTH_MODE_OPTIONS = [
   { value: 'narrow', label: 'Στενό' },

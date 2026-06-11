@@ -8,6 +8,7 @@
     "build": "vite build",
     "qa:scheduler-engine": "node scripts/stress-test-scheduler-engine.mjs",
     "qa:scheduler": "node scripts/validate-scheduler-rules.mjs && npm run build",
+    "qa:repositories": "node scripts/validate-repository-boundaries.mjs",
     "test:e2e:scheduler": "playwright test tests/scheduler-roles.e2e.spec.js",
     "preview": "vite preview",
     "security:audit": "npm audit --audit-level=high",

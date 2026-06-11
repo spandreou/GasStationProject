@@ -1,48 +1,16 @@
 import { create } from 'zustand';
-import { firebaseConfigErrorMessage, isFirebaseConfigured } from '../firebase/config';
 import {
-  sendAdminPasswordResetEmail,
-  signInAdmin,
-  signOutAdmin,
-  subscribeAdminAuth,
-} from '../firebase/authService';
-import { createAnnouncement, removeAnnouncement, subscribeAnnouncements } from '../firebase/announcementService';
-import {
-  cancelEmployeeAbsence,
-  createEmployeeAbsence,
-  removeEmployeeAbsence,
-  subscribeEmployeeAbsences,
-  updateEmployeeAbsence,
-} from '../firebase/absenceService';
-import { createEmployee, removeEmployee, subscribeEmployees, updateEmployee } from '../firebase/employeeService';
-import {
-  createShift,
-  createShiftTemplate,
-  fetchShiftsByDates,
-  hasConsecutiveSundayAssignment,
-  removeShift,
-  removeShiftTemplate,
-  removeShiftsByDates,
-  removeShiftsByEmployee,
-  replaceShiftsBatch,
-  restoreShift,
-  subscribeShifts,
-  subscribeShiftTemplates,
-  updateShift,
-  updateShiftTemplate,
-} from '../firebase/shiftService';
-import { subscribeSchedulerSettings, upsertSchedulerSettings } from '../firebase/settingsService';
-import {
-  fetchAttendanceHistoryByMonth,
-  fetchLatestWeekSnapshotByWeekId,
-  fetchWeekHistoryList,
-  fetchWeekTemplates,
-  finalizeWeekAttendance,
-  isWeekFinalized,
-  saveWeekHistorySnapshot,
-  saveWeekTemplate,
-} from '../firebase/weekService';
-import { writeAuditLog } from '../firebase/auditLogService';
+  absencesRepository,
+  announcementsRepository,
+  auditLogRepository,
+  authRepository,
+  employeesRepository,
+  schedulerSettingsRepository,
+  shiftsRepository,
+  templatesRepository,
+  weekHistoryRepository,
+  weekLocksRepository,
+} from '../repositories';
 import {
   evaluateSundayRuleViolation,
   getWeekIdFromWeekStart,
@@ -55,6 +23,78 @@ import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, getShiftDurationHours, SHIFT_TYPES } from '../utils/analytics';
 import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
 import { formatDateGreek, getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
+
+const isFirebaseConfigured = authRepository.isPersistenceConfigured();
+const firebaseConfigErrorMessage = authRepository.getPersistenceErrorMessage?.() || '';
+
+const {
+  sendAdminPasswordResetEmail,
+  signInAdmin,
+  signOutAdmin,
+  subscribeAdminAuth,
+} = authRepository;
+
+const {
+  createAnnouncement,
+  deleteAnnouncement: removeAnnouncement,
+  subscribeAnnouncements,
+} = announcementsRepository;
+
+const {
+  cancelAbsence: cancelEmployeeAbsence,
+  createAbsence: createEmployeeAbsence,
+  deleteAbsence: removeEmployeeAbsence,
+  subscribeAbsences: subscribeEmployeeAbsences,
+  updateAbsence: updateEmployeeAbsence,
+} = absencesRepository;
+
+const {
+  createEmployee,
+  deleteEmployee: removeEmployee,
+  subscribeEmployees,
+  updateEmployee,
+} = employeesRepository;
+
+const {
+  createShift,
+  createShiftTemplate,
+  deleteShift: removeShift,
+  deleteShiftTemplate: removeShiftTemplate,
+  deleteShiftsByDates: removeShiftsByDates,
+  deleteShiftsByEmployee: removeShiftsByEmployee,
+  hasConsecutiveSundayAssignment,
+  listShiftsByDates: fetchShiftsByDates,
+  replaceShiftsBatch,
+  restoreShift,
+  subscribeShifts,
+  subscribeShiftTemplates,
+  updateShift,
+  updateShiftTemplate,
+} = shiftsRepository;
+
+const {
+  subscribeSettings: subscribeSchedulerSettings,
+  upsertSettings: upsertSchedulerSettings,
+} = schedulerSettingsRepository;
+
+const {
+  finalizeWeek: finalizeWeekAttendance,
+  isWeekFinalized,
+} = weekLocksRepository;
+
+const {
+  getLatestWeekSnapshotByWeekId: fetchLatestWeekSnapshotByWeekId,
+  listAttendanceHistoryByMonth: fetchAttendanceHistoryByMonth,
+  listWeekHistory: fetchWeekHistoryList,
+  saveWeekSnapshot: saveWeekHistorySnapshot,
+} = weekHistoryRepository;
+
+const {
+  createWeekTemplate: saveWeekTemplate,
+  listWeekTemplates: fetchWeekTemplates,
+} = templatesRepository;
+
+const { writeAuditLog } = auditLogRepository;
 
 function getCurrentWeekStart() {
   return getIsoDate(getMonday(new Date()));

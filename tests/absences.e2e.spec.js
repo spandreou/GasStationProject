@@ -84,8 +84,16 @@ test('admin can add an absence and public view sees absences read-only', async (
 
   await expect(page.getByTestId('absences-sidebar-section')).toBeVisible();
   await expect(page.getByTestId('absences-sidebar-toggle')).toContainText('Άδειες');
+  await expect(page.getByTestId('employees-sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('absences-sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
   await page.getByTestId('absences-sidebar-toggle').click();
+  await expect(page.getByTestId('employees-sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('absences-sidebar-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByTestId('absences-panel')).toBeVisible();
+  await page.getByTestId('absences-sidebar-toggle').click();
+  await expect(page.getByTestId('absences-sidebar-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('absences-panel')).toHaveCount(0);
+  await page.getByTestId('absences-sidebar-toggle').click();
   await page.getByTestId('add-absence-button').click({ force: true });
 
   await page.getByTestId('absence-employee-select').selectOption('drossi');

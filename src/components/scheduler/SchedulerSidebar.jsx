@@ -62,7 +62,7 @@ export default function SchedulerSidebar({
   onAddShiftTemplate,
   onDeleteShiftTemplate,
   onCreateShift,
-  defaultSection = 'employees',
+  defaultSection = '',
   compact = false,
 }) {
   const [activeSection, setActiveSection] = useState(defaultSection);

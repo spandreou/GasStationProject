@@ -1,4 +1,5 @@
-import { createSign } from 'node:crypto';
+import { createSign, randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -12,7 +13,11 @@ function printUsage() {
 Options:
   --display-name <name>         Display name for a newly created user.
   --service-account <path>      Service account JSON path. Alternative to GOOGLE_APPLICATION_CREDENTIALS.
+  --use-gcloud                  Use the active gcloud account for the Google OAuth token.
+  --project-id <id>             Firebase project id. Defaults to service account or .env VITE_FIREBASE_PROJECT_ID.
+  --api-key <key>               Firebase Web API key. Defaults to .env VITE_FIREBASE_API_KEY.
   --password-env <name>         Env var that contains a temporary password. Default: ${DEFAULT_PASSWORD_ENV}.
+  --send-reset                  Send a Firebase reset email after setting admin=true.
   --dry-run                     Validate arguments without contacting Google APIs.
 
 Security:
@@ -40,8 +45,16 @@ function parseArgs(argv) {
       args.displayName = argv[++index];
     } else if (arg === '--service-account') {
       args.serviceAccountPath = argv[++index];
+    } else if (arg === '--use-gcloud') {
+      args.useGcloud = true;
+    } else if (arg === '--project-id') {
+      args.projectId = argv[++index];
+    } else if (arg === '--api-key') {
+      args.apiKey = argv[++index];
     } else if (arg === '--password-env') {
       args.passwordEnv = argv[++index];
+    } else if (arg === '--send-reset') {
+      args.sendReset = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -60,6 +73,15 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function getDotEnvValue(name) {
+  if (!existsSync('.env')) return '';
+  const line = readFileSync('.env', 'utf8')
+    .split(/\r?\n/u)
+    .find((entry) => entry.trim().startsWith(`${name}=`));
+  if (!line) return '';
+  return line.slice(line.indexOf('=') + 1).trim().replace(/^["']|["']$/gu, '');
+}
+
 function loadServiceAccount(pathFromArgs) {
   const inlineJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (inlineJson) {
@@ -73,6 +95,27 @@ function loadServiceAccount(pathFromArgs) {
   );
   assert(existsSync(serviceAccountPath), `Service account file was not found: ${serviceAccountPath}`);
   return JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
+}
+
+function resolveProjectId(args, serviceAccount) {
+  return (
+    args.projectId ||
+    serviceAccount?.project_id ||
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.VITE_FIREBASE_PROJECT_ID ||
+    getDotEnvValue('FIREBASE_PROJECT_ID') ||
+    getDotEnvValue('VITE_FIREBASE_PROJECT_ID')
+  );
+}
+
+function resolveApiKey(args) {
+  return (
+    args.apiKey ||
+    process.env.FIREBASE_API_KEY ||
+    process.env.VITE_FIREBASE_API_KEY ||
+    getDotEnvValue('FIREBASE_API_KEY') ||
+    getDotEnvValue('VITE_FIREBASE_API_KEY')
+  );
 }
 
 function validateServiceAccount(serviceAccount) {
@@ -107,12 +150,13 @@ function createServiceAccountJwt(serviceAccount) {
   return `${unsignedJwt}.${signature}`;
 }
 
-async function postJson(url, body, accessToken) {
+async function postJson(url, body, accessToken, quotaProjectId = '') {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(accessToken && quotaProjectId ? { 'X-Goog-User-Project': quotaProjectId } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -145,6 +189,43 @@ async function getAccessToken(serviceAccount) {
   return data.access_token;
 }
 
+function getGcloudAccessToken() {
+  const args = ['auth', 'print-access-token'];
+  let token = '';
+  try {
+    token = execFileSync('gcloud', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    if (process.platform !== 'win32') {
+      throw error;
+    }
+    token = execFileSync('cmd', ['/c', 'gcloud', ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  }
+  assert(token, 'gcloud did not return an access token.');
+  return token;
+}
+
+async function resolveAccessToken(args, serviceAccount) {
+  if (serviceAccount) {
+    return getAccessToken(serviceAccount);
+  }
+
+  if (process.env.GOOGLE_OAUTH_ACCESS_TOKEN) {
+    return process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+  }
+
+  if (args.useGcloud) {
+    return getGcloudAccessToken();
+  }
+
+  throw new Error('Missing token source. Provide a service account, GOOGLE_OAUTH_ACCESS_TOKEN, or --use-gcloud.');
+}
+
 function identityToolkitUrl(projectId, method) {
   return `https://identitytoolkit.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/accounts:${method}`;
 }
@@ -154,6 +235,7 @@ async function lookupUserByEmail(projectId, email, accessToken) {
     identityToolkitUrl(projectId, 'lookup'),
     { email: [email], targetProjectId: projectId },
     accessToken,
+    projectId,
   );
   return data.users?.[0] || null;
 }
@@ -170,6 +252,15 @@ async function createUser(projectId, { email, password, displayName }, accessTok
       targetProjectId: projectId,
     },
     accessToken,
+    projectId,
+  );
+}
+
+async function sendResetEmail({ apiKey, email }) {
+  assert(apiKey, 'Missing Firebase API key. Set VITE_FIREBASE_API_KEY in .env or pass --api-key.');
+  await postJson(
+    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`,
+    { requestType: 'PASSWORD_RESET', email },
   );
 }
 
@@ -195,7 +286,7 @@ async function updateUser(projectId, { localId, claims, password }, accessToken)
     body.password = password;
   }
 
-  return postJson(identityToolkitUrl(projectId, 'update'), body, accessToken);
+  return postJson(identityToolkitUrl(projectId, 'update'), body, accessToken, projectId);
 }
 
 async function main() {
@@ -216,23 +307,25 @@ async function main() {
   }
 
   assert(typeof fetch === 'function', 'This script requires Node.js with global fetch support.');
-  const serviceAccount = loadServiceAccount(args.serviceAccountPath);
-  validateServiceAccount(serviceAccount);
-  const projectId = serviceAccount.project_id;
+  const serviceAccount = (args.serviceAccountPath || process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS)
+    ? loadServiceAccount(args.serviceAccountPath)
+    : null;
+  if (serviceAccount) {
+    validateServiceAccount(serviceAccount);
+  }
+  const projectId = resolveProjectId(args, serviceAccount);
+  assert(projectId, 'Missing Firebase project id. Set VITE_FIREBASE_PROJECT_ID in .env or pass --project-id.');
 
   const temporaryPassword = process.env[args.passwordEnv] || '';
-  const accessToken = await getAccessToken(serviceAccount);
+  const accessToken = await resolveAccessToken(args, serviceAccount);
   let user = await lookupUserByEmail(projectId, email, accessToken);
   let created = false;
 
   if (!user) {
-    assert(
-      temporaryPassword,
-      `User does not exist. Set ${args.passwordEnv} to create the user with a temporary password.`,
-    );
+    const creationCredential = temporaryPassword || randomBytes(32).toString('base64url');
     const createdUser = await createUser(
       projectId,
-      { email, password: temporaryPassword, displayName: args.displayName },
+      { email, password: creationCredential, displayName: args.displayName },
       accessToken,
     );
     user = { localId: createdUser.localId, customAttributes: createdUser.customAttributes };
@@ -252,6 +345,10 @@ async function main() {
   console.log(`Firebase uid: ${user.localId}`);
   console.log(`User created: ${created ? 'yes' : 'no'}`);
   console.log(`Temporary credential set/updated: ${temporaryCredentialProvided ? 'yes' : 'no'}`);
+  if (args.sendReset) {
+    await sendResetEmail({ apiKey: resolveApiKey(args), email });
+    console.log('Firebase reset email sent.');
+  }
   console.log('Custom claim admin=true is set. Sign out and sign in again so Firebase refreshes the ID token.');
 }
 

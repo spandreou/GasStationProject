@@ -128,9 +128,17 @@ Remove-Item Env:\ADMIN_BOOTSTRAP_PASSWORD
 
 Εναλλακτικά, μπορείς να δώσεις το service account JSON από `FIREBASE_SERVICE_ACCOUNT_JSON`.
 
+Αν έχεις ήδη ενεργό Google Cloud login με τα σωστά Firebase Auth δικαιώματα, μπορείς να χρησιμοποιήσεις:
+
+```powershell
+npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Station Admin" --use-gcloud --send-reset
+```
+
+Με το `--send-reset` στέλνεται Firebase password reset email στον admin, ώστε ο κωδικός να οριστεί από τον ίδιο τον διαχειριστή και να μη μπει σε logs/chat/repo.
+
 Το script:
 
-- δημιουργεί τον χρήστη αν δεν υπάρχει και έχει δοθεί προσωρινός κωδικός,
+- δημιουργεί τον χρήστη αν δεν υπάρχει,
 - κρατάει τυχόν υπάρχοντα custom claims,
 - θέτει `admin=true`,
 - δεν εκτυπώνει password, private key ή access token.

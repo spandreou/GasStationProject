@@ -99,6 +99,19 @@ test('admin can add an absence and public view sees absences read-only', async (
   await expect(page.getByTestId('absence-card')).toContainText('3 ημέρες');
 
   await page.evaluate(() => {
+    window.__gasStationSchedulerStore.setState((state) => ({
+      absences: state.absences.map((absence) => ({
+        ...absence,
+        replacementMode: 'MANUAL',
+        manualReplacementEmployeeId: 'loulakakis',
+        note: 'internal replacement note',
+        createdBy: 'playwright-admin@example.test',
+        updatedBy: 'playwright-admin@example.test',
+      })),
+    }));
+  });
+
+  await page.evaluate(() => {
     window.__gasStationSchedulerStore.setState({
       isAdmin: false,
       adminUser: null,
@@ -110,4 +123,10 @@ test('admin can add an absence and public view sees absences read-only', async (
   await expect(page.getByTestId('absence-readonly-view')).toBeVisible();
   await expect(page.getByTestId('add-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('edit-absence-button')).toHaveCount(0);
+  await expect(page.getByTestId('cancel-absence-button')).toHaveCount(0);
+  await expect(page.getByTestId('delete-absence-button')).toHaveCount(0);
+  await expect(page.getByTestId('absence-card')).not.toContainText('Αντικατάσταση');
+  await expect(page.getByTestId('absence-card')).not.toContainText('Σχόλιο');
+  await expect(page.getByTestId('absence-card')).not.toContainText('internal replacement note');
+  await expect(page.getByTestId('absence-card')).not.toContainText('MANUAL');
 });

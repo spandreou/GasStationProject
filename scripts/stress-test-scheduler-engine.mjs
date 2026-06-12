@@ -25,6 +25,13 @@ function employeeShift(shifts, date, employeeId) {
   return shiftsOn(shifts, date).find((shift) => shift.employeeId === employeeId);
 }
 
+function assertNoEmployeeShiftInRange(shifts, employeeId, startDate, endDate, message) {
+  assert(
+    !shifts.some((shift) => shift.employeeId === employeeId && shift.date >= startDate && shift.date <= endDate),
+    message,
+  );
+}
+
 function assertNoDoubleShift(shifts) {
   const seen = new Set();
   for (const shift of shifts) {
@@ -134,6 +141,7 @@ try {
     DEFAULT_SHIFT_DEFINITIONS,
     generateSchedule,
     resolveScheduleRoles,
+    validateSchedule,
   } = await import(pathToFileURL(bundledEnginePath).href);
 
   assert(DEFAULT_SHIFT_DEFINITIONS.MORNING.startTime === '06:00', 'default morning starts at 06:00');
@@ -332,6 +340,28 @@ try {
   );
   assert(!absenceWeek.shifts.some((shift) => shift.employeeId === 'extra-b'), 'disabled extra never works');
 
+  const autoWithoutReplacement = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: fourEmployees,
+    absences: [
+      {
+        id: 'leave-core-a-auto-no-substitute',
+        employeeId: 'core-a',
+        type: 'LEAVE',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        scope: 'FULL_DAY',
+        replacementMode: 'AUTO',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+  });
+  assert(!employeeShift(autoWithoutReplacement.shifts, '2026-06-01', 'core-a'), 'AUTO absence removes absent employee even without replacement');
+  assert(autoWithoutReplacement.unresolvedGaps.length === 1, 'AUTO without available replacement leaves unresolved gap');
+  assert(autoWithoutReplacement.warnings.some((warning) => warning.code === 'UNRESOLVED_GAP'), 'AUTO without replacement creates warning');
+
   const seasonalEmployees = [
     ...fourEmployees,
     {
@@ -394,6 +424,153 @@ try {
   });
   assert(noReplacement.unresolvedGaps.length === 1, 'NO_REPLACEMENT leaves an unresolved gap');
   assert(noReplacement.warnings.some((warning) => warning.code === 'UNRESOLVED_GAP'), 'unresolved gap creates warning');
+  assert(
+    !noReplacement.shifts.some((shift) => shift.source === 'ABSENCE_REPLACEMENT'),
+    'NO_REPLACEMENT does not assign arbitrary replacement employee',
+  );
+
+  const manualReplacementDirect = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: [
+      ...fourEmployees,
+      {
+        employeeId: 'extra-manual-direct',
+        fullName: 'Extra Manual Direct',
+        scheduleRole: 'EXTRA_A',
+        isEnabled: true,
+        participatesInWeeklyRotation: false,
+        participatesInSundayRotation: false,
+        extraMode: 'SUBSTITUTE_ONLY',
+        canCoverLeaves: true,
+        canWorkMorning: true,
+        canWorkIntermediate: true,
+        canWorkAfternoon: true,
+        canWorkSunday: false,
+      },
+      {
+        employeeId: 'extra-other-direct',
+        fullName: 'Extra Other Direct',
+        scheduleRole: 'EXTRA_B',
+        isEnabled: true,
+        participatesInWeeklyRotation: false,
+        participatesInSundayRotation: false,
+        extraMode: 'SUBSTITUTE_ONLY',
+        canCoverLeaves: true,
+        canWorkMorning: true,
+        canWorkIntermediate: true,
+        canWorkAfternoon: true,
+        canWorkSunday: false,
+      },
+    ],
+    absences: [
+      {
+        id: 'leave-core-a-manual-direct',
+        employeeId: 'core-a',
+        type: 'LEAVE',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        scope: 'FULL_DAY',
+        replacementMode: 'MANUAL',
+        manualReplacementEmployeeId: 'extra-manual-direct',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+  });
+  assert(employeeShift(manualReplacementDirect.shifts, '2026-06-01', 'extra-manual-direct'), 'MANUAL replacement uses selected replacement');
+  assert(!employeeShift(manualReplacementDirect.shifts, '2026-06-01', 'extra-other-direct'), 'MANUAL replacement does not choose a different available replacement');
+  assert(!manualReplacementDirect.unresolvedGaps.length, 'available MANUAL replacement resolves gap');
+
+  const manualReplacementUnavailable = generateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: extraEmployees,
+    absences: [
+      {
+        id: 'leave-core-a-manual-disabled',
+        employeeId: 'core-a',
+        type: 'LEAVE',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        scope: 'FULL_DAY',
+        replacementMode: 'MANUAL',
+        manualReplacementEmployeeId: 'extra-b',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+  });
+  assert(manualReplacementUnavailable.unresolvedGaps.length === 1, 'unavailable MANUAL replacement leaves unresolved gap');
+  assert(manualReplacementUnavailable.warnings.some((warning) => warning.code === 'UNRESOLVED_GAP'), 'unavailable MANUAL replacement creates warning');
+  assert(!employeeShift(manualReplacementUnavailable.shifts, '2026-06-01', 'extra-a'), 'unavailable MANUAL replacement does not fall back to another employee');
+
+  const sundayBaseline = generateSchedule({
+    startDate: '2026-06-07',
+    endDate: '2026-06-07',
+    employees: fourEmployees,
+    absences: [],
+  });
+  const baselineSundayEmployeeId = shiftsOn(sundayBaseline.shifts, '2026-06-07')[0]?.employeeId;
+  assert(baselineSundayEmployeeId, 'baseline Sunday fixture must assign one employee');
+  const sundayAbsence = generateSchedule({
+    startDate: '2026-06-07',
+    endDate: '2026-06-07',
+    employees: fourEmployees,
+    absences: [
+      {
+        id: 'sunday-leave',
+        employeeId: baselineSundayEmployeeId,
+        type: 'LEAVE',
+        startDate: '2026-06-07',
+        endDate: '2026-06-07',
+        scope: 'FULL_DAY',
+        replacementMode: 'AUTO',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+  });
+  assert(countShiftType(sundayAbsence.shifts, '2026-06-07', 'SUNDAY_12H') === 1, 'Sunday absence still leaves exactly one Sunday shift');
+  assert(!employeeShift(sundayAbsence.shifts, '2026-06-07', baselineSundayEmployeeId), 'employee with Sunday absence is not assigned 08:00-20:00');
+
+  const invalidAbsentScheduleValidation = validateSchedule({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: fourEmployees,
+    absences: [
+      {
+        id: 'validation-leave-core-a',
+        employeeId: 'core-a',
+        type: 'LEAVE',
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        scope: 'FULL_DAY',
+        replacementMode: 'AUTO',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ],
+    shifts: [
+      {
+        id: 'invalid-absent-core-a',
+        date: '2026-06-01',
+        employeeId: 'core-a',
+        employeeName: 'Core A',
+        scheduleRole: 'CORE_A',
+        shiftType: 'MORNING',
+        startTime: '06:00',
+        endTime: '14:00',
+        source: 'BASE',
+      },
+    ],
+    unresolvedGaps: [],
+    warnings: [],
+  });
+  assert(
+    invalidAbsentScheduleValidation.violations.some((violation) => violation.code === 'ABSENT_EMPLOYEE_WORKED'),
+    'validation fails when absent employee appears in generated shift',
+  );
 
   await build({
     entryPoints: [path.join(rootDir, 'src/utils/schedulerEngineAdapter.js')],
@@ -446,6 +623,13 @@ try {
     !adapterStoredAbsenceWeek.shifts.some((shift) => shift.employeeId === 'loulakakis' && shift.date >= '2026-06-01' && shift.date <= '2026-06-03'),
     'stored multi-day absence prevents employee shifts for every absence date',
   );
+  assertNoEmployeeShiftInRange(
+    adapterStoredAbsenceWeek.shifts,
+    'loulakakis',
+    '2026-06-01',
+    '2026-06-03',
+    'stored current-month multi-day absence excludes every date in range',
+  );
   assert(adapterStoredAbsenceWeek.warnings.some((message) => String(message).includes('χωρίς αντικατάσταση')), 'stored NO_REPLACEMENT absence creates warning');
 
   const adapterManualReplacementWeek = await generateEngineWeekSchedule({
@@ -482,6 +666,32 @@ try {
   assert(
     adapterManualReplacementWeek.shifts.some((shift) => shift.employeeId === 'extra-manual' && shift.date === '2026-06-01'),
     'stored MANUAL absence uses selected replacement when available',
+  );
+
+  const adapterPublicAbsenceSafetyWeek = await generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: legacyEmployees,
+    allShifts: [],
+    absences: [
+      {
+        id: 'public-absence-doc',
+        employeeName: 'Λουλακάκης Κώστας',
+        typeLabel: 'Άδεια',
+        startDate: '2026-06-01',
+        endDate: '2026-06-03',
+        totalDays: 3,
+        status: 'ACTIVE',
+      },
+    ],
+    rules: {},
+  });
+  assert(
+    adapterPublicAbsenceSafetyWeek.shifts.some((shift) => shift.employeeId === 'loulakakis' && shift.date === '2026-06-01'),
+    'sanitized public absence docs without employeeId are ignored by generator',
+  );
+  assert(
+    !adapterPublicAbsenceSafetyWeek.warnings.some((message) => String(message).includes('public-absence-doc')),
+    'sanitized public absence docs do not enter generator warnings',
   );
 
   const adapterMonth = generateEngineMonthSchedule({
@@ -521,6 +731,13 @@ try {
   assert(
     !adapterFutureLeaveMonth.shifts.some((shift) => shift.employeeId === 'drossi' && shift.date >= '2026-08-05' && shift.date <= '2026-08-15'),
     'future stored absence is applied when that month is generated',
+  );
+  assertNoEmployeeShiftInRange(
+    adapterFutureLeaveMonth.shifts,
+    'drossi',
+    '2026-08-05',
+    '2026-08-15',
+    'future month multi-day absence excludes every generated date in range',
   );
 
   console.log('Scheduler engine stress QA passed');

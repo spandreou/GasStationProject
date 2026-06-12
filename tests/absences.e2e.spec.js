@@ -82,7 +82,9 @@ test('admin can add an absence and public view sees absences read-only', async (
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedAbsenceStore(page);
 
-  await page.getByTestId('absences-nav').click();
+  await expect(page.getByTestId('absences-sidebar-section')).toBeVisible();
+  await expect(page.getByTestId('absences-sidebar-toggle')).toContainText('Άδειες');
+  await page.getByTestId('absences-sidebar-toggle').click();
   await expect(page.getByTestId('absences-panel')).toBeVisible();
   await page.getByTestId('add-absence-button').click({ force: true });
 
@@ -119,8 +121,8 @@ test('admin can add an absence and public view sees absences read-only', async (
   });
 
   await page.waitForFunction(() => window.__gasStationSchedulerStore.getState().isAdmin === false);
-  await page.getByTestId('absences-nav').click();
-  await expect(page.getByTestId('absence-readonly-view')).toBeVisible();
+  await page.getByTestId('absences-sidebar-toggle').click();
+  await expect(page.getByTestId('absence-public-view')).toBeVisible();
   await expect(page.getByTestId('add-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('edit-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('cancel-absence-button')).toHaveCount(0);

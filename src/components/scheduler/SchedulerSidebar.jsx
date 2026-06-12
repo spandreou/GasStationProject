@@ -9,10 +9,13 @@ function SidebarSection({ id, title, icon: Icon, activeId, onToggle, children, h
   const isOpen = activeId === id;
 
   return (
-    <section className="rounded-2xl border border-white/35 bg-white/22 p-2.5 backdrop-blur-sm dark:border-cyan-300/18 dark:bg-slate-900/22">
+    <section
+      data-testid={`${id}-sidebar-section`}
+      className="rounded-2xl border border-white/35 bg-white/22 p-2.5 backdrop-blur-sm dark:border-cyan-300/18 dark:bg-slate-900/22"
+    >
       <button
         type="button"
-        data-testid={`${id}-nav`}
+        data-testid={`${id}-sidebar-toggle`}
         onClick={() => onToggle(id)}
         className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left transition hover:bg-white/25 dark:hover:bg-slate-900/35"
         aria-expanded={isOpen}

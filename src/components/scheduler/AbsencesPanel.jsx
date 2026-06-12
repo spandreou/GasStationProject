@@ -365,7 +365,7 @@ export default function AbsencesPanel({
           Προσθήκη Άδειας / Απουσίας
         </button>
       ) : (
-        <div data-testid="absence-readonly-view" className="rounded-xl border border-cyan-300/25 bg-slate-950/20 px-3 py-2 text-xs text-slate-700 dark:text-cyan-50">
+        <div data-testid="absence-public-view" className="rounded-xl border border-cyan-300/25 bg-slate-950/20 px-3 py-2 text-xs text-slate-700 dark:text-cyan-50">
           View-only προβολή. Μόνο ο διαχειριστής μπορεί να αλλάξει άδειες.
         </div>
       )}

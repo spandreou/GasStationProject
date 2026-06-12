@@ -77,7 +77,7 @@ async function seedAbsenceStore(page) {
   await applySeed();
 }
 
-test('admin can add an absence and staff sees absences read-only', async ({ page }) => {
+test('admin can add an absence and public view sees absences read-only', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedAbsenceStore(page);
@@ -88,9 +88,8 @@ test('admin can add an absence and staff sees absences read-only', async ({ page
 
   await page.getByTestId('absence-employee-select').selectOption('drossi');
   await page.getByTestId('absence-type-select').selectOption('LEAVE');
-  const picker = page.getByTestId('absence-date-range-picker');
-  await picker.locator('[data-testid="absence-calendar-day"][data-in-month="true"]').filter({ hasText: /^10$/ }).first().click();
-  await picker.locator('[data-testid="absence-calendar-day"][data-in-month="true"]').filter({ hasText: /^12$/ }).first().click();
+  await page.locator('[data-testid="absence-calendar-day"][data-date="2026-06-10"]').click();
+  await page.locator('[data-testid="absence-calendar-day"][data-date="2026-06-12"]').click();
   await expect(page.getByTestId('absence-total-days')).toContainText('3');
   await page.getByTestId('absence-replacement-mode').selectOption('AUTO');
   await page.getByTestId('save-absence-button').click();

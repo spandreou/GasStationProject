@@ -19,6 +19,19 @@ const readme = read('README.md');
 
 const combinedClientAuth = `${firebaseConfig}\n${authService}\n${adminLoginModal}\n${readme}`;
 
+function matchBlock(collectionName) {
+  const marker = `match /${collectionName}/`;
+  const start = firestoreRules.indexOf(marker);
+  if (start === -1) return '';
+  const next = firestoreRules.indexOf('\n    match /', start + marker.length);
+  return firestoreRules.slice(start, next === -1 ? undefined : next);
+}
+
+const publicReadMatches = [...firestoreRules.matchAll(/match\s+\/([A-Za-z0-9_]+)\/\{/g)]
+  .map((match) => match[1])
+  .filter((collectionName) => matchBlock(collectionName).includes('allow read: if true;'));
+const allowedPublicReadCollections = new Set(['employees_public', 'employeeAbsencesPublic']);
+
 assert(!combinedClientAuth.includes('VITE_ADMIN_PASSWORD'), 'Client/admin docs must not reference VITE_ADMIN_PASSWORD.');
 assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not expose demo admin password fallback.');
 assert(!combinedClientAuth.includes('admin@example.com'), 'Client/admin docs must not expose demo admin email fallback.');
@@ -26,9 +39,14 @@ assert(!authService.includes('adminPassword'), 'Auth service must not import or 
 assert(authService.includes('getIdTokenResult'), 'Auth service must verify production admin using Firebase custom claims.');
 
 assert(!firestoreRules.includes('admin@example.com'), 'Firestore rules must not hardcode demo admin emails.');
-assert(!firestoreRules.includes('allow read: if true'), 'Firestore rules must not expose public reads.');
+assert(
+  publicReadMatches.every((collectionName) => allowedPublicReadCollections.has(collectionName)),
+  `Firestore rules expose unexpected public reads: ${publicReadMatches.filter((collectionName) => !allowedPublicReadCollections.has(collectionName)).join(', ')}`,
+);
+assert(matchBlock('employeeAbsencesPublic').includes('allow read: if true;'), 'Sanitized public absence docs must remain public readable.');
+assert(matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin()'), 'Sanitized public absence docs must be admin writable only.');
 assert(firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must authorize admin writes by custom claim.');
-assert(firestoreRules.includes('allow read: if isSignedIn()'), 'Protected Firestore reads must require authentication.');
+assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');
 assert(firestoreRules.includes('affectedKeys().hasOnly'), 'Firestore rules must restrict unexpected fields.');
 
 const allHeaders = vercelConfig.headers.flatMap((entry) => entry.headers || []);

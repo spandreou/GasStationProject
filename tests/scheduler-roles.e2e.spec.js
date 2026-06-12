@@ -232,6 +232,14 @@ test('saving generator rules also persists pending employee role drafts before m
   await expect(page.getByTestId('employee-role-roka')).toHaveValue('intermediate');
 
   await page.getByRole('button', { name: 'Αποθήκευση κανόνων generator' }).click();
+  await page.waitForFunction(() => {
+    const employees = window.__gasStationSchedulerStore?.getState?.().employees || [];
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+    return byId.get('loulakakis')?.scheduleRole === 'core1' &&
+      byId.get('spourlis')?.scheduleRole === 'core2' &&
+      byId.get('drossi')?.scheduleRole === 'intermediate' &&
+      byId.get('roka')?.scheduleRole === 'intermediate';
+  });
   await page.getByTestId('schedule-mode-select').selectOption('month');
   await page.getByTestId('monthly-month-select').selectOption('5');
   await page.getByTestId('monthly-year-select').selectOption('2026');

@@ -54,17 +54,42 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - Use `.env.example` only for variable names and non-sensitive defaults.
 - Rotate any secret immediately if it is accidentally committed or exposed in logs.
 
+## Admin-Only Sign-In Model
+
+- Only the station admin signs in.
+- Employees do not have app accounts, Firebase Auth identities, role claims, or write access.
+- Employee-facing views, where present, must be public-safe and read-only.
+- UI hiding is not security. Firestore rules are the enforcement layer.
+- Admin/private collections require Firebase Auth with the custom claim `admin=true`.
+- Public collections may be readable without sign-in only when every field is intentionally sanitized.
+
+## Firestore Privacy Model
+
+- `employees` is admin-only because it contains private data and scheduling role fields.
+- `employeeAbsences` is admin-only and remains the private source of truth for the scheduler generator.
+- `attendance_history` and `week_history` are admin-only because they are loaded through admin-only UI flows.
+- Public/employee views must read only dedicated sanitized collections.
+- Sanitized public collections are readable without sign-in and writable only by admins.
+
 ## Application Security Baseline
 
 - Do not trust frontend-only validation for production authorization decisions.
 - Production admin authorization uses Firebase Auth plus a Firebase custom claim `admin=true`.
 - Demo email allowlists are allowed only in `VITE_APP_MODE=demo` and must not be treated as production authorization.
 - Do not put admin passwords in Vite env vars. Vite env vars are included in the frontend bundle.
-- Firestore protected data must require authentication for reads and custom-claim admin authorization for writes.
+- Firestore protected data must require custom-claim admin authorization for reads and writes unless it is a dedicated sanitized public collection.
 - Server-side data access must use parameterized queries or a trusted SDK/ORM.
 - Passwords must be hashed with a strong password hashing function such as Argon2id or bcrypt.
 - JWT/session secrets must be high-entropy values stored only in environment-specific secret storage.
 - Login, admin, and write-heavy endpoints must use rate limiting when production backend services are introduced.
+
+## Rate Limiting Follow-up
+
+- Current limiter: no dedicated backend limiter is present because the app is Firebase/client-heavy.
+- Affected features: login/admin entry points, schedule writes, employee writes, audit-log writes, and any future API or Cloud Function endpoints.
+- Implemented now: documented the production limiter requirement; no runtime limiter changes were made in this pass.
+- Deferred: Firebase App Check enforcement, Cloud Function or backend throttles for write-heavy actions, and Cloudflare/Firebase abuse controls.
+- Recommended production path: enable Firebase App Check for supported clients, keep Firestore rules as the authorization boundary, and add server-side rate limiting when privileged writes move behind Cloud Functions or a backend API.
 
 ## Phase 1 Production Hardening Notes
 
@@ -84,6 +109,23 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - Firestore rules deny audit log update and delete from the client.
 
 Remaining limitation: without a backend or Cloud Function, audit log creation is initiated by the trusted admin client. Firestore rules protect who may create/read logs and prevent client edits/deletes, but they cannot guarantee that every allowed write is accompanied by a matching audit entry. A server-side write layer or Firestore trigger is the future hardening path for fully enforced audit logging.
+
+## Absence Data Access
+
+Private source of truth:
+
+- `employeeAbsences` is admin-only read/write.
+- It contains full absence data used by admin screens and the scheduler generator, including employee ids, replacement mode, manual replacement employee id, notes, status, and audit metadata.
+- The generator uses `employeeAbsences`, never the sanitized public view.
+
+Sanitized public view:
+
+- `employeeAbsencesPublic` is public read-only and admin write-only.
+- It contains only `id`, `employeeName`, `typeLabel`, `startDate`, `endDate`, `totalDays`, and `status`.
+- It must not contain replacement settings, manual replacement ids, notes, internal comments, `createdBy`, `updatedBy`, or audit metadata.
+- Public/employee views may display only this sanitized collection and must not allow add, edit, cancel, or delete actions.
+
+Remaining limitation: without a backend or Cloud Function, the admin client maintains the sanitized public absence document in the same Firestore batch as the private write. A server-side derivation layer would be stronger for future multi-tenant deployments.
 
 ## Phase 4 Content Security Policy
 

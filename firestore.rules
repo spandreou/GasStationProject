@@ -46,6 +46,24 @@ service cloud.firestore {
       ];
     }
 
+    function publicEmployeeFields() {
+      return [
+        'fullName', 'role', 'color', 'isActive',
+        'scheduleRole', 'roleType', 'fixedDayOff', 'fixedDaysOff', 'defaultShiftPreference',
+        'participatesInRotation', 'participatesInSundayRotation', 'weeklyFixedShiftSideRotation',
+        'fixedStartTime', 'fixedEndTime', 'staticStartTime', 'staticEndTime',
+        'extraMode', 'activeFrom', 'activeTo', 'canCoverLeaves', 'canWorkMorning',
+        'canWorkIntermediate', 'canWorkAfternoon', 'canWorkSunday', 'createdAt', 'updatedAt'
+      ];
+    }
+
+    function privateEmployeeFields() {
+      return [
+        'afm', 'phone', 'email', 'address', 'hireDate', 'personalNotes',
+        'internalComments', 'payrollId', 'createdAt', 'updatedAt'
+      ];
+    }
+
     function validEmployee() {
       return request.resource.data.keys().hasAll(['fullName']) &&
         request.resource.data.keys().hasOnly(employeeFields()) &&
@@ -73,6 +91,43 @@ service cloud.firestore {
         isOptionalBool('canWorkAfternoon') &&
         isOptionalBool('canWorkSunday') &&
         isOptionalIntOrNull('fixedDayOff');
+    }
+
+    function validPublicEmployee() {
+      return request.resource.data.keys().hasAll(['fullName']) &&
+        request.resource.data.keys().hasOnly(publicEmployeeFields()) &&
+        request.resource.data.fullName is string &&
+        request.resource.data.fullName.size() > 0 &&
+        isOptionalString('role') &&
+        isOptionalString('color') &&
+        isOptionalString('scheduleRole') &&
+        isOptionalString('roleType') &&
+        isOptionalString('defaultShiftPreference') &&
+        isOptionalString('extraMode') &&
+        isOptionalString('activeFrom') &&
+        isOptionalString('activeTo') &&
+        isOptionalBool('isActive') &&
+        isOptionalBool('participatesInRotation') &&
+        isOptionalBool('participatesInSundayRotation') &&
+        isOptionalBool('weeklyFixedShiftSideRotation') &&
+        isOptionalBool('canCoverLeaves') &&
+        isOptionalBool('canWorkMorning') &&
+        isOptionalBool('canWorkIntermediate') &&
+        isOptionalBool('canWorkAfternoon') &&
+        isOptionalBool('canWorkSunday') &&
+        isOptionalIntOrNull('fixedDayOff');
+    }
+
+    function validPrivateEmployee() {
+      return request.resource.data.keys().hasOnly(privateEmployeeFields()) &&
+        isOptionalString('afm') &&
+        isOptionalString('phone') &&
+        isOptionalString('email') &&
+        isOptionalString('address') &&
+        isOptionalString('hireDate') &&
+        isOptionalString('personalNotes') &&
+        isOptionalString('internalComments') &&
+        isOptionalString('payrollId');
     }
 
     function shiftFields() {
@@ -104,9 +159,16 @@ service cloud.firestore {
 
     function absenceFields() {
       return [
-        'employeeId', 'type', 'startDate', 'endDate', 'scope', 'replacementMode',
+        'employeeId', 'employeeName', 'type', 'startDate', 'endDate', 'scope', 'replacementMode',
         'manualReplacementEmployeeId', 'note', 'status', 'createdBy', 'updatedBy',
         'createdAt', 'updatedAt'
+      ];
+    }
+
+    function privateAbsenceFields() {
+      return [
+        'employeeId', 'type', 'startDate', 'endDate', 'reason', 'note',
+        'internalComments', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
       ];
     }
 
@@ -135,7 +197,54 @@ service cloud.firestore {
         ) &&
         (!('manualReplacementEmployeeId' in request.resource.data) || request.resource.data.manualReplacementEmployeeId is string) &&
         (!('status' in request.resource.data) || request.resource.data.status in ['ACTIVE', 'CANCELLED']) &&
+        isOptionalString('employeeName') &&
         isOptionalString('note') &&
+        isOptionalString('createdBy') &&
+        isOptionalString('updatedBy');
+    }
+
+    function publicAbsenceFields() {
+      return ['id', 'employeeName', 'typeLabel', 'startDate', 'endDate', 'totalDays', 'status'];
+    }
+
+    function validPublicAbsence() {
+      return request.resource.data.keys().hasAll([
+        'id', 'employeeName', 'typeLabel', 'startDate', 'endDate', 'totalDays', 'status'
+      ]) &&
+        request.resource.data.keys().hasOnly(publicAbsenceFields()) &&
+        request.resource.data.id is string &&
+        request.resource.data.employeeName is string &&
+        request.resource.data.typeLabel is string &&
+        isIsoDate(request.resource.data.startDate) &&
+        isIsoDate(request.resource.data.endDate) &&
+        request.resource.data.startDate <= request.resource.data.endDate &&
+        request.resource.data.totalDays is int &&
+        request.resource.data.totalDays >= 1 &&
+        request.resource.data.status in ['ACTIVE', 'CANCELLED'];
+    }
+
+    function validPublicAbsencePatch() {
+      return request.resource.data.keys().hasOnly(publicAbsenceFields()) &&
+        (!('id' in request.resource.data) || request.resource.data.id is string) &&
+        (!('employeeName' in request.resource.data) || request.resource.data.employeeName is string) &&
+        (!('typeLabel' in request.resource.data) || request.resource.data.typeLabel is string) &&
+        (!('startDate' in request.resource.data) || isIsoDate(request.resource.data.startDate)) &&
+        (!('endDate' in request.resource.data) || isIsoDate(request.resource.data.endDate)) &&
+        (!('totalDays' in request.resource.data) || (request.resource.data.totalDays is int && request.resource.data.totalDays >= 1)) &&
+        (!('status' in request.resource.data) || request.resource.data.status in ['ACTIVE', 'CANCELLED']);
+    }
+
+    function validPrivateAbsence() {
+      return request.resource.data.keys().hasAll(['employeeId']) &&
+        request.resource.data.keys().hasOnly(privateAbsenceFields()) &&
+        request.resource.data.employeeId is string &&
+        request.resource.data.employeeId.size() > 0 &&
+        (!('type' in request.resource.data) || request.resource.data.type in ['LEAVE', 'SICK', 'OTHER']) &&
+        (!('startDate' in request.resource.data) || isIsoDate(request.resource.data.startDate)) &&
+        (!('endDate' in request.resource.data) || isIsoDate(request.resource.data.endDate)) &&
+        isOptionalString('reason') &&
+        isOptionalString('note') &&
+        isOptionalString('internalComments') &&
         isOptionalString('createdBy') &&
         isOptionalString('updatedBy');
     }
@@ -213,64 +322,89 @@ service cloud.firestore {
     }
 
     match /employees/{employeeId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create: if isAdmin() && validEmployee();
       allow update: if isAdmin() && onlyChanged(employeeFields()) && validEmployee();
       allow delete: if isAdmin();
     }
 
+    match /employees_public/{employeeId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && validPublicEmployee();
+      allow delete: if isAdmin();
+    }
+
+    match /employees_private/{employeeId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && validPrivateEmployee();
+      allow delete: if isAdmin();
+    }
+
     match /shifts/{shiftId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create: if isAdmin() && validShift();
       allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
       allow delete: if isAdmin();
     }
 
     match /shiftTemplates/{templateId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validTemplate();
       allow delete: if isAdmin();
     }
 
     match /employeeAbsences/{absenceId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create: if isAdmin() && validAbsence();
       allow update: if isAdmin() && onlyChanged(absenceFields()) && validAbsence();
       allow delete: if isAdmin();
     }
 
+    match /employeeAbsencesPublic/{absenceId} {
+      allow read: if true;
+      allow create: if isAdmin() && validPublicAbsence();
+      allow update: if isAdmin() && validPublicAbsencePatch();
+      allow delete: if isAdmin();
+    }
+
+    match /employee_absences_private/{absenceId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && validPrivateAbsence();
+      allow delete: if isAdmin();
+    }
+
     match /announcements/{announcementId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validAnnouncement();
       allow delete: if isAdmin();
     }
 
     match /attendance_history/{historyId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validAttendanceHistory();
       allow delete: if isAdmin();
     }
 
     match /week_locks/{weekId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validWeekLock();
       allow delete: if isAdmin();
     }
 
     match /week_history/{historyId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validWeekHistory();
       allow delete: if isAdmin();
     }
 
     match /week_templates/{templateId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validTemplate();
       allow delete: if isAdmin();
     }
 
     match /scheduler_settings/{settingsId} {
-      allow read: if isSignedIn();
+      allow read: if isAdmin();
       allow create, update: if isAdmin() && validSchedulerSettings();
       allow delete: if isAdmin();
     }

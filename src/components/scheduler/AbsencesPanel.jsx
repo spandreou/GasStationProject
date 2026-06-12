@@ -269,9 +269,16 @@ export default function AbsencesPanel({
     return absences
       .filter((absence) => dateRangesOverlap(absence.startDate, absence.endDate, start, end))
       .filter((absence) => !filters.employeeId || absence.employeeId === filters.employeeId)
-      .filter((absence) => !filters.type || absence.type === filters.type)
+      .filter((absence) => {
+        if (!filters.type) return true;
+        if (absence.type) return absence.type === filters.type;
+        return absence.typeLabel === getAbsenceTypeLabel(filters.type);
+      })
       .filter((absence) => !filters.status || deriveAbsenceStatus(absence) === filters.status)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.employeeId.localeCompare(b.employeeId));
+      .sort((a, b) =>
+        a.startDate.localeCompare(b.startDate) ||
+        (a.employeeName || a.employeeId || '').localeCompare(b.employeeName || b.employeeId || '', 'el'),
+      );
   }, [absences, filters]);
 
   const summary = useMemo(() => {
@@ -280,7 +287,8 @@ export default function AbsencesPanel({
     const daysByEmployee = new Map();
     filteredAbsences.forEach((absence) => {
       if (absence.status === 'CANCELLED') return;
-      daysByEmployee.set(absence.employeeId, (daysByEmployee.get(absence.employeeId) || 0) + countInclusiveDays(absence.startDate, absence.endDate));
+      const key = absence.employeeId || absence.employeeName || absence.id;
+      daysByEmployee.set(key, (daysByEmployee.get(key) || 0) + countInclusiveDays(absence.startDate, absence.endDate));
     });
     return {
       total: filteredAbsences.length,
@@ -463,6 +471,8 @@ export default function AbsencesPanel({
           {filteredAbsences.map((absence) => {
             const employee = employeesById.get(absence.employeeId);
             const status = deriveAbsenceStatus(absence);
+            const displayName = employee?.fullName || absence.employeeName || absence.employeeId || '-';
+            const typeLabel = absence.typeLabel || getAbsenceTypeLabel(absence.type);
             return (
               <article
                 key={absence.id}
@@ -471,8 +481,8 @@ export default function AbsencesPanel({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-bold">{employee?.fullName || absence.employeeId}</p>
-                    <p className="mt-0.5 font-semibold text-cyan-700 dark:text-cyan-200">{getAbsenceTypeLabel(absence.type)}</p>
+                    <p className="break-words text-sm font-bold">{displayName}</p>
+                    <p className="mt-0.5 font-semibold text-cyan-700 dark:text-cyan-200">{typeLabel}</p>
                   </div>
                   <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold">{getStatusLabel(status)}</span>
                 </div>
@@ -481,7 +491,7 @@ export default function AbsencesPanel({
                 </p>
                 <p>{countInclusiveDays(absence.startDate, absence.endDate)} ημέρες</p>
                 {isAdmin ? <p>Αντικατάσταση: {getReplacementLabel(absence.replacementMode)}</p> : null}
-                {absence.note ? <p className="mt-1 text-slate-500 dark:text-slate-300">Σχόλιο: {absence.note}</p> : null}
+                {isAdmin && absence.note ? <p className="mt-1 text-slate-500 dark:text-slate-300">Σχόλιο: {absence.note}</p> : null}
 
                 {isAdmin ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">

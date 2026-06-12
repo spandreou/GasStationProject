@@ -45,6 +45,7 @@ const {
   createAbsence: createEmployeeAbsence,
   deleteAbsence: removeEmployeeAbsence,
   subscribeAbsences: subscribeEmployeeAbsences,
+  subscribePublicAbsences: subscribePublicEmployeeAbsences,
   updateAbsence: updateEmployeeAbsence,
 } = absencesRepository;
 
@@ -286,6 +287,10 @@ function normalizeAbsenceInput(input = {}, current = {}) {
   };
 }
 
+function getEmployeeName(employees = [], employeeId = '') {
+  return employees.find((employee) => employee.id === employeeId)?.fullName || '';
+}
+
 const emptyUndoState = { visible: false, actionType: '', message: '', payload: null, createdAt: 0 };
 const defaultGeneratorRules = {
   weeklyRotationEnabled: true,
@@ -422,15 +427,46 @@ export const useSchedulerStore = create((set, get) => ({
     return unsubscribeTemplates;
   },
 
-  initializeData: () => {
-    if (!isFirebaseConfigured) {
-      set({
-        errorMessage: firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Συμπλήρωσε τα env vars για Firestore/Auth.',
-        isLoading: false,
-        isAuthLoading: false,
-      });
-      return;
-    }
+  startAbsencesSubscription: ({ adminOnly = false } = {}) => {
+    if (!isFirebaseConfigured) return null;
+
+    const existingUnsubscribe = get()._unsubscribeAbsences;
+    existingUnsubscribe?.();
+
+    const subscribe = adminOnly ? subscribeEmployeeAbsences : subscribePublicEmployeeAbsences;
+    const unsubscribeAbsences = subscribe(
+      (absences) => set({ absences, isAbsencesLoading: false }),
+      () =>
+        set({
+          warningMessage: adminOnly
+            ? 'Δεν ήταν δυνατή η φόρτωση των αδειών διαχειριστή.'
+            : '',
+          absences: [],
+          isAbsencesLoading: false,
+        }),
+    );
+
+    set({
+      _unsubscribeAbsences: unsubscribeAbsences,
+      isAbsencesLoading: false,
+    });
+
+    return unsubscribeAbsences;
+  },
+
+  startAdminDataSubscriptions: () => {
+    if (!isFirebaseConfigured) return;
+
+    const {
+      _unsubscribeEmployees,
+      _unsubscribeShifts,
+      _unsubscribeAnnouncements,
+      _unsubscribeSchedulerSettings,
+    } = get();
+    _unsubscribeEmployees?.();
+    _unsubscribeShifts?.();
+    _unsubscribeAnnouncements?.();
+    _unsubscribeSchedulerSettings?.();
 
     const unsubscribeEmployees = subscribeEmployees(
       (employees) => set({ employees, isLoading: false }),
@@ -443,11 +479,6 @@ export const useSchedulerStore = create((set, get) => ({
     );
 
     const unsubscribeTemplates = get().startShiftTemplatesSubscription();
-
-    const unsubscribeAbsences = subscribeEmployeeAbsences(
-      (absences) => set({ absences, isAbsencesLoading: false }),
-      () => set({ warningMessage: 'Δεν ήταν δυνατή η φόρτωση των αδειών.', isAbsencesLoading: false }),
-    );
 
     const unsubscribeAnnouncements = subscribeAnnouncements(
       (announcements) => set({ announcements }),
@@ -466,6 +497,27 @@ export const useSchedulerStore = create((set, get) => ({
       () => set({ warningMessage: 'Αποτυχία φόρτωσης ρυθμίσεων προγραμματισμού.' }),
     );
 
+    set({
+      _unsubscribeEmployees: unsubscribeEmployees,
+      _unsubscribeShifts: unsubscribeShifts,
+      _unsubscribeTemplates: unsubscribeTemplates,
+      _unsubscribeAnnouncements: unsubscribeAnnouncements,
+      _unsubscribeSchedulerSettings: unsubscribeSchedulerSettings,
+    });
+  },
+
+  initializeData: () => {
+    if (!isFirebaseConfigured) {
+      set({
+        errorMessage: firebaseConfigErrorMessage || 'Το Firebase δεν είναι ρυθμισμένο. Συμπλήρωσε τα env vars για Firestore/Auth.',
+        isLoading: false,
+        isAuthLoading: false,
+      });
+      return;
+    }
+
+    const unsubscribeAbsences = get().startAbsencesSubscription({ adminOnly: false });
+
     const unsubscribeAuth = subscribeAdminAuth(
       async (user) => {
         set({
@@ -476,6 +528,8 @@ export const useSchedulerStore = create((set, get) => ({
         });
 
         if (user) {
+          get().startAdminDataSubscriptions();
+          get().startAbsencesSubscription({ adminOnly: true });
           if ((get()._shiftTemplatesRetryCount || 0) > 0) {
             get().startShiftTemplatesSubscription();
           }
@@ -486,7 +540,24 @@ export const useSchedulerStore = create((set, get) => ({
             get().loadWeekTemplates({ force: false }),
           ]);
         } else {
+          const {
+            _unsubscribeEmployees,
+            _unsubscribeShifts,
+            _unsubscribeTemplates,
+            _unsubscribeAnnouncements,
+            _unsubscribeSchedulerSettings,
+          } = get();
+          _unsubscribeEmployees?.();
+          _unsubscribeShifts?.();
+          _unsubscribeTemplates?.();
+          _unsubscribeAnnouncements?.();
+          _unsubscribeSchedulerSettings?.();
+          get().startAbsencesSubscription({ adminOnly: false });
           set({
+            employees: [],
+            shifts: [],
+            shiftTemplates: [],
+            announcements: [],
             attendanceHistory: [],
             weekHistory: [],
             weekTemplates: [],
@@ -496,6 +567,12 @@ export const useSchedulerStore = create((set, get) => ({
             _attendanceHistoryInflightPromise: null,
             _weekHistoryFetchedAt: 0,
             _weekTemplatesFetchedAt: 0,
+            _unsubscribeEmployees: null,
+            _unsubscribeShifts: null,
+            _unsubscribeTemplates: null,
+            _unsubscribeAnnouncements: null,
+            _unsubscribeSchedulerSettings: null,
+            isLoading: false,
           });
         }
       },
@@ -503,12 +580,7 @@ export const useSchedulerStore = create((set, get) => ({
     );
 
     set({
-      _unsubscribeEmployees: unsubscribeEmployees,
-      _unsubscribeShifts: unsubscribeShifts,
-      _unsubscribeTemplates: unsubscribeTemplates,
       _unsubscribeAbsences: unsubscribeAbsences,
-      _unsubscribeAnnouncements: unsubscribeAnnouncements,
-      _unsubscribeSchedulerSettings: unsubscribeSchedulerSettings,
       _unsubscribeAuth: unsubscribeAuth,
     });
   },
@@ -691,8 +763,10 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       const payload = normalizeAbsenceInput(input);
       const createdBy = get().adminUser?.email || '';
+      const employeeName = getEmployeeName(get().employees, payload.employeeId);
       const created = await createEmployeeAbsence({
         ...payload,
+        employeeName,
         createdBy,
         updatedBy: createdBy,
       });
@@ -706,10 +780,10 @@ export const useSchedulerStore = create((set, get) => ({
         action: 'absence.create',
         target: { collection: 'employeeAbsences', id: created.id },
         before: null,
-        after: { ...payload, id: created.id },
+        after: { ...payload, employeeName, id: created.id },
       });
       set((state) => ({
-        absences: sortAbsencesByDate([...state.absences, { ...created, ...payload }]),
+        absences: sortAbsencesByDate([...state.absences, { ...created, ...payload, employeeName }]),
       }));
       set({
         warningMessage: existingImpact
@@ -737,20 +811,22 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       const payload = normalizeAbsenceInput(patch, current);
       const updatedBy = get().adminUser?.email || '';
+      const employeeName = getEmployeeName(get().employees, payload.employeeId) || current.employeeName || '';
       await updateEmployeeAbsence(absenceId, {
         ...payload,
+        employeeName,
         updatedBy,
       });
       await recordAuditLog(get, {
         action: 'absence.update',
         target: { collection: 'employeeAbsences', id: absenceId },
         before: current,
-        after: { ...current, ...payload, updatedBy },
+        after: { ...current, ...payload, employeeName, updatedBy },
       });
       set((state) => ({
         absences: sortAbsencesByDate(
           state.absences.map((absence) =>
-            absence.id === absenceId ? { ...absence, ...payload, updatedBy } : absence,
+            absence.id === absenceId ? { ...absence, ...payload, employeeName, updatedBy } : absence,
           ),
         ),
       }));

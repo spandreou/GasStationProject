@@ -115,6 +115,36 @@ await admin.auth().setCustomUserClaims(uid, { admin: true });
 4. Κράτα το `VITE_APP_MODE=production`.
 5. Μην ορίζεις admin passwords σε Vite env vars. Τα Vite env vars είναι client-visible.
 
+### Safe Admin Bootstrap Script
+
+Υπάρχει helper script για να δημιουργήσεις ή να αναβαθμίσεις admin χρήστη χωρίς να μπει κωδικός στο frontend bundle ή στο Git:
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS="C:\secure\gasstation-service-account.json"
+$env:ADMIN_BOOTSTRAP_PASSWORD="temporary-password-you-choose"
+npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Station Admin"
+Remove-Item Env:\ADMIN_BOOTSTRAP_PASSWORD
+```
+
+Εναλλακτικά, μπορείς να δώσεις το service account JSON από `FIREBASE_SERVICE_ACCOUNT_JSON`.
+
+Το script:
+
+- δημιουργεί τον χρήστη αν δεν υπάρχει και έχει δοθεί προσωρινός κωδικός,
+- κρατάει τυχόν υπάρχοντα custom claims,
+- θέτει `admin=true`,
+- δεν εκτυπώνει password, private key ή access token.
+
+Μετά το bootstrap, κάνε sign out / sign in στην εφαρμογή για να ανανεωθεί το Firebase ID token.
+
+Προτεινόμενο test admin email:
+
+```txt
+admin@homelabshare.gr
+```
+
+Ο κωδικός είναι αυτός που ορίζεις εσύ στο `ADMIN_BOOTSTRAP_PASSWORD` ή αυτός που θα αλλάξεις μέσω Firebase password reset. Δεν πρέπει να αποθηκεύεται στο repo ή να μοιράζεται σε logs/chat.
+
 ## Demo-only Σημεία
 
 - Demo admin email allowlist μέσω `VITE_ADMIN_EMAIL`

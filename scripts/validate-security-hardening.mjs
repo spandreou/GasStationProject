@@ -14,6 +14,7 @@ const firebaseConfig = read('src/firebase/config.js');
 const authService = read('src/firebase/authService.js');
 const adminLoginModal = read('src/components/scheduler/AdminLoginModal.jsx');
 const runtimeEnvironmentRepository = read('src/repositories/firebase/firebaseRuntimeEnvironmentRepository.js');
+const adminBootstrapScript = read('scripts/bootstrap-admin-user.mjs');
 const firestoreRules = read('firestore.rules');
 const vercelConfig = JSON.parse(read('vercel.json'));
 const readme = read('README.md');
@@ -45,6 +46,24 @@ assert(
 assert(
   runtimeEnvironmentRepository.includes('getPublicConfiguredAdminEmail'),
   'Runtime repository must hide configured admin email outside demo mode.',
+);
+assert(
+  adminBootstrapScript.includes('customAttributes') && adminBootstrapScript.includes('admin: true'),
+  'Admin bootstrap must set Firebase custom claim admin=true.',
+);
+assert(
+  adminBootstrapScript.includes('ADMIN_BOOTSTRAP_PASSWORD'),
+  'Admin bootstrap must read temporary passwords from an environment variable.',
+);
+assert(
+  !adminBootstrapScript.includes("arg === '--password'") && !adminBootstrapScript.includes('case \'--password\''),
+  'Admin bootstrap must not accept passwords as CLI arguments.',
+);
+assert(
+  !adminBootstrapScript
+    .split('\n')
+    .some((line) => /console\.(log|error)/iu.test(line) && /(password|private_key|access_token|serviceAccount)/iu.test(line)),
+  'Admin bootstrap must not print passwords, private keys, access tokens, or service account objects.',
 );
 
 assert(!firestoreRules.includes('admin@example.com'), 'Firestore rules must not hardcode demo admin emails.');

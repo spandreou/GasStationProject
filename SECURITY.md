@@ -62,6 +62,8 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - UI hiding is not security. Firestore rules are the enforcement layer.
 - Admin/private collections require Firebase Auth with the custom claim `admin=true`.
 - Public collections may be readable without sign-in only when every field is intentionally sanitized.
+- Production admin bootstrapping must happen from a trusted local/admin environment with a Firebase service account, never from frontend code.
+- The `admin:bootstrap` helper reads temporary credentials from environment variables and must not print passwords, private keys, access tokens, or service account objects.
 
 ## Firestore Privacy Model
 

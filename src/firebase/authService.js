@@ -51,6 +51,10 @@ export function getConfiguredAdminEmail() {
   return adminEmail;
 }
 
+export function getPublicConfiguredAdminEmail() {
+  return isDemoMode ? adminEmail : '';
+}
+
 export function getAdminAuthModeLabel() {
   if (isDemoMode) {
     return 'Demo Admin Mode';
@@ -59,7 +63,7 @@ export function getAdminAuthModeLabel() {
 }
 
 export function subscribeAdminAuth(onUserChange, onError) {
-  if (!isFirebaseConfigured || !auth || !isAdminEmailConfigured) {
+  if (!isFirebaseConfigured || !auth || (isDemoMode && !isAdminEmailConfigured)) {
     onUserChange(null);
     return () => {};
   }

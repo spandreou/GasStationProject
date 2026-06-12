@@ -1,10 +1,9 @@
 import {
-  adminEmail,
   firebaseConfigErrorMessage,
   isDemoMode as isFirebaseDemoMode,
   isFirebaseConfigured,
 } from '../../firebase/config';
-import { getAdminAuthModeLabel } from '../../firebase/authService';
+import { getAdminAuthModeLabel, getPublicConfiguredAdminEmail } from '../../firebase/authService';
 
 function getRuntimeEnvironment() {
   return {
@@ -13,7 +12,7 @@ function getRuntimeEnvironment() {
     authProvider: 'firebase',
     isDemo: isFirebaseDemoMode,
     isPersistenceConfigured: isFirebaseConfigured,
-    configuredAdminEmail: adminEmail,
+    configuredAdminEmail: getPublicConfiguredAdminEmail(),
     persistenceErrorMessage: firebaseConfigErrorMessage,
   };
 }
@@ -21,7 +20,7 @@ function getRuntimeEnvironment() {
 export const firebaseRuntimeEnvironmentRepository = {
   getRuntimeEnvironment,
   getAuthModeLabel: getAdminAuthModeLabel,
-  getConfiguredAdminEmail: () => adminEmail,
+  getConfiguredAdminEmail: getPublicConfiguredAdminEmail,
   isPersistenceConfigured: () => isFirebaseConfigured,
   getPersistenceErrorMessage: () => firebaseConfigErrorMessage,
   isDemoMode: () => isFirebaseDemoMode,

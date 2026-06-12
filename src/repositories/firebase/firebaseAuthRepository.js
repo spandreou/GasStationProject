@@ -4,7 +4,7 @@ import {
 } from '../../firebase/config';
 import {
   getAdminAuthModeLabel,
-  getConfiguredAdminEmail,
+  getPublicConfiguredAdminEmail,
   sendAdminPasswordResetEmail,
   signInAdmin,
   signOutAdmin,
@@ -16,7 +16,7 @@ export const firebaseAuthRepository = {
   signInAdmin,
   signOutAdmin,
   sendAdminPasswordResetEmail,
-  getConfiguredAdminEmail,
+  getConfiguredAdminEmail: getPublicConfiguredAdminEmail,
   getAuthModeLabel: getAdminAuthModeLabel,
   isPersistenceConfigured: () => isFirebaseConfigured,
   getPersistenceErrorMessage: () => firebaseConfigErrorMessage,

@@ -13,6 +13,7 @@ function assert(condition, message) {
 const firebaseConfig = read('src/firebase/config.js');
 const authService = read('src/firebase/authService.js');
 const adminLoginModal = read('src/components/scheduler/AdminLoginModal.jsx');
+const runtimeEnvironmentRepository = read('src/repositories/firebase/firebaseRuntimeEnvironmentRepository.js');
 const firestoreRules = read('firestore.rules');
 const vercelConfig = JSON.parse(read('vercel.json'));
 const readme = read('README.md');
@@ -37,6 +38,14 @@ assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not exp
 assert(!combinedClientAuth.includes('admin@example.com'), 'Client/admin docs must not expose demo admin email fallback.');
 assert(!authService.includes('adminPassword'), 'Auth service must not import or compare a client-side admin password.');
 assert(authService.includes('getIdTokenResult'), 'Auth service must verify production admin using Firebase custom claims.');
+assert(
+  !authService.includes('!isFirebaseConfigured || !auth || !isAdminEmailConfigured'),
+  'Production auth subscription must not require VITE_ADMIN_EMAIL.',
+);
+assert(
+  runtimeEnvironmentRepository.includes('getPublicConfiguredAdminEmail'),
+  'Runtime repository must hide configured admin email outside demo mode.',
+);
 
 assert(!firestoreRules.includes('admin@example.com'), 'Firestore rules must not hardcode demo admin emails.');
 assert(

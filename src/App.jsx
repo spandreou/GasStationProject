@@ -46,7 +46,28 @@ function StaticBackground() {
 }
 
 export default function App() {
+  const [isInterfaceReady, setIsInterfaceReady] = useState(false);
   const [renderDynamicBackground, setRenderDynamicBackground] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = 'dark';
+    try {
+      localStorage.removeItem('gas-station-theme');
+    } catch {
+      // Ignore storage access restrictions; the UI theme is presentation-only.
+    }
+  }, []);
+
+  useEffect(() => {
+    const revealTimer = window.setTimeout(() => {
+      setIsInterfaceReady(true);
+    }, 1400);
+
+    return () => window.clearTimeout(revealTimer);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -54,12 +75,11 @@ export default function App() {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const updateBackgroundMode = () => {
-      const isMobileWidth = window.innerWidth < 1024;
       const reducedMotion = mediaQuery.matches;
       const lowMemory = Number(navigator.deviceMemory || 8) <= 4;
       const saveData = Boolean(navigator.connection?.saveData);
 
-      setRenderDynamicBackground(!(isMobileWidth || reducedMotion || lowMemory || saveData));
+      setRenderDynamicBackground(!(reducedMotion || lowMemory || saveData));
     };
 
     updateBackgroundMode();
@@ -93,8 +113,9 @@ export default function App() {
         ) : (
           <StaticBackground />
         )}
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58),rgba(2,6,23,0.72)_44%,rgba(2,6,23,0.86))]" />
       </div>
-      <div className="relative z-10">
+      <div className={`app-content-reveal relative z-10 ${isInterfaceReady ? 'app-content-reveal--ready' : ''}`}>
         <MainDashboard />
       </div>
     </div>

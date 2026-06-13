@@ -4,7 +4,6 @@ import { WEEKDAY_LABELS } from '../../data/constants';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import useResizableLayout from '../../hooks/useResizableLayout';
 import useToastQueue from '../../hooks/useToastQueue';
-import { useThemeMode } from '../../hooks/useThemeMode';
 import { runtimeEnvironmentRepository } from '../../repositories';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { getMonthDays } from '../../utils/scheduleUtils';
@@ -235,7 +234,6 @@ export default function MainDashboard() {
   const previousWeekFingerprintRef = useRef('');
   const skipNextUnsavedRef = useRef(false);
 
-  const { isDark, toggleTheme } = useThemeMode();
   const { toasts, pushToast, dismissToast } = useToastQueue({ maxVisible: 3 });
 
   const {
@@ -933,10 +931,8 @@ export default function MainDashboard() {
           selectedYear={selectedYear}
           isAdmin={isAdmin}
           isAdminTransitioning={isAdminTransitioning}
-          isDark={isDark}
           onOpenAdminLogin={handleOpenAdminLogin}
           onLogoutAdmin={handleLogoutAdmin}
-          onToggleTheme={toggleTheme}
           onSaveWeek={handleSaveWeekFromToolbar}
           onSaveTemplate={handleSaveTemplateFromToolbar}
           onSelectTemplate={setSelectedTemplateId}

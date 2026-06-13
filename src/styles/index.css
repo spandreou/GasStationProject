@@ -23,6 +23,22 @@ body {
   min-height: 100vh;
 }
 
+.app-content-reveal {
+  opacity: 0;
+  transform: translateY(14px) scale(0.99);
+  filter: blur(8px);
+  transition:
+    opacity 720ms ease,
+    transform 780ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 720ms ease;
+}
+
+.app-content-reveal.app-content-reveal--ready {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
 .scheduler-layout-shell {
   position: relative;
   isolation: isolate;
@@ -155,6 +171,13 @@ button,
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-content-reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+
   .glass-panel,
   .glass-soft,
   .input-glass {

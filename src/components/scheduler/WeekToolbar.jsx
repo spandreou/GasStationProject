@@ -10,10 +10,8 @@ import {
   Loader2,
   LockKeyhole,
   LogOut,
-  MoonStar,
   Save,
   Sparkles,
-  SunMedium,
   Trash2,
   TriangleAlert,
   XCircle,
@@ -249,10 +247,8 @@ export default function WeekToolbar({
   selectedYear,
   isAdmin,
   isAdminTransitioning = false,
-  isDark,
   onOpenAdminLogin,
   onLogoutAdmin,
-  onToggleTheme,
   onSaveWeek,
   onSaveTemplate,
   onSelectTemplate,
@@ -322,16 +318,6 @@ export default function WeekToolbar({
               )}
               {isAdmin ? 'Admin Mode' : isAdminTransitioning ? 'Ενεργοποίηση Admin Mode...' : 'Read-only Mode'}
             </span>
-
-            <button
-              type="button"
-              onClick={onToggleTheme}
-              className={neutralButtonClass}
-              title={isDark ? 'Εναλλαγή σε Light mode' : 'Εναλλαγή σε Dark mode'}
-            >
-              {isDark ? <SunMedium size={16} /> : <MoonStar size={16} />}
-              {isDark ? 'Light' : 'Dark'}
-            </button>
 
             {!isAdmin ? (
               <button

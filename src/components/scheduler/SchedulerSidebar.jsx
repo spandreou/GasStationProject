@@ -1,5 +1,5 @@
-import { BarChart3, CalendarDays, ChevronDown, ChevronUp, LayoutPanelTop, Sparkles, UsersRound } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { BarChart3, CalendarDays, ChevronDown, ChevronUp, LayoutPanelTop, UsersRound } from 'lucide-react';
+import { useState } from 'react';
 import AbsencesPanel from './AbsencesPanel';
 import AnalyticsPanel from './AnalyticsPanel';
 import EmployeeSidebar from './EmployeeSidebar';
@@ -39,10 +39,8 @@ function SidebarSection({ id, title, icon: Icon, activeId, onToggle, children, h
 
 export default function SchedulerSidebar({
   employees,
-  shiftTemplates,
   absences,
   isAbsencesLoading,
-  weekDays,
   visibleDays,
   isAdmin,
   isSaving,
@@ -59,18 +57,11 @@ export default function SchedulerSidebar({
   onUpdateAbsence,
   onCancelAbsence,
   onDeleteAbsence,
-  onAddShiftTemplate,
-  onDeleteShiftTemplate,
   onCreateShift,
   defaultSection = '',
   compact = false,
 }) {
   const [activeSection, setActiveSection] = useState(defaultSection);
-
-  const templateCount = useMemo(
-    () => (shiftTemplates || []).filter((template) => !template?.isPlaced).length,
-    [shiftTemplates],
-  );
 
   function handleToggle(sectionId) {
     setActiveSection((prev) => (prev === sectionId ? '' : sectionId));
@@ -88,16 +79,11 @@ export default function SchedulerSidebar({
       >
         <EmployeeSidebar
           employees={employees}
-          shiftTemplates={shiftTemplates}
-          weekDays={weekDays}
           isAdmin={isAdmin}
           onAddEmployee={onAddEmployee}
           onDeleteEmployee={onDeleteEmployee}
           onOpenAdminLogin={onOpenAdminLogin}
           onOpenProfile={onOpenProfile}
-          onAddShiftTemplate={onAddShiftTemplate}
-          onDeleteShiftTemplate={onDeleteShiftTemplate}
-          view="employees"
           compact={compact}
           className="border-white/30 bg-white/18 dark:border-cyan-300/16 dark:bg-slate-900/20"
         />
@@ -135,31 +121,6 @@ export default function SchedulerSidebar({
         helperText="Γρήγορη προσθήκη custom βάρδιας χωρίς να φύγεις από το dashboard."
       >
         <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={onCreateShift} canManage={isAdmin} />
-      </SidebarSection>
-
-      <SidebarSection
-        id="templates"
-        title="Μη Ανατεθειμένες Κάρτες"
-        icon={Sparkles}
-        activeId={activeSection}
-        onToggle={handleToggle}
-        helperText={`Έτοιμες κάρτες προς ανάθεση: ${templateCount}`}
-      >
-        <EmployeeSidebar
-          employees={employees}
-          shiftTemplates={shiftTemplates}
-          weekDays={weekDays}
-          isAdmin={isAdmin}
-          onAddEmployee={onAddEmployee}
-          onDeleteEmployee={onDeleteEmployee}
-          onOpenAdminLogin={onOpenAdminLogin}
-          onOpenProfile={onOpenProfile}
-          onAddShiftTemplate={onAddShiftTemplate}
-          onDeleteShiftTemplate={onDeleteShiftTemplate}
-          view="templates"
-          compact={compact}
-          className="border-white/30 bg-white/18 dark:border-cyan-300/16 dark:bg-slate-900/20"
-        />
       </SidebarSection>
 
       <SidebarSection

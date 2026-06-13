@@ -474,6 +474,7 @@ export default function MainDashboard() {
   async function runActionWithFeedback({
     actionKey,
     execute,
+    loadingMessage,
     successMessage,
     errorMessageFallback,
     markAsSynced = false,
@@ -481,6 +482,15 @@ export default function MainDashboard() {
   }) {
     setActionBusy(actionKey, true);
     setSyncStatusOverride({ status: 'saving', label: 'Εκτέλεση ενέργειας...' });
+    const loadingToast = loadingMessage
+      ? pushToast({
+          type: 'info',
+          title: 'Σε εξέλιξη',
+          message: loadingMessage,
+          duration: 0,
+          dedupe: false,
+        })
+      : null;
 
     try {
       const result = await execute();
@@ -519,6 +529,9 @@ export default function MainDashboard() {
       });
       return false;
     } finally {
+      if (loadingToast?.id) {
+        dismissToast(loadingToast.id);
+      }
       setActionBusy(actionKey, false);
     }
   }
@@ -645,9 +658,22 @@ export default function MainDashboard() {
     };
   }
 
+  async function showExportSuccessBeforeDownload({ title, message }) {
+    pushToast({
+      type: 'success',
+      title,
+      message,
+      duration: 7000,
+      dedupe: false,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
   async function handleExportWeekPdf() {
     await runActionWithFeedback({
       actionKey: 'exportWeekPdf',
+      loadingMessage: 'Γίνεται εξαγωγή PDF εβδομάδας...',
       execute: async () => {
         const { exportScheduleToPdf } = await loadExportService();
         await exportScheduleToPdf({
@@ -656,10 +682,14 @@ export default function MainDashboard() {
           shifts: weekShifts,
           employees,
           absences,
+          onBeforeDownload: () =>
+            showExportSuccessBeforeDownload({
+              title: 'Επιτυχής εξαγωγή PDF',
+              message: 'Το PDF εβδομάδας δημιουργήθηκε και η λήψη ξεκινά.',
+            }),
         });
         return true;
       },
-      successMessage: 'Ολοκληρώθηκε η εξαγωγή PDF εβδομάδας.',
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF εβδομάδας.',
       retryAction: handleExportWeekPdf,
     });
@@ -668,6 +698,7 @@ export default function MainDashboard() {
   async function handleExportMonthPdf() {
     await runActionWithFeedback({
       actionKey: 'exportMonthPdf',
+      loadingMessage: 'Γίνεται εξαγωγή PDF μήνα...',
       execute: async () => {
         const { exportScheduleToPdf } = await loadExportService();
         await exportScheduleToPdf({
@@ -678,10 +709,14 @@ export default function MainDashboard() {
           absences,
           month: selectedMonth,
           year: selectedYear,
+          onBeforeDownload: () =>
+            showExportSuccessBeforeDownload({
+              title: 'Επιτυχής εξαγωγή PDF',
+              message: 'Το PDF μήνα δημιουργήθηκε και η λήψη ξεκινά.',
+            }),
         });
         return true;
       },
-      successMessage: 'Ολοκληρώθηκε η εξαγωγή PDF μήνα.',
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF μήνα.',
       retryAction: handleExportMonthPdf,
     });
@@ -690,12 +725,19 @@ export default function MainDashboard() {
   async function handleExportExcel() {
     await runActionWithFeedback({
       actionKey: 'exportExcel',
+      loadingMessage: 'Γίνεται εξαγωγή Excel...',
       execute: async () => {
         const { exportScheduleToExcel } = await loadExportService();
-        await exportScheduleToExcel(getExportPayload());
+        await exportScheduleToExcel({
+          ...getExportPayload(),
+          onBeforeDownload: () =>
+            showExportSuccessBeforeDownload({
+              title: 'Επιτυχής εξαγωγή Excel',
+              message: 'Το αρχείο Excel δημιουργήθηκε και η λήψη ξεκινά.',
+            }),
+        });
         return true;
       },
-      successMessage: 'Ολοκληρώθηκε η εξαγωγή Excel.',
       errorMessageFallback: 'Αποτυχία εξαγωγής Excel.',
       retryAction: handleExportExcel,
     });
@@ -704,12 +746,19 @@ export default function MainDashboard() {
   async function handleExportWord() {
     await runActionWithFeedback({
       actionKey: 'exportWord',
+      loadingMessage: 'Γίνεται εξαγωγή Word...',
       execute: async () => {
         const { exportScheduleToWord } = await loadExportService();
-        await exportScheduleToWord(getExportPayload());
+        await exportScheduleToWord({
+          ...getExportPayload(),
+          onBeforeDownload: () =>
+            showExportSuccessBeforeDownload({
+              title: 'Επιτυχής εξαγωγή Word',
+              message: 'Το αρχείο Word δημιουργήθηκε και η λήψη ξεκινά.',
+            }),
+        });
         return true;
       },
-      successMessage: 'Ολοκληρώθηκε η εξαγωγή Word.',
       errorMessageFallback: 'Αποτυχία εξαγωγής Word.',
       retryAction: handleExportWord,
     });

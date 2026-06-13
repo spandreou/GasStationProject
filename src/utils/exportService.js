@@ -429,6 +429,7 @@ export async function exportScheduleToPdf({
   absences = [],
   month,
   year,
+  onBeforeDownload,
 } = {}) {
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
@@ -464,10 +465,11 @@ export async function exportScheduleToPdf({
     rows,
   });
 
+  await onBeforeDownload?.();
   doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
 }
 
-export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload }) {
   const XLSX = await loadXlsx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
@@ -486,10 +488,11 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A3' });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
+  await onBeforeDownload?.();
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
-export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload }) {
   const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } = await loadDocx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
@@ -538,5 +541,6 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
   });
 
   const blob = await Packer.toBlob(doc);
+  await onBeforeDownload?.();
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
 }

@@ -4,6 +4,19 @@
 
 GasStation Shift Manager
 
+## Repository And Deployment Context
+
+- Local working folder for Codex on Windows: `C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main`.
+- Do not use `GasStationProject-main`; it was the wrong/empty local folder.
+- GitHub remote is currently `https://github.com/spandreou/GasStationProject.git`.
+- Active homelab checkout is `/home/spandreou/projects/GasStationProject`.
+- Active homelab deployment branch is currently `chore/dependabot-config`.
+- Public pilot URL: `https://bp-kallis.homelabshare.gr/`.
+- Homelab compose project: `gasstationproject`.
+- Frontend container: `gasstation-bp-kallis`.
+- Host port: `8085` mapped to container port `8080`.
+- See `HOMELAB.md` and `docs/self-hosting-bp-kallis.md` before searching for deployment details.
+
 ## Stack
 
 - React + Vite

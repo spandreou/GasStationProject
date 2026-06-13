@@ -12,6 +12,19 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 - Demo admin email allowlist μόνο όταν `VITE_APP_MODE=demo`
 - Χωρίς fallback admin credentials μέσα στον κώδικα
 
+## Repository / Deployment Map
+
+- Σωστό local working folder: `C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main`.
+- Μην χρησιμοποιείς το παλιό `GasStationProject-main`; ήταν λάθος/άδειο local folder.
+- GitHub remote: `https://github.com/spandreou/GasStationProject.git`.
+- Live BP Kallis URL: `https://bp-kallis.homelabshare.gr/`.
+- Active homelab server path: `/home/spandreou/projects/GasStationProject`.
+- Active homelab deployment branch: `chore/dependabot-config`.
+- Compose project/container: `gasstationproject` / `gasstation-bp-kallis`.
+- Host port: `8085` -> container port `8080`.
+
+Πριν από homelab deploy ή troubleshooting, διάβασε πρώτα `HOMELAB.md` και `docs/self-hosting-bp-kallis.md`.
+
 ## Tech Stack
 
 - React + Vite

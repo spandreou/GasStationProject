@@ -1,5 +1,12 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
+import LoginPage from './components/auth/LoginPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import RouteNoticePage from './components/auth/RouteNoticePage';
+import SelectTenantPage from './components/auth/SelectTenantPage';
+import TenantGate from './components/auth/TenantGate';
 import MainDashboard from './components/scheduler/MainDashboard';
+import { getCurrentTenantHostContext } from './utils/tenantHostContext';
 
 const Hyperspeed = lazy(() => import('./components/background/Hyperspeed'));
 
@@ -47,6 +54,10 @@ function StaticBackground() {
 
 export default function App() {
   const [renderDynamicBackground, setRenderDynamicBackground] = useState(false);
+  const [routePath, setRoutePath] = useState(() =>
+    typeof window === 'undefined' ? '/' : window.location.pathname,
+  );
+  const tenantHostContext = getCurrentTenantHostContext();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -81,8 +92,45 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleNavigation = () => setRoutePath(window.location.pathname);
+    window.addEventListener('popstate', handleNavigation);
+    return () => window.removeEventListener('popstate', handleNavigation);
+  }, []);
+
+  let page = <MainDashboard />;
+  if (routePath === '/login') {
+    page = <LoginPage />;
+  } else if (routePath === '/forgot-password') {
+    page = <ForgotPasswordPage />;
+  } else if (routePath === '/reset-password') {
+    page = <ResetPasswordPage />;
+  } else if (routePath === '/select-tenant') {
+    page = <SelectTenantPage />;
+  } else if (routePath === '/request-token') {
+    page = (
+      <RouteNoticePage
+        title="Αίτημα ενεργοποίησης"
+        subtitle="Η ροή token/subscription θα ενεργοποιηθεί σε επόμενη φάση."
+        message="Για ενεργοποίηση ή ανανέωση πρόσβασης, επικοινώνησε προσωρινά με τον διαχειριστή."
+      />
+    );
+  } else if (routePath === '/admin-console') {
+    page = (
+      <RouteNoticePage
+        title="Superadmin console"
+        subtitle="Η κονσόλα superadmin δεν είναι ενεργή στο pilot deployment."
+        message="Η πρόσβαση θα προστατευτεί με Firebase custom claim role=SUPERADMIN πριν εμφανιστούν δεδομένα."
+      />
+    );
+  } else if (routePath === '/app') {
+    page = <MainDashboard />;
+  }
+
   return (
-    <div className="relative isolate min-h-screen overflow-hidden">
+    <div className="relative isolate min-h-screen overflow-hidden" data-tenant-mode={tenantHostContext.mode}>
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {renderDynamicBackground ? (
           <Suspense fallback={<StaticBackground />}>
@@ -95,7 +143,7 @@ export default function App() {
         )}
       </div>
       <div className="relative z-10">
-        <MainDashboard />
+        <TenantGate hostContext={tenantHostContext} routePath={routePath}>{page}</TenantGate>
       </div>
     </div>
   );

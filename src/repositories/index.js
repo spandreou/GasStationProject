@@ -9,3 +9,7 @@ export { firebaseTemplatesRepository as templatesRepository } from './firebase/f
 export { firebaseAnnouncementsRepository as announcementsRepository } from './firebase/firebaseAnnouncementsRepository';
 export { firebaseAuditLogRepository as auditLogRepository } from './firebase/firebaseAuditLogRepository';
 export { firebaseRuntimeEnvironmentRepository as runtimeEnvironmentRepository } from './firebase/firebaseRuntimeEnvironmentRepository';
+export { firebaseTenantsRepository as tenantsRepository } from './firebase/firebaseTenantsRepository';
+export { firebaseTenantMembershipsRepository as tenantMembershipsRepository } from './firebase/firebaseTenantMembershipsRepository';
+export { firebaseTenantSubscriptionRepository as tenantSubscriptionRepository } from './firebase/firebaseTenantSubscriptionRepository';
+export { firebaseTenantTokenRequestsRepository as tenantTokenRequestsRepository } from './firebase/firebaseTenantTokenRequestsRepository';

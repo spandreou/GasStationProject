@@ -76,6 +76,21 @@ assert(matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin()
 assert(firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must authorize admin writes by custom claim.');
 assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');
 assert(firestoreRules.includes('affectedKeys().hasOnly'), 'Firestore rules must restrict unexpected fields.');
+assert(firestoreRules.includes('match /users/{uid}'), 'Firestore rules must define SaaS users/{uid} rules.');
+assert(firestoreRules.includes('match /tenantMemberships/{membershipId}'), 'Firestore rules must define tenantMemberships rules.');
+assert(firestoreRules.includes('match /tenants/{tenantId}'), 'Firestore rules must define tenants rules.');
+assert(firestoreRules.includes('isActiveTenantMember'), 'Firestore rules must verify active tenant membership by uid + tenantId.');
+assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.auth.uid'), 'Tenant memberships must be readable by the owning uid.');
+assert(matchBlock('tenantMemberships').includes("resource.data.status == 'ACTIVE'"), 'Tenant membership self-read must require ACTIVE status.');
+assert(matchBlock('tenantMemberships').includes('allow create, update: if isAdmin() && validTenantMembership();'), 'Tenant memberships must be admin writable only.');
+assert(matchBlock('tenants').includes('allow read: if isAdmin() || isActiveTenantMember(tenantId);'), 'Tenants must be readable only by admins or active tenant members.');
+assert(matchBlock('tenants').includes('match /employees/{employeeId}'), 'Tenant scoped employees rules must exist.');
+assert(matchBlock('tenants').includes('match /shifts/{shiftId}'), 'Tenant scoped shifts rules must exist.');
+assert(matchBlock('tenants').includes('match /settings/{settingsId}'), 'Tenant scoped settings rules must exist.');
+assert(matchBlock('tenants').includes('match /subscription/{subscriptionId}'), 'Tenant scoped subscription rules must exist.');
+assert(matchBlock('tenants').includes('match /tokenRequests/{requestId}'), 'Tenant scoped token request rules must exist.');
+assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant scoped audit log rules must exist.');
+assert(!matchBlock('tenants').includes('allow read: if true;'), 'Tenant scoped SaaS data must not be public readable.');
 
 const allHeaders = vercelConfig.headers.flatMap((entry) => entry.headers || []);
 const headerKeys = new Set(allHeaders.map((header) => header.key));

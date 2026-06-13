@@ -655,6 +655,7 @@ export default function MainDashboard() {
           days: weekDays,
           shifts: weekShifts,
           employees,
+          absences,
         });
         return true;
       },
@@ -674,6 +675,7 @@ export default function MainDashboard() {
           days: monthDays,
           shifts: monthShifts,
           employees,
+          absences,
           month: selectedMonth,
           year: selectedYear,
         });

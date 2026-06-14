@@ -41,6 +41,7 @@ export default function SchedulerSidebar({
   employees,
   absences,
   isAbsencesLoading,
+  absencesWarningMessage = '',
   visibleDays,
   isAdmin,
   isSaving,
@@ -101,6 +102,7 @@ export default function SchedulerSidebar({
           employees={employees}
           absences={absences}
           isLoading={isAbsencesLoading}
+          warningMessage={absencesWarningMessage}
           isAdmin={isAdmin}
           isSaving={isSaving}
           selectedMonth={selectedMonth}

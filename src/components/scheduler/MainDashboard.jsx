@@ -253,6 +253,7 @@ export default function MainDashboard() {
     historyFilters,
     isHistoryLoading,
     isAbsencesLoading,
+    absencesWarningMessage,
     isWeekLocked,
     weekStart,
     isLoading,
@@ -1017,6 +1018,7 @@ export default function MainDashboard() {
                 shiftTemplates={shiftTemplates}
                 absences={absences}
                 isAbsencesLoading={isAbsencesLoading}
+                absencesWarningMessage={absencesWarningMessage}
                 weekDays={weekDays}
                 visibleDays={visibleDays}
                 isAdmin={isAdmin}
@@ -1207,6 +1209,7 @@ export default function MainDashboard() {
                   shiftTemplates={shiftTemplates}
                   absences={absences}
                   isAbsencesLoading={isAbsencesLoading}
+                  absencesWarningMessage={absencesWarningMessage}
                   weekDays={weekDays}
                   visibleDays={visibleDays}
                   isAdmin={isAdmin}

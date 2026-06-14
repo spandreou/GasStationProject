@@ -1,5 +1,6 @@
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const TONE_STYLES = {
   danger:
@@ -41,11 +42,19 @@ export default function ConfirmDialog({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isConfirming, onClose, open]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0" aria-label="Κλείσιμο" onClick={onClose} />
+      <button
+        type="button"
+        className="absolute inset-0"
+        aria-label="Κλείσιμο"
+        onClick={() => {
+          if (!isConfirming) onClose?.();
+        }}
+        disabled={isConfirming}
+      />
       <section
         className={`relative w-full max-w-md rounded-2xl border p-4 shadow-2xl backdrop-blur-md ${
           TONE_STYLES[tone] || TONE_STYLES.info
@@ -53,9 +62,12 @@ export default function ConfirmDialog({
       >
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            if (!isConfirming) onClose?.();
+          }}
           className="absolute right-3 top-3 rounded p-1 text-current/70 transition hover:bg-white/35 hover:text-current dark:hover:bg-slate-900/45"
           aria-label="Κλείσιμο διαλόγου"
+          disabled={isConfirming}
         >
           <X size={14} />
         </button>
@@ -92,6 +104,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

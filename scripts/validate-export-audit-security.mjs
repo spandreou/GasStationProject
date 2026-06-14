@@ -18,6 +18,7 @@ function matchBlock(source, collectionName) {
 
 const mainDashboard = read('src/components/scheduler/MainDashboard.jsx');
 const weekToolbar = read('src/components/scheduler/WeekToolbar.jsx');
+const firebaseConfig = read('src/firebase/config.js');
 const exportService = read('src/utils/exportService.js');
 const exportUtils = read('src/utils/exportUtils.js');
 const exportAuditService = read('src/firebase/exportAuditService.js');
@@ -68,6 +69,8 @@ assert(firebaseJson.storage?.rules === 'storage.rules', 'firebase.json must incl
 assert(monthlyArchiveService.includes('tenants/${safeTenant}/monthly_schedule_pdfs/${safeYearMonth}/program_month_${safeYearMonth}.pdf'), 'Monthly archives must use tenant-scoped private Storage paths.');
 assert(monthlyArchiveService.includes('uploadBytes') && monthlyArchiveService.includes('getBlob'), 'Monthly archive service must upload and fetch private blobs through Firebase Storage.');
 assert(!/getDownloadURL|downloadUrl|signedUrl|publicUrl/i.test(monthlyArchiveService), 'Monthly archive service must not create public or signed URLs.');
+assert(firebaseConfig.includes("getStorage(app, `gs://${firebaseEnv.storageBucket}`)"), 'Firebase Storage must be initialized with the configured bucket explicitly.');
+assert(!firebaseConfig.includes("replace(/\\.firebasestorage\\.app$/i, '.appspot.com')"), 'Firebase config must not rewrite firebasestorage.app buckets to appspot.com.');
 
 const auditBlock = matchBlock(firestoreRules, 'audit_logs');
 assert(auditBlock.includes('allow read: if isAdmin();'), 'Audit logs must be readable only by admins.');

@@ -23,7 +23,7 @@ function normalizeStorageBucket(value) {
 
   // Accept inputs like:
   // - gasstationproject-xxxx.appspot.com
-  // - gasstationproject-xxxx.firebasestorage.app (legacy/wrong host for direct DNS)
+  // - gasstationproject-xxxx.firebasestorage.app
   // - gs://gasstationproject-xxxx.appspot.com
   // - https://gasstationproject-xxxx.appspot.com
   const raw = value
@@ -31,10 +31,6 @@ function normalizeStorageBucket(value) {
     .replace(/^https?:\/\//i, '')
     .split('/')[0]
     .trim();
-
-  if (raw.endsWith('.firebasestorage.app')) {
-    return raw.replace(/\.firebasestorage\.app$/i, '.appspot.com');
-  }
 
   return raw;
 }
@@ -80,7 +76,7 @@ const firebaseConfig = isFirebaseConfigured
 const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
-const storage = app ? getStorage(app) : null;
+const storage = app ? getStorage(app, `gs://${firebaseEnv.storageBucket}`) : null;
 let analytics = null;
 
 if (typeof window !== 'undefined' && app) {

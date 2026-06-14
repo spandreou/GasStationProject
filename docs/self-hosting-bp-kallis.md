@@ -79,12 +79,15 @@ VITE_APP_MODE=production
 VITE_PUBLIC_APP_BASE_DOMAIN=homelabshare.gr
 VITE_CENTRAL_PORTAL_DOMAIN=gas.homelabshare.gr
 VITE_DEFAULT_TENANT_SLUG=bp-kallis
+VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false
 GASSTATION_FRONTEND_PORT=8085
 ```
 
 `GASSTATION_FRONTEND_PORT=8085` is required because port `8080` is already allocated on the homelab server.
 
 `VITE_ADMIN_EMAIL` is demo-only. Do not use it as production authorization.
+
+`VITE_ENABLE_MONTHLY_PDF_ARCHIVE` must stay `false` until Firebase Storage is active and Storage rules deploy successfully.
 
 ## Deploy
 
@@ -118,21 +121,30 @@ Then rerun:
 docker compose up -d
 ```
 
-## Firestore Rules Deploy
+## Firebase Rules Deploy
 
-The frontend can be updated while Firestore rules are still stale. If admin-only feeds fail with `permission-denied`, deploy the checked-in rules:
+The frontend can be updated while Firebase rules are still stale. If admin-only feeds fail with `permission-denied`, deploy the checked-in Firestore and Storage rules:
 
 ```bash
-npm run deploy:firestore-rules -- --project gasstationproject-9dd89
+npm run deploy:firebase-rules -- --project gasstationproject-9dd89
 ```
 
 This uses `firebase.json`, which points Firebase CLI at:
 
 ```txt
 firestore.rules
+storage.rules
 ```
 
-Deploy rules after changing Firestore collections, admin-only reads/writes, public sanitized collections, or SaaS tenant access.
+Deploy rules after changing Firestore collections, Storage archive paths, admin-only reads/writes, public sanitized collections, or SaaS tenant access.
+
+Monthly PDF archive files are private under:
+
+```txt
+tenants/{tenantId}/monthly_schedule_pdfs/{YYYY-MM}/program_month_{YYYY-MM}.pdf
+```
+
+Do not expose signed/public URLs for these files and do not write Storage paths or URLs into audit logs.
 
 ## Cloudflare
 

@@ -16,6 +16,7 @@ const adminLoginModal = read('src/components/scheduler/AdminLoginModal.jsx');
 const runtimeEnvironmentRepository = read('src/repositories/firebase/firebaseRuntimeEnvironmentRepository.js');
 const adminBootstrapScript = read('scripts/bootstrap-admin-user.mjs');
 const firestoreRules = read('firestore.rules');
+const storageRules = read('storage.rules');
 const vercelConfig = JSON.parse(read('vercel.json'));
 const readme = read('README.md');
 
@@ -96,6 +97,17 @@ assert(matchBlock('tenants').includes('match /subscription/{subscriptionId}'), '
 assert(matchBlock('tenants').includes('match /tokenRequests/{requestId}'), 'Tenant scoped token request rules must exist.');
 assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant scoped audit log rules must exist.');
 assert(!matchBlock('tenants').includes('allow read: if true;'), 'Tenant scoped SaaS data must not be public readable.');
+assert(matchBlock('monthly_schedule_exports').includes('allow read: if isAdmin();'), 'Monthly PDF archive metadata must be admin-readable only.');
+assert(
+  matchBlock('monthly_schedule_exports').includes('allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);'),
+  'Monthly PDF archive metadata must be admin writable only and validated.',
+);
+assert(!matchBlock('monthly_schedule_exports').includes('allow read: if true;'), 'Monthly PDF archive metadata must not be public readable.');
+assert(storageRules.includes('request.auth.token.admin == true'), 'Storage rules must authorize admins by custom claim.');
+assert(storageRules.includes('match /tenants/{tenantId}/monthly_schedule_pdfs/{yearMonth}/{fileName}'), 'Storage rules must define private monthly PDF archive paths.');
+assert(storageRules.includes('allow read: if isAdmin()'), 'Monthly PDF archive files must be admin-readable only.');
+assert(storageRules.includes('allow write: if isAdmin()'), 'Monthly PDF archive files must be admin-writable only.');
+assert(!storageRules.includes('allow read: if true;'), 'Storage rules must not expose public reads.');
 
 const allHeaders = vercelConfig.headers.flatMap((entry) => entry.headers || []);
 const headerKeys = new Set(allHeaders.map((header) => header.key));

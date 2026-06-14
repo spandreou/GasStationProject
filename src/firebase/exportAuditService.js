@@ -2,6 +2,7 @@ import { writeAuditLog } from './auditLogService';
 
 const SAFE_EXPORT_TYPES = new Set(['PDF', 'EXCEL', 'WORD', 'WHATSAPP', 'SCHEDULE']);
 const SAFE_EXPORT_SCOPES = new Set(['WEEK', 'MONTH', 'SCHEDULE']);
+const SAFE_ARCHIVE_ACTIONS = new Set(['', 'GENERATE', 'DOWNLOAD']);
 const DEFAULT_TENANT_ID = 'bp-kallis';
 const MAX_TEXT_LENGTH = 160;
 
@@ -18,6 +19,11 @@ function safeExportType(value) {
 function safeExportScope(value) {
   const normalized = String(value || '').trim().toUpperCase();
   return SAFE_EXPORT_SCOPES.has(normalized) ? normalized : 'SCHEDULE';
+}
+
+function safeArchiveAction(value) {
+  const normalized = String(value || '').trim().toUpperCase();
+  return SAFE_ARCHIVE_ACTIONS.has(normalized) ? normalized : '';
 }
 
 function safeCount(value) {
@@ -46,6 +52,7 @@ export async function writeExportAuditLog({
   recordCount = 0,
   shiftCount = 0,
   fileName = '',
+  archiveAction = '',
   status = 'SUCCESS',
 } = {}) {
   try {
@@ -53,6 +60,7 @@ export async function writeExportAuditLog({
     const safeTenantId = safeText(tenantId, DEFAULT_TENANT_ID) || DEFAULT_TENANT_ID;
     const safeType = safeExportType(exportType);
     const safeScope = safeExportScope(exportScope);
+    const sanitizedArchiveAction = safeArchiveAction(archiveAction);
 
     await writeAuditLog({
       action: 'EXPORT',
@@ -77,6 +85,7 @@ export async function writeExportAuditLog({
         recordCount: safeCount(recordCount),
         shiftCount: safeCount(shiftCount),
         fileName: safeText(fileName),
+        archiveAction: sanitizedArchiveAction,
         status: safeStatus,
       },
     });

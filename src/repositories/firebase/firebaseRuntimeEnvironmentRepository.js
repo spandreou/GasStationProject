@@ -2,6 +2,7 @@ import {
   firebaseConfigErrorMessage,
   isDemoMode as isFirebaseDemoMode,
   isFirebaseConfigured,
+  isMonthlyPdfArchiveEnabled,
 } from '../../firebase/config';
 import { getAdminAuthModeLabel, getPublicConfiguredAdminEmail } from '../../firebase/authService';
 
@@ -14,6 +15,7 @@ function getRuntimeEnvironment() {
     isPersistenceConfigured: isFirebaseConfigured,
     configuredAdminEmail: getPublicConfiguredAdminEmail(),
     persistenceErrorMessage: firebaseConfigErrorMessage,
+    isMonthlyPdfArchiveEnabled,
   };
 }
 
@@ -24,4 +26,5 @@ export const firebaseRuntimeEnvironmentRepository = {
   isPersistenceConfigured: () => isFirebaseConfigured,
   getPersistenceErrorMessage: () => firebaseConfigErrorMessage,
   isDemoMode: () => isFirebaseDemoMode,
+  isMonthlyPdfArchiveEnabled: () => isMonthlyPdfArchiveEnabled,
 };

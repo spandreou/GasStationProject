@@ -13,11 +13,11 @@ export const PDF_SCHEDULE_COLUMNS = [
   { key: 'workRest', title: 'Εργασία/Ανάπαυση', widthRatio: 0.16 },
 ];
 
-function assertExportAuthorized(exportAuthorization, onBeforeDownload) {
+function assertExportAuthorized(exportAuthorization, onBeforeDownload, { requireAuditCallback = true } = {}) {
   if (!exportAuthorization?.isAdmin || exportAuthorization.auditRequired !== true) {
     throw new Error('Η εξαγωγή απαιτεί σύνδεση διαχειριστή.');
   }
-  if (typeof onBeforeDownload !== 'function') {
+  if (requireAuditCallback && typeof onBeforeDownload !== 'function') {
     throw new Error('Η εξαγωγή δεν ολοκληρώθηκε. Δοκίμασε ξανά.');
   }
 }
@@ -438,10 +438,12 @@ export async function exportScheduleToPdf({
   absences = [],
   month,
   year,
+  output = 'download',
   onBeforeDownload,
   exportAuthorization,
 } = {}) {
-  assertExportAuthorized(exportAuthorization, onBeforeDownload);
+  const safeOutput = output === 'blob' ? 'blob' : 'download';
+  assertExportAuthorized(exportAuthorization, onBeforeDownload, { requireAuditCallback: safeOutput !== 'blob' });
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
   if (!targetDays.length) {
@@ -476,8 +478,13 @@ export async function exportScheduleToPdf({
     rows,
   });
 
+  if (safeOutput === 'blob') {
+    return doc.output('blob');
+  }
+
   await onBeforeDownload?.();
   doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
+  return true;
 }
 
 export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload, exportAuthorization }) {

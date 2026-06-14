@@ -78,9 +78,12 @@ The server `.env` must include this non-secret runtime setting because port `808
 
 ```env
 GASSTATION_FRONTEND_PORT=8085
+VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false
 ```
 
 Do not assume a GitHub push deploys the live site automatically. The current live target is self-hosted Docker and needs a server pull plus Docker rebuild/recreate.
+
+Keep `VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false` until Firebase Storage is enabled and both `firestore.rules` and `storage.rules` have deployed successfully.
 
 ## Deploy Commands
 

@@ -15,6 +15,7 @@ services:
         VITE_PUBLIC_APP_BASE_DOMAIN: ${VITE_PUBLIC_APP_BASE_DOMAIN:-homelabshare.gr}
         VITE_CENTRAL_PORTAL_DOMAIN: ${VITE_CENTRAL_PORTAL_DOMAIN:-gas.homelabshare.gr}
         VITE_DEFAULT_TENANT_SLUG: ${VITE_DEFAULT_TENANT_SLUG:-bp-kallis}
+        VITE_ENABLE_MONTHLY_PDF_ARCHIVE: ${VITE_ENABLE_MONTHLY_PDF_ARCHIVE:-false}
     image: gasstation-shift-manager:bp-kallis
     container_name: gasstation-bp-kallis
     restart: unless-stopped

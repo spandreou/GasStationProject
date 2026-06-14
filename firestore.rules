@@ -304,6 +304,29 @@ service cloud.firestore {
         request.resource.data.shifts is list;
     }
 
+    function validMonthlyScheduleExport(exportId) {
+      return request.resource.data.keys().hasAll([
+          'tenantId', 'yearMonth', 'fileName', 'storagePath', 'createdBy', 'shiftCount', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'tenantId', 'yearMonth', 'fileName', 'storagePath', 'createdBy', 'shiftCount', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        exportId == request.resource.data.tenantId + '_' + request.resource.data.yearMonth &&
+        request.resource.data.tenantId is string &&
+        request.resource.data.tenantId.matches('^[a-z0-9-]{1,60}$') &&
+        request.resource.data.yearMonth is string &&
+        request.resource.data.yearMonth.matches('^\\d{4}-\\d{2}$') &&
+        request.resource.data.fileName == 'program_month_' + request.resource.data.yearMonth + '.pdf' &&
+        request.resource.data.storagePath ==
+          'tenants/' + request.resource.data.tenantId + '/monthly_schedule_pdfs/' +
+          request.resource.data.yearMonth + '/' + request.resource.data.fileName &&
+        request.resource.data.createdBy is string &&
+        request.resource.data.createdBy.size() <= 160 &&
+        request.resource.data.shiftCount is number &&
+        request.resource.data.shiftCount >= 0 &&
+        request.resource.data.status == 'READY';
+    }
+
     function validTemplate() {
       return request.resource.data.keys().hasOnly([
         'name', 'label', 'weekStart', 'shifts', 'createdBy', 'createdAt', 'updatedAt',
@@ -441,6 +464,12 @@ service cloud.firestore {
     match /published_schedules/{resourceId} {
       allow read: if true;
       allow create, update: if isAdmin() && validPublishedSchedule(resourceId);
+      allow delete: if isAdmin();
+    }
+
+    match /monthly_schedule_exports/{exportId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);
       allow delete: if isAdmin();
     }
 

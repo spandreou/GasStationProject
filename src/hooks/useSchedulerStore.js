@@ -586,7 +586,6 @@ export const useSchedulerStore = create((set, get) => ({
           }
           await get().refreshWeekLockStatus();
           await Promise.all([
-            get().loadAttendanceHistory({ force: false }),
             get().loadWeekHistory({ force: false }),
             get().loadWeekTemplates({ force: false }),
           ]);
@@ -1820,7 +1819,6 @@ export const useSchedulerStore = create((set, get) => ({
               : `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές, αλλά το snapshot ιστορικού και η δημόσια δημοσίευση απέτυχαν.`,
       isWeekLocked: true,
     });
-    await get().loadAttendanceHistory();
   },
 
   clearWeekShifts: async () => {
@@ -2364,10 +2362,10 @@ export const useSchedulerStore = create((set, get) => ({
     roleConfig = {},
     rules = {},
   }) => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
     if (typeof year !== 'number' || typeof month !== 'number') {
       set({ warningMessage: 'Μη έγκυρα στοιχεία μήνα για αυτόματη δημιουργία.' });
-      return;
+      return false;
     }
 
     const monthDateSet = getMonthDateSet(year, month);
@@ -2457,11 +2455,24 @@ export const useSchedulerStore = create((set, get) => ({
           await get().refreshWeekLockStatus();
         }
       }
+
+      return {
+        ok: true,
+        year,
+        month,
+        monthDays: meta?.monthDays || monthDatesForGeneration,
+        shifts: savedMonthShifts,
+        shiftCount: savedMonthShifts.length,
+        manualOverrideCount: manualOverrides.length,
+        generatedShiftCount: generatedShifts.length,
+        warningCount: warnings?.length || 0,
+      };
     } catch (error) {
       set({
         warningMessage:
           error?.message || 'Αποτυχία αυτόματης δημιουργίας μηνιαίου προγράμματος.',
       });
+      return false;
     } finally {
       set({ isSaving: false });
     }

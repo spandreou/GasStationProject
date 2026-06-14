@@ -118,6 +118,22 @@ Then rerun:
 docker compose up -d
 ```
 
+## Firestore Rules Deploy
+
+The frontend can be updated while Firestore rules are still stale. If admin-only feeds fail with `permission-denied`, deploy the checked-in rules:
+
+```bash
+npm run deploy:firestore-rules -- --project gasstationproject-9dd89
+```
+
+This uses `firebase.json`, which points Firebase CLI at:
+
+```txt
+firestore.rules
+```
+
+Deploy rules after changing Firestore collections, admin-only reads/writes, public sanitized collections, or SaaS tenant access.
+
 ## Cloudflare
 
 Recommended options:

@@ -306,6 +306,7 @@ const SHIFT_TEMPLATES_LOAD_WARNING =
   'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.';
 const SHIFT_TEMPLATES_RETRY_LIMIT = 2;
 const SHIFT_TEMPLATES_RETRY_DELAY_MS = 1200;
+const ADMIN_ABSENCES_LOAD_WARNING = 'Δεν ήταν δυνατή η φόρτωση των αδειών διαχειριστή.';
 
 function isShiftTemplatesLoadWarning(message) {
   return String(message || '') === SHIFT_TEMPLATES_LOAD_WARNING;
@@ -343,6 +344,7 @@ export const useSchedulerStore = create((set, get) => ({
   },
   isHistoryLoading: false,
   isAbsencesLoading: true,
+  absencesWarningMessage: '',
   isWeekLocked: false,
   isLoading: true,
   isAuthLoading: true,
@@ -435,12 +437,10 @@ export const useSchedulerStore = create((set, get) => ({
 
     const subscribe = adminOnly ? subscribeEmployeeAbsences : subscribePublicEmployeeAbsences;
     const unsubscribeAbsences = subscribe(
-      (absences) => set({ absences, isAbsencesLoading: false }),
+      (absences) => set({ absences, isAbsencesLoading: false, absencesWarningMessage: '' }),
       () =>
         set({
-          warningMessage: adminOnly
-            ? 'Δεν ήταν δυνατή η φόρτωση των αδειών διαχειριστή.'
-            : '',
+          absencesWarningMessage: adminOnly ? ADMIN_ABSENCES_LOAD_WARNING : '',
           absences: [],
           isAbsencesLoading: false,
         }),
@@ -754,7 +754,7 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   setWarningMessage: (warningMessage) => set({ warningMessage }),
-  clearMessages: () => set({ warningMessage: '', errorMessage: '' }),
+  clearMessages: () => set({ warningMessage: '', errorMessage: '', absencesWarningMessage: '' }),
 
   createAbsence: async (input) => {
     if (!requireAdmin(get, set)) return false;

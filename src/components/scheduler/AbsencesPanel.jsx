@@ -6,6 +6,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  TriangleAlert,
   X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -239,6 +240,7 @@ export default function AbsencesPanel({
   employees = [],
   absences = [],
   isLoading = false,
+  warningMessage = '',
   isAdmin = false,
   isSaving = false,
   selectedMonth = new Date().getMonth(),
@@ -352,6 +354,19 @@ export default function AbsencesPanel({
           Διαχείριση και προβολή αδειών υπαλλήλων
         </p>
       </div>
+
+      {warningMessage ? (
+        <div
+          data-testid="absences-scoped-warning"
+          className="flex gap-2 rounded-xl border border-amber-300/45 bg-amber-400/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100"
+        >
+          <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-bold">Περιορισμένη φόρτωση αδειών</p>
+            <p className="mt-0.5">{warningMessage}</p>
+          </div>
+        </div>
+      ) : null}
 
       {isAdmin ? (
         <button

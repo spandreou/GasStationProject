@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const SIDEBAR_STORAGE_KEY = 'gasStation.scheduler.sidebarWidth';
-const SHELL_MODE_STORAGE_KEY = 'gasStation.scheduler.shellWidthMode';
-const SIDEBAR_MIN_WIDTH = 240;
-const SIDEBAR_DEFAULT_WIDTH = 300;
-const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_MIN_WIDTH = 320;
+const SIDEBAR_DEFAULT_WIDTH = 360;
+const SIDEBAR_MAX_WIDTH = 460;
 const DESKTOP_RESIZE_MIN_WIDTH = 1024;
 
 const SHELL_WIDTH_CLASSES = {
@@ -31,20 +30,14 @@ function readStoredSidebarWidth() {
 }
 
 function readStoredShellMode() {
-  if (typeof window === 'undefined') return 'normal';
-  try {
-    const value = window.localStorage.getItem(SHELL_MODE_STORAGE_KEY);
-    return SHELL_WIDTH_CLASSES[value] ? value : 'normal';
-  } catch {
-    return 'normal';
-  }
+  return 'wide';
 }
 
 export default function useResizableLayout() {
   const mainPanelRef = useRef(null);
   const cleanupResizeRef = useRef(null);
   const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth);
-  const [shellWidthMode, setShellWidthModeState] = useState(readStoredShellMode);
+  const [shellWidthMode] = useState(readStoredShellMode);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [mainPanelWidth, setMainPanelWidth] = useState(0);
 
@@ -56,15 +49,6 @@ export default function useResizableLayout() {
       // Layout persistence is optional; ignore blocked storage.
     }
   }, [sidebarWidth]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(SHELL_MODE_STORAGE_KEY, shellWidthMode);
-    } catch {
-      // Layout persistence is optional; ignore blocked storage.
-    }
-  }, [shellWidthMode]);
 
   useEffect(() => () => {
     cleanupResizeRef.current?.();
@@ -80,11 +64,6 @@ export default function useResizableLayout() {
     observer.observe(node);
 
     return () => observer.disconnect();
-  }, []);
-
-  const setShellWidthMode = useCallback((nextMode) => {
-    if (!SHELL_WIDTH_CLASSES[nextMode]) return;
-    setShellWidthModeState(nextMode);
   }, []);
 
   const updateSidebarWidth = useCallback((nextWidth) => {
@@ -163,7 +142,6 @@ export default function useResizableLayout() {
     scheduleDensity,
     shellWidthMode,
     shellWidthClass: SHELL_WIDTH_CLASSES[shellWidthMode],
-    setShellWidthMode,
     handleSidebarResizeStart,
     handleSidebarResizeKeyDown,
   };

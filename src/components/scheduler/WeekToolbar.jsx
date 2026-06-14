@@ -16,7 +16,8 @@ import {
   TriangleAlert,
   XCircle,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ConfirmDialog from '../feedback/ConfirmDialog';
 import { formatDateGreek } from '../../utils/time';
 
@@ -88,6 +89,56 @@ function SyncIndicator({ syncStatus }) {
 
 function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onExportWord, actionLoading = {} }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const isExporting = Boolean(
+    actionLoading.exportWeekPdf || actionLoading.exportMonthPdf || actionLoading.exportExcel || actionLoading.exportWord,
+  );
+
+  const updateMenuPosition = () => {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = Math.max(220, Math.min(rect.width, 320));
+    const viewportPadding = 12;
+    const right = Math.max(viewportPadding, window.innerWidth - rect.right);
+    const top = Math.min(rect.bottom + 8, window.innerHeight - viewportPadding);
+
+    setMenuPosition({
+      top,
+      right,
+      width: menuWidth,
+      maxHeight: Math.max(180, window.innerHeight - top - viewportPadding),
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    updateMenuPosition();
+
+    function handleDocumentClick(event) {
+      if (buttonRef.current?.contains(event.target)) return;
+      if (event.target.closest?.('[data-export-menu="true"]')) return;
+      setIsOpen(false);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') setIsOpen(false);
+    }
+
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    document.addEventListener('click', handleDocumentClick);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      document.removeEventListener('click', handleDocumentClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   async function handleAction(action) {
     setIsOpen(false);
@@ -96,58 +147,72 @@ function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onEx
     }
   }
 
-  return (
-    <div className="relative z-[9999] overflow-visible">
+  const menu = isOpen && menuPosition ? (
+    <div
+      data-export-menu="true"
+      className="fixed z-[100000] overflow-y-auto rounded-lg border border-cyan-300/55 bg-slate-950 p-1.5 text-slate-100 shadow-2xl shadow-slate-950/45 ring-1 ring-white/10"
+      style={{
+        top: `${menuPosition.top}px`,
+        right: `${menuPosition.right}px`,
+        width: `${menuPosition.width}px`,
+        maxHeight: `${menuPosition.maxHeight}px`,
+      }}
+    >
       <button
         type="button"
+        onClick={() => handleAction(onExportWeekPdf)}
+        disabled={isExporting}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-100 transition hover:bg-cyan-400/15 disabled:opacity-60"
+      >
+        {actionLoading.exportWeekPdf ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+        PDF Εβδομάδας
+      </button>
+      <button
+        type="button"
+        onClick={() => handleAction(onExportMonthPdf)}
+        disabled={isExporting}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-100 transition hover:bg-cyan-400/15 disabled:opacity-60"
+      >
+        {actionLoading.exportMonthPdf ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+        PDF Μήνα
+      </button>
+      <button
+        type="button"
+        onClick={() => handleAction(onExportExcel)}
+        disabled={isExporting}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-100 transition hover:bg-cyan-400/15 disabled:opacity-60"
+      >
+        {actionLoading.exportExcel ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
+        Excel
+      </button>
+      <button
+        type="button"
+        onClick={() => handleAction(onExportWord)}
+        disabled={isExporting}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-100 transition hover:bg-cyan-400/15 disabled:opacity-60"
+      >
+        {actionLoading.exportWord ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+        Word
+      </button>
+    </div>
+  ) : null;
+
+  return (
+    <div className="relative overflow-visible">
+      <button
+        ref={buttonRef}
+        type="button"
         onClick={() => setIsOpen((prev) => !prev)}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
         className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/35 px-2.5 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
       >
-        <FileDown size={16} />
-        Εξαγωγή
+        {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
+        {isExporting ? 'Εξαγωγή...' : 'Εξαγωγή'}
         <ChevronDown size={14} />
       </button>
 
-      {isOpen ? (
-        <div className="z-[9999] mt-2 w-full rounded-lg border border-white/45 bg-white/85 p-1.5 shadow-2xl backdrop-blur-md sm:absolute sm:right-0 sm:min-w-[200px] sm:w-auto dark:border-cyan-300/45 dark:bg-slate-900/90">
-          <button
-            type="button"
-            onClick={() => handleAction(onExportWeekPdf)}
-            disabled={actionLoading.exportWeekPdf}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-white/70 disabled:opacity-60 dark:text-slate-100 dark:hover:bg-slate-800/80"
-          >
-            {actionLoading.exportWeekPdf ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-            PDF Εβδομάδας
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAction(onExportMonthPdf)}
-            disabled={actionLoading.exportMonthPdf}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-white/70 disabled:opacity-60 dark:text-slate-100 dark:hover:bg-slate-800/80"
-          >
-            {actionLoading.exportMonthPdf ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-            PDF Μήνα
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAction(onExportExcel)}
-            disabled={actionLoading.exportExcel}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-white/70 disabled:opacity-60 dark:text-slate-100 dark:hover:bg-slate-800/80"
-          >
-            {actionLoading.exportExcel ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
-            Excel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAction(onExportWord)}
-            disabled={actionLoading.exportWord}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-white/70 disabled:opacity-60 dark:text-slate-100 dark:hover:bg-slate-800/80"
-          >
-            {actionLoading.exportWord ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-            Word
-          </button>
-        </div>
-      ) : null}
+      {typeof document !== 'undefined' ? createPortal(menu, document.body) : menu}
     </div>
   );
 }
@@ -273,73 +338,65 @@ export default function WeekToolbar({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-3">
-          <ToolbarGroup title="Editing">
-            {isAdmin ? (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <LoadingButton
-                    icon={Save}
-                    label="Αποθήκευση"
-                    loadingLabel="Αποθήκευση..."
-                    onClick={onSaveWeek}
-                    className={primaryButtonClass}
-                    isLoading={actionLoading.saveWeek}
-                  />
+        {isAdmin ? (
+          <div className="mt-3 grid gap-3 xl:grid-cols-3">
+            <ToolbarGroup title="Editing">
+              <div className="grid grid-cols-2 gap-2">
+                <LoadingButton
+                  icon={Save}
+                  label="Αποθήκευση"
+                  loadingLabel="Αποθήκευση..."
+                  onClick={onSaveWeek}
+                  className={primaryButtonClass}
+                  isLoading={actionLoading.saveWeek}
+                />
 
-                  <LoadingButton
-                    icon={Sparkles}
-                    label="Αυτόματη Δημιουργία"
-                    loadingLabel="Δημιουργία..."
-                    onClick={onMagicWand}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.magicWeek}
-                  />
-                </div>
-
-                <select
-                  value={selectedTemplateId}
-                  onChange={(event) => onSelectTemplate?.(event.target.value)}
-                  className="input-glass w-full rounded-lg border border-white/35 bg-white/40 px-2.5 py-2 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
-                >
-                  <option value="">Επιλογή template...</option>
-                  {weekTemplates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name || 'Template'}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <LoadingButton
-                    icon={FileText}
-                    label="Φόρτωση Template"
-                    loadingLabel="Φόρτωση..."
-                    onClick={() => onLoadSelectedTemplate?.()}
-                    disabled={!canLoadTemplate}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.loadTemplate}
-                  />
-
-                  <LoadingButton
-                    icon={Save}
-                    label="Save as Template"
-                    loadingLabel="Αποθήκευση..."
-                    onClick={handleSaveTemplate}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.saveTemplate}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="rounded-lg border border-slate-300/70 bg-white/45 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/25 dark:bg-slate-900/40 dark:text-slate-300">
-                Read-only preview. Για επεξεργασία, κάνε είσοδο ως διαχειριστής.
+                <LoadingButton
+                  icon={Sparkles}
+                  label="Αυτόματη Δημιουργία"
+                  loadingLabel="Δημιουργία..."
+                  onClick={onMagicWand}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.magicWeek}
+                />
               </div>
-            )}
-          </ToolbarGroup>
 
-          <ToolbarGroup title="Finalize / Share">
-            {isAdmin ? (
+              <select
+                value={selectedTemplateId}
+                onChange={(event) => onSelectTemplate?.(event.target.value)}
+                className="input-glass w-full rounded-lg border border-white/35 bg-white/40 px-2.5 py-2 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+              >
+                <option value="">Επιλογή template...</option>
+                {weekTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name || 'Template'}
+                  </option>
+                ))}
+              </select>
+
+              <div className="grid grid-cols-2 gap-2">
+                <LoadingButton
+                  icon={FileText}
+                  label="Φόρτωση Template"
+                  loadingLabel="Φόρτωση..."
+                  onClick={() => onLoadSelectedTemplate?.()}
+                  disabled={!canLoadTemplate}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.loadTemplate}
+                />
+
+                <LoadingButton
+                  icon={Save}
+                  label="Save as Template"
+                  loadingLabel="Αποθήκευση..."
+                  onClick={handleSaveTemplate}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.saveTemplate}
+                />
+              </div>
+            </ToolbarGroup>
+
+            <ToolbarGroup title="Finalize / Share">
               <LoadingButton
                 icon={FolderCheck}
                 label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
@@ -358,27 +415,25 @@ export default function WeekToolbar({
                 className={finalizeButtonClass}
                 isLoading={actionLoading.finalizeWeek}
               />
-            ) : null}
 
-            <LoadingButton
-              icon={Copy}
-              label="Αντιγραφή για WhatsApp"
-              loadingLabel="Αντιγραφή..."
-              onClick={onCopyWhatsapp}
-              className={infoButtonClass}
-              isLoading={actionLoading.copyWhatsapp}
-            />
+              <LoadingButton
+                icon={Copy}
+                label="Αντιγραφή για WhatsApp"
+                loadingLabel="Αντιγραφή..."
+                onClick={onCopyWhatsapp}
+                className={infoButtonClass}
+                isLoading={actionLoading.copyWhatsapp}
+              />
 
-            <ExportDropdown
-              onExportWeekPdf={onExportWeekPdf}
-              onExportMonthPdf={onExportMonthPdf}
-              onExportExcel={onExportExcel}
-              onExportWord={onExportWord}
-              actionLoading={actionLoading}
-            />
-          </ToolbarGroup>
+              <ExportDropdown
+                onExportWeekPdf={onExportWeekPdf}
+                onExportMonthPdf={onExportMonthPdf}
+                onExportExcel={onExportExcel}
+                onExportWord={onExportWord}
+                actionLoading={actionLoading}
+              />
+            </ToolbarGroup>
 
-          {isAdmin ? (
             <ToolbarGroup title="Danger Zone">
               <LoadingButton
                 icon={Trash2}
@@ -420,8 +475,8 @@ export default function WeekToolbar({
                 isLoading={actionLoading.clearMonth}
               />
             </ToolbarGroup>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </header>
 
       <ConfirmDialog

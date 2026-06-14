@@ -32,33 +32,29 @@ export function useToastQueue({ maxVisible = MAX_VISIBLE_TOASTS } = {}) {
 
       const normalizedMessage = String(message).trim();
       const signature = getToastSignature(type, normalizedMessage);
+      const nextToast = {
+        id: `toast_${Date.now()}_${sequenceRef.current}`,
+        type,
+        title,
+        message: normalizedMessage,
+        duration,
+        actionLabel,
+        onAction,
+        signature,
+      };
+      sequenceRef.current += 1;
 
-      let createdToast = null;
       setToasts((current) => {
         const hasDuplicate = dedupe
           ? current.some((item) => item.signature === signature)
           : false;
         if (hasDuplicate) return current;
 
-        const nextToast = {
-          id: `toast_${Date.now()}_${sequenceRef.current}`,
-          type,
-          title,
-          message: normalizedMessage,
-          duration,
-          actionLabel,
-          onAction,
-          signature,
-        };
-
-        sequenceRef.current += 1;
-        createdToast = nextToast;
-
         const nextQueue = [nextToast, ...current];
         return nextQueue.slice(0, Math.max(maxVisible * 2, maxVisible));
       });
 
-      return createdToast;
+      return nextToast;
     },
     [maxVisible],
   );

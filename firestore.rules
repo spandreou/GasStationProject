@@ -9,6 +9,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isActiveTenantMember(tenantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)) &&
+        get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.status == 'ACTIVE';
+    }
+
     function isIsoDate(value) {
       return value is string && value.matches('^\\d{4}-\\d{2}-\\d{2}$');
     }
@@ -294,6 +304,29 @@ service cloud.firestore {
         request.resource.data.shifts is list;
     }
 
+    function validMonthlyScheduleExport(exportId) {
+      return request.resource.data.keys().hasAll([
+          'tenantId', 'yearMonth', 'fileName', 'storagePath', 'createdBy', 'shiftCount', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'tenantId', 'yearMonth', 'fileName', 'storagePath', 'createdBy', 'shiftCount', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        exportId == request.resource.data.tenantId + '_' + request.resource.data.yearMonth &&
+        request.resource.data.tenantId is string &&
+        request.resource.data.tenantId.matches('^[a-z0-9-]{1,60}$') &&
+        request.resource.data.yearMonth is string &&
+        request.resource.data.yearMonth.matches('^\\d{4}-\\d{2}$') &&
+        request.resource.data.fileName == 'program_month_' + request.resource.data.yearMonth + '.pdf' &&
+        request.resource.data.storagePath ==
+          'tenants/' + request.resource.data.tenantId + '/monthly_schedule_pdfs/' +
+          request.resource.data.yearMonth + '/' + request.resource.data.fileName &&
+        request.resource.data.createdBy is string &&
+        request.resource.data.createdBy.size() <= 160 &&
+        request.resource.data.shiftCount is number &&
+        request.resource.data.shiftCount >= 0 &&
+        request.resource.data.status == 'READY';
+    }
+
     function validTemplate() {
       return request.resource.data.keys().hasOnly([
         'name', 'label', 'weekStart', 'shifts', 'createdBy', 'createdAt', 'updatedAt',
@@ -333,6 +366,69 @@ service cloud.firestore {
         isIsoDate(request.resource.data.date);
     }
 
+    function validUserProfile(uid) {
+      return request.resource.data.keys().hasOnly([
+        'uid', 'email', 'displayName', 'status', 'createdAt', 'updatedAt'
+      ]) &&
+        (!('uid' in request.resource.data) || request.resource.data.uid == uid) &&
+        isOptionalString('email') &&
+        isOptionalString('displayName') &&
+        (!('status' in request.resource.data) || request.resource.data.status in ['ACTIVE', 'DISABLED']);
+    }
+
+    function validTenant() {
+      return request.resource.data.keys().hasAll(['slug']) &&
+        request.resource.data.keys().hasOnly([
+          'slug', 'domain', 'displayName', 'name', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.slug is string &&
+        request.resource.data.slug.matches('^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$') &&
+        isOptionalString('domain') &&
+        isOptionalString('displayName') &&
+        isOptionalString('name') &&
+        (!('status' in request.resource.data) || request.resource.data.status in ['ACTIVE', 'DISABLED']);
+    }
+
+    function validTenantMembership() {
+      return request.resource.data.keys().hasAll(['uid', 'tenantId', 'status', 'role']) &&
+        request.resource.data.keys().hasOnly([
+          'uid', 'tenantId', 'email', 'role', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.uid is string &&
+        request.resource.data.uid.size() > 0 &&
+        request.resource.data.tenantId is string &&
+        request.resource.data.tenantId.matches('^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$') &&
+        request.resource.data.role in ['TENANT_ADMIN', 'EMPLOYEE', 'VIEWER'] &&
+        request.resource.data.status in ['ACTIVE', 'DISABLED'] &&
+        isOptionalString('email');
+    }
+
+    function validTenantSubscription() {
+      return request.resource.data.keys().hasOnly([
+        'plan', 'status', 'trialEndsAt', 'currentPeriodStart', 'currentPeriodEnd',
+        'createdAt', 'updatedAt'
+      ]) &&
+        isOptionalString('plan') &&
+        (!('status' in request.resource.data) || request.resource.data.status in [
+          'ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELLED', 'DISABLED'
+        ]);
+    }
+
+    function validTenantTokenRequest() {
+      return request.resource.data.keys().hasAll(['email', 'status']) &&
+        request.resource.data.keys().hasOnly([
+          'email', 'requesterName', 'note', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        request.resource.data.email is string &&
+        request.resource.data.email.size() > 0 &&
+        request.resource.data.email.size() <= 254 &&
+        (!('requesterName' in request.resource.data) ||
+          (request.resource.data.requesterName is string && request.resource.data.requesterName.size() <= 120)) &&
+        (!('note' in request.resource.data) ||
+          (request.resource.data.note is string && request.resource.data.note.size() <= 1000)) &&
+        request.resource.data.status in ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
+    }
+
     match /employees/{employeeId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && validEmployee();
@@ -368,6 +464,12 @@ service cloud.firestore {
     match /published_schedules/{resourceId} {
       allow read: if true;
       allow create, update: if isAdmin() && validPublishedSchedule(resourceId);
+      allow delete: if isAdmin();
+    }
+
+    match /monthly_schedule_exports/{exportId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);
       allow delete: if isAdmin();
     }
 
@@ -431,6 +533,63 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if isAdmin() && validAuditLog();
       allow update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if isAdmin() || isSelf(uid);
+      allow create, update: if isAdmin() && validUserProfile(uid);
+      allow delete: if isAdmin();
+    }
+
+    match /tenantMemberships/{membershipId} {
+      allow read: if isAdmin() ||
+        (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'ACTIVE');
+      allow create, update: if isAdmin() && validTenantMembership();
+      allow delete: if isAdmin();
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isAdmin() || isActiveTenantMember(tenantId);
+      allow create, update: if isAdmin() && validTenant();
+      allow delete: if isAdmin();
+
+      match /employees/{employeeId} {
+        allow read: if isAdmin() || isActiveTenantMember(tenantId);
+        allow create: if isAdmin() && validEmployee();
+        allow update: if isAdmin() && onlyChanged(employeeFields()) && validEmployee();
+        allow delete: if isAdmin();
+      }
+
+      match /shifts/{shiftId} {
+        allow read: if isAdmin() || isActiveTenantMember(tenantId);
+        allow create: if isAdmin() && validShift();
+        allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
+        allow delete: if isAdmin();
+      }
+
+      match /settings/{settingsId} {
+        allow read: if isAdmin() || isActiveTenantMember(tenantId);
+        allow create, update: if isAdmin() && validSchedulerSettings();
+        allow delete: if isAdmin();
+      }
+
+      match /subscription/{subscriptionId} {
+        allow read: if isAdmin() || isActiveTenantMember(tenantId);
+        allow create, update: if isAdmin() && validTenantSubscription();
+        allow delete: if isAdmin();
+      }
+
+      match /tokenRequests/{requestId} {
+        allow read: if isAdmin() || isActiveTenantMember(tenantId);
+        allow create, update: if isAdmin() && validTenantTokenRequest();
+        allow delete: if isAdmin();
+      }
+
+      match /auditLogs/{auditLogId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && validAuditLog();
+        allow update, delete: if false;
+      }
     }
 
     match /{document=**} {

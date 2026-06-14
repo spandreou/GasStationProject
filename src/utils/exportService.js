@@ -13,6 +13,15 @@ export const PDF_SCHEDULE_COLUMNS = [
   { key: 'workRest', title: 'Εργασία/Ανάπαυση', widthRatio: 0.16 },
 ];
 
+function assertExportAuthorized(exportAuthorization, onBeforeDownload, { requireAuditCallback = true } = {}) {
+  if (!exportAuthorization?.isAdmin || exportAuthorization.auditRequired !== true) {
+    throw new Error('Η εξαγωγή απαιτεί σύνδεση διαχειριστή.');
+  }
+  if (requireAuditCallback && typeof onBeforeDownload !== 'function') {
+    throw new Error('Η εξαγωγή δεν ολοκληρώθηκε. Δοκίμασε ξανά.');
+  }
+}
+
 function loadXlsx() {
   if (!xlsxModulePromise) {
     xlsxModulePromise = import('@e965/xlsx');
@@ -185,7 +194,65 @@ function getEmployeeDayWorkShifts(shiftMap, day, employeeId) {
     });
 }
 
-export function buildGroupedScheduleRows({ days, employees, shifts }) {
+function isDateInRange(date, startDate, endDate) {
+  return Boolean(date && startDate && endDate && date >= startDate && date <= endDate);
+}
+
+function normalizeShiftType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'morning' || normalized === 'morning_only') return 'MORNING';
+  if (normalized === 'intermediate' || normalized === 'intermediate_only') return 'INTERMEDIATE';
+  if (normalized === 'evening' || normalized === 'afternoon' || normalized === 'afternoon_only') return 'AFTERNOON';
+  if (normalized === 'sunday' || normalized === 'sunday_12h' || normalized === 'sunday_12h_only') return 'SUNDAY_12H';
+  return normalized.toUpperCase();
+}
+
+function absenceAffectsExportShift(absence, shift) {
+  const scope = absence?.scope || 'FULL_DAY';
+  if (scope === 'FULL_DAY') return true;
+  const shiftType = normalizeShiftType(shift?.shiftType);
+  if (scope === 'MORNING_ONLY') return shiftType === 'MORNING';
+  if (scope === 'INTERMEDIATE_ONLY') return shiftType === 'INTERMEDIATE';
+  if (scope === 'AFTERNOON_ONLY') return shiftType === 'AFTERNOON';
+  if (scope === 'SUNDAY_12H_ONLY') return shiftType === 'SUNDAY_12H';
+  return false;
+}
+
+function getActiveAbsenceForDay(absenceMap, day, employeeId) {
+  const employeeAbsences = absenceMap.get(employeeId) || [];
+  return employeeAbsences.find((absence) => isDateInRange(day, absence.startDate, absence.endDate));
+}
+
+function getAbsenceExportCode(absence) {
+  if (!absence) return '';
+  if (absence.type === 'LEAVE') return 'Άδεια';
+  if (absence.type === 'SICK') return 'Ασθένεια';
+  return 'Απουσία';
+}
+
+function buildAbsenceMap(absences = []) {
+  const map = new Map();
+  (absences || [])
+    .filter((absence) => absence?.status !== 'CANCELLED')
+    .filter((absence) => absence?.employeeId && absence?.startDate && absence?.endDate)
+    .forEach((absence) => {
+      if (!map.has(absence.employeeId)) {
+        map.set(absence.employeeId, []);
+      }
+      map.get(absence.employeeId).push(absence);
+    });
+
+  for (const [employeeId, employeeAbsences] of map.entries()) {
+    map.set(
+      employeeId,
+      employeeAbsences.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate)),
+    );
+  }
+
+  return map;
+}
+
+export function buildGroupedScheduleRows({ days, employees, shifts, absences = [] }) {
   const shiftMap = new Map();
   (shifts || []).forEach((shift) => {
     const key = `${shift.date}__${shift.employeeId}`;
@@ -198,13 +265,19 @@ export function buildGroupedScheduleRows({ days, employees, shifts }) {
   const normalizedEmployees = [...(employees || [])].sort((a, b) =>
     (a.fullName || '').localeCompare(b.fullName || '', 'el'),
   );
+  const absenceMap = buildAbsenceMap(absences);
 
   return (days || []).map((day) => {
     const orderedEmployees = normalizedEmployees
       .map((employee) => {
-        const workShifts = getEmployeeDayWorkShifts(shiftMap, day, employee.id);
+        const absence = getActiveAbsenceForDay(absenceMap, day, employee.id);
+        const rawWorkShifts = getEmployeeDayWorkShifts(shiftMap, day, employee.id);
+        const workShifts = absence
+          ? rawWorkShifts.filter((shift) => !absenceAffectsExportShift(absence, shift))
+          : rawWorkShifts;
         return {
           employee,
+          absence: absence && !workShifts.length ? absence : null,
           workShifts,
           firstStart: workShifts[0]?.startTime || '',
         };
@@ -233,7 +306,12 @@ export function buildGroupedScheduleRows({ days, employees, shifts }) {
             : '-',
         )
         .join('\n'),
-      workRest: orderedEmployees.map(({ workShifts }) => (workShifts.length ? 'ΕΡΓ' : 'ΑΝ')).join('\n'),
+      workRest: orderedEmployees
+        .map(({ absence, workShifts }) => {
+          if (workShifts.length) return 'ΕΡΓ';
+          return getAbsenceExportCode(absence) || 'ΑΝ';
+        })
+        .join('\n'),
     };
   });
 }
@@ -357,9 +435,15 @@ export async function exportScheduleToPdf({
   weekDays = [],
   employees = [],
   shifts = [],
+  absences = [],
   month,
   year,
+  output = 'download',
+  onBeforeDownload,
+  exportAuthorization,
 } = {}) {
+  const safeOutput = output === 'blob' ? 'blob' : 'download';
+  assertExportAuthorized(exportAuthorization, onBeforeDownload, { requireAuditCallback: safeOutput !== 'blob' });
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
   if (!targetDays.length) {
@@ -369,7 +453,7 @@ export async function exportScheduleToPdf({
     throw new Error('\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03B9 \u03B3\u03B9\u03B1 \u03B5\u03BE\u03B1\u03B3\u03C9\u03B3\u03AE PDF.');
   }
 
-  const rows = buildGroupedScheduleRows({ days: targetDays, employees, shifts });
+  const rows = buildGroupedScheduleRows({ days: targetDays, employees, shifts, absences });
   const { default: jsPDFCtor } = await loadJsPdf();
   const doc = new jsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   await setupGreekFont(doc);
@@ -394,10 +478,17 @@ export async function exportScheduleToPdf({
     rows,
   });
 
+  if (safeOutput === 'blob') {
+    return doc.output('blob');
+  }
+
+  await onBeforeDownload?.();
   doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
+  return true;
 }
 
-export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload, exportAuthorization }) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const XLSX = await loadXlsx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
@@ -416,10 +507,12 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A3' });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
+  await onBeforeDownload?.();
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
-export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload, exportAuthorization }) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } = await loadDocx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
@@ -468,5 +561,6 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
   });
 
   const blob = await Packer.toBlob(doc);
+  await onBeforeDownload?.();
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
 }

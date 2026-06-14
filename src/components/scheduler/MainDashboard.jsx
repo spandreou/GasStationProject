@@ -243,6 +243,8 @@ export default function MainDashboard() {
     absences,
     weekHistory,
     weekTemplates,
+    publishedSchedule,
+    publishedSchedulesByWeek,
     generatorRules,
     specialDaysByDate,
     selectedHistoryWeekId,
@@ -336,14 +338,45 @@ export default function MainDashboard() {
     () => shifts.filter((shift) => weekSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, weekSet],
   );
+  const activePublishedSchedule = useMemo(() => {
+    if (publishedSchedule?.weekStart === weekStart) return publishedSchedule;
+    return publishedSchedulesByWeek?.[weekStart] || null;
+  }, [publishedSchedule, publishedSchedulesByWeek, weekStart]);
+  const publishedWeekShifts = useMemo(
+    () =>
+      (activePublishedSchedule?.shifts || [])
+        .filter((shift) => weekSet.has(shift.date))
+        .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`)),
+    [activePublishedSchedule, weekSet],
+  );
   const weekFingerprint = useMemo(() => createWeekFingerprint(weekShifts), [weekShifts]);
   const isWeekEffectivelyLocked = isWeekLocked && weekShifts.length > 0;
   const monthShifts = useMemo(
     () => shifts.filter((shift) => monthSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, monthSet],
   );
+  const publicMonthShifts = useMemo(
+    () => publishedWeekShifts.filter((shift) => monthSet.has(shift.date)),
+    [monthSet, publishedWeekShifts],
+  );
+  const publicEmployees = useMemo(() => {
+    const employeeById = new Map();
+    publishedWeekShifts.forEach((shift) => {
+      if (!shift.employeeId || employeeById.has(shift.employeeId)) return;
+      employeeById.set(shift.employeeId, {
+        id: shift.employeeId,
+        fullName: shift.employeeName || 'Άγνωστος',
+        role: 'Δημοσιευμένο πρόγραμμα',
+        isActive: true,
+      });
+    });
+    return [...employeeById.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, 'el'));
+  }, [publishedWeekShifts]);
+  const displayEmployees = isAdmin ? employees : publicEmployees;
+  const displayWeekShifts = isAdmin ? weekShifts : publishedWeekShifts;
+  const displayMonthShifts = isAdmin ? monthShifts : publicMonthShifts;
   const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
-  const visibleShifts = scheduleMode === 'month' ? monthShifts : weekShifts;
+  const visibleShifts = scheduleMode === 'month' ? displayMonthShifts : displayWeekShifts;
 
   useEffect(() => {
     previousWeekFingerprintRef.current = weekFingerprint;
@@ -375,12 +408,12 @@ export default function MainDashboard() {
   }, [isAdmin]);
 
   const weeklyAnalytics = useMemo(
-    () => calculateWeeklyTotals(weekShifts, employees, weekDays),
-    [weekShifts, employees, weekDays],
+    () => calculateWeeklyTotals(displayWeekShifts, displayEmployees, weekDays),
+    [displayEmployees, displayWeekShifts, weekDays],
   );
   const monthlyAnalytics = useMemo(
-    () => calculateWeeklyTotals(monthShifts, employees, monthDays),
-    [monthShifts, employees, monthDays],
+    () => calculateWeeklyTotals(displayMonthShifts, displayEmployees, monthDays),
+    [displayEmployees, displayMonthShifts, monthDays],
   );
   const analytics = scheduleMode === 'month' ? monthlyAnalytics : weeklyAnalytics;
   const hasExplicitEmployeeScheduleRoles = useMemo(
@@ -475,11 +508,12 @@ export default function MainDashboard() {
     execute,
     successMessage,
     errorMessageFallback,
+    pendingMessage = 'Εκτέλεση ενέργειας...',
     markAsSynced = false,
     retryAction,
   }) {
     setActionBusy(actionKey, true);
-    setSyncStatusOverride({ status: 'saving', label: 'Εκτέλεση ενέργειας...' });
+    setSyncStatusOverride({ status: 'saving', label: pendingMessage });
 
     try {
       const result = await execute();
@@ -502,8 +536,10 @@ export default function MainDashboard() {
         setSyncStatusOverride({ status: 'saved', label: '' });
       }
 
-      if (successMessage) {
-        pushToast({ type: 'success', title: 'Έγινε', message: successMessage });
+      const resolvedSuccessMessage =
+        typeof successMessage === 'function' ? successMessage(result) : successMessage;
+      if (resolvedSuccessMessage) {
+        pushToast({ type: 'success', title: 'Έγινε', message: resolvedSuccessMessage });
       }
       return true;
     } catch (error) {
@@ -589,8 +625,8 @@ export default function MainDashboard() {
       actionKey: 'copyWhatsapp',
       execute: async () => {
         const text = buildWhatsappSummary({
-          shifts: weekShifts,
-          employees,
+          shifts: displayWeekShifts,
+          employees: displayEmployees,
           weekDays,
           weekdayLabels: WEEKDAY_LABELS,
         });
@@ -599,6 +635,7 @@ export default function MainDashboard() {
       },
       successMessage: 'Το πρόγραμμα αντιγράφηκε στο clipboard για WhatsApp.',
       errorMessageFallback: 'Δεν ήταν δυνατή η αντιγραφή στο clipboard.',
+      pendingMessage: 'Αντιγραφή προγράμματος...',
       retryAction: handleCopyWhatsapp,
     });
   }
@@ -639,8 +676,8 @@ export default function MainDashboard() {
     return {
       weekDays,
       weekdayLabels: WEEKDAY_LABELS,
-      shifts: weekShifts,
-      employees,
+      shifts: displayWeekShifts,
+      employees: displayEmployees,
     };
   }
 
@@ -652,13 +689,14 @@ export default function MainDashboard() {
         await exportScheduleToPdf({
           mode: 'week',
           days: weekDays,
-          shifts: weekShifts,
-          employees,
+          shifts: displayWeekShifts,
+          employees: displayEmployees,
         });
         return true;
       },
       successMessage: 'Ολοκληρώθηκε η εξαγωγή PDF εβδομάδας.',
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF εβδομάδας.',
+      pendingMessage: 'Εξαγωγή PDF εβδομάδας...',
       retryAction: handleExportWeekPdf,
     });
   }
@@ -671,8 +709,8 @@ export default function MainDashboard() {
         await exportScheduleToPdf({
           mode: 'month',
           days: monthDays,
-          shifts: monthShifts,
-          employees,
+          shifts: displayMonthShifts,
+          employees: displayEmployees,
           month: selectedMonth,
           year: selectedYear,
         });
@@ -680,6 +718,7 @@ export default function MainDashboard() {
       },
       successMessage: 'Ολοκληρώθηκε η εξαγωγή PDF μήνα.',
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF μήνα.',
+      pendingMessage: 'Εξαγωγή PDF μήνα...',
       retryAction: handleExportMonthPdf,
     });
   }
@@ -694,6 +733,7 @@ export default function MainDashboard() {
       },
       successMessage: 'Ολοκληρώθηκε η εξαγωγή Excel.',
       errorMessageFallback: 'Αποτυχία εξαγωγής Excel.',
+      pendingMessage: 'Εξαγωγή Excel...',
       retryAction: handleExportExcel,
     });
   }
@@ -708,6 +748,7 @@ export default function MainDashboard() {
       },
       successMessage: 'Ολοκληρώθηκε η εξαγωγή Word.',
       errorMessageFallback: 'Αποτυχία εξαγωγής Word.',
+      pendingMessage: 'Εξαγωγή Word...',
       retryAction: handleExportWord,
     });
   }
@@ -727,6 +768,7 @@ export default function MainDashboard() {
         }),
       successMessage: 'Ο μηνιαίος προγραμματισμός ολοκληρώθηκε.',
       errorMessageFallback: 'Αποτυχία αυτόματης δημιουργίας μηνιαίου προγράμματος.',
+      pendingMessage: 'Δημιουργία μηνιαίου προγράμματος...',
       retryAction: handleGenerateMonthlySchedule,
       markAsSynced: true,
     });
@@ -744,6 +786,7 @@ export default function MainDashboard() {
         execute: () => saveCurrentWeekAsTemplate(name),
         successMessage: 'Το πρότυπο αποθηκεύτηκε.',
         errorMessageFallback: 'Αποτυχία αποθήκευσης προτύπου.',
+        pendingMessage: 'Αποθήκευση προτύπου...',
       });
     },
     [runActionWithFeedback, saveCurrentWeekAsTemplate],
@@ -756,6 +799,7 @@ export default function MainDashboard() {
         execute: saveCurrentWeekManually,
         successMessage: 'Η εβδομάδα αποθηκεύτηκε.',
         errorMessageFallback: 'Αποτυχία αποθήκευσης εβδομάδας.',
+        pendingMessage: 'Αποθήκευση εβδομάδας...',
         markAsSynced: true,
       }),
     [runActionWithFeedback, saveCurrentWeekManually],
@@ -768,6 +812,7 @@ export default function MainDashboard() {
         execute: generateMagicWeek,
         successMessage: 'Η αυτόματη δημιουργία εβδομάδας ολοκληρώθηκε.',
         errorMessageFallback: 'Αποτυχία αυτόματης δημιουργίας εβδομάδας.',
+        pendingMessage: 'Δημιουργία εβδομαδιαίου προγράμματος...',
         markAsSynced: true,
       }),
     [generateMagicWeek, runActionWithFeedback],
@@ -780,6 +825,7 @@ export default function MainDashboard() {
         execute: finalizeCurrentWeek,
         successMessage: 'Η εβδομάδα οριστικοποιήθηκε.',
         errorMessageFallback: 'Η οριστικοποίηση απέτυχε.',
+        pendingMessage: 'Οριστικοποίηση και δημοσίευση...',
         markAsSynced: true,
       }),
     [finalizeCurrentWeek, runActionWithFeedback],
@@ -792,6 +838,7 @@ export default function MainDashboard() {
         execute: clearWeekShifts,
         successMessage: 'Η εβδομάδα καθαρίστηκε.',
         errorMessageFallback: 'Αποτυχία καθαρισμού εβδομάδας.',
+        pendingMessage: 'Καθαρισμός εβδομάδας...',
       }),
     [clearWeekShifts, runActionWithFeedback],
   );
@@ -801,8 +848,12 @@ export default function MainDashboard() {
       runActionWithFeedback({
         actionKey: 'clearMonth',
         execute: () => clearMonthShifts({ year: selectedYear, month: selectedMonth }),
-        successMessage: 'Ο μήνας καθαρίστηκε.',
+        successMessage: (result) =>
+          result?.removedCount === 0
+            ? 'Δεν βρέθηκαν βάρδιες για καθαρισμό στον επιλεγμένο μήνα.'
+            : `Ο μήνας καθαρίστηκε (${result?.removedCount ?? 0} βάρδιες).`,
         errorMessageFallback: 'Αποτυχία καθαρισμού μήνα.',
+        pendingMessage: 'Καθαρισμός μήνα...',
       }),
     [clearMonthShifts, runActionWithFeedback, selectedMonth, selectedYear],
   );
@@ -814,6 +865,7 @@ export default function MainDashboard() {
         execute: loadSelectedTemplateIntoCurrentWeek,
         successMessage: 'Το πρότυπο φορτώθηκε στην εβδομάδα.',
         errorMessageFallback: 'Αποτυχία φόρτωσης προτύπου.',
+        pendingMessage: 'Φόρτωση προτύπου...',
         markAsSynced: true,
       }),
     [loadSelectedTemplateIntoCurrentWeek, runActionWithFeedback],
@@ -1014,7 +1066,7 @@ export default function MainDashboard() {
           <div className="order-1 min-w-0 xl:order-1 xl:w-[var(--scheduler-sidebar-width)] xl:basis-[var(--scheduler-sidebar-width)] xl:shrink-0">
             <div className="hidden md:block">
               <SchedulerSidebar
-                employees={employees}
+                employees={displayEmployees}
                 shiftTemplates={shiftTemplates}
                 absences={absences}
                 isAbsencesLoading={isAbsencesLoading}
@@ -1067,7 +1119,7 @@ export default function MainDashboard() {
                 monthDays={monthDays}
                 shifts={visibleShifts}
                 shiftTemplates={shiftTemplates}
-                employees={employees}
+                employees={displayEmployees}
                 weekHistory={weekHistory}
                 weekTemplates={weekTemplates}
                 selectedHistoryWeekId={selectedHistoryWeekId}
@@ -1125,7 +1177,7 @@ export default function MainDashboard() {
                   />
                 ) : null}
                 <AnalyticsPanel
-                  employees={employees}
+                  employees={displayEmployees}
                   mode={scheduleMode}
                   onModeChange={setScheduleMode}
                   selectedMonth={selectedMonth}

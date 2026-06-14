@@ -13,6 +13,7 @@ export const WEEK_HISTORY_COLLECTION = 'week_history';
 export const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 export const SCHEDULER_SETTINGS_COLLECTION = 'scheduler_settings';
 export const AUDIT_LOGS_COLLECTION = 'audit_logs';
+export const PUBLISHED_SCHEDULES_COLLECTION = 'published_schedules';
 export const DEFAULT_SCHEDULER_SETTINGS_DOC = 'default';
 
 const MAX_IN_QUERY_VALUES = 10;

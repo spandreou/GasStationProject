@@ -5,6 +5,7 @@ import {
   auditLogRepository,
   authRepository,
   employeesRepository,
+  publishedSchedulesRepository,
   schedulerSettingsRepository,
   shiftsRepository,
   templatesRepository,
@@ -97,8 +98,24 @@ const {
 
 const { writeAuditLog } = auditLogRepository;
 
+const {
+  deleteByWeekStarts: deletePublishedSchedulesByWeekStarts,
+  publishWeekSchedule,
+  subscribePublishedSchedule,
+} = publishedSchedulesRepository;
+
 function getCurrentWeekStart() {
   return getIsoDate(getMonday(new Date()));
+}
+
+function getWeekStartsForDates(dates = []) {
+  return [
+    ...new Set(
+      (dates || [])
+        .filter(Boolean)
+        .map((dateValue) => getIsoDate(getMonday(new Date(`${dateValue}T00:00:00`)))),
+    ),
+  ];
 }
 
 function getCurrentYearMonth() {
@@ -333,6 +350,8 @@ export const useSchedulerStore = create((set, get) => ({
   attendanceHistory: [],
   weekHistory: [],
   weekTemplates: [],
+  publishedSchedule: null,
+  publishedSchedulesByWeek: {},
   generatorRules: { ...defaultGeneratorRules },
   specialDaysByDate: {},
   selectedHistoryWeekId: '',
@@ -362,6 +381,7 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeAbsences: null,
   _unsubscribeAnnouncements: null,
   _unsubscribeSchedulerSettings: null,
+  _unsubscribePublishedSchedule: null,
   _unsubscribeAuth: null,
   _shiftTemplatesRetryTimer: null,
   _shiftTemplatesRetryCount: 0,
@@ -454,6 +474,36 @@ export const useSchedulerStore = create((set, get) => ({
     return unsubscribeAbsences;
   },
 
+  startPublishedScheduleSubscription: (weekStart = get().weekStart) => {
+    if (!isFirebaseConfigured || !weekStart) return null;
+
+    const existingUnsubscribe = get()._unsubscribePublishedSchedule;
+    existingUnsubscribe?.();
+
+    const unsubscribePublishedSchedule = subscribePublishedSchedule(
+      weekStart,
+      (publishedSchedule) =>
+        set((state) => ({
+          publishedSchedule,
+          publishedSchedulesByWeek: {
+            ...state.publishedSchedulesByWeek,
+            [weekStart]: publishedSchedule,
+          },
+        })),
+      () =>
+        set((state) => ({
+          publishedSchedule: null,
+          publishedSchedulesByWeek: {
+            ...state.publishedSchedulesByWeek,
+            [weekStart]: null,
+          },
+        })),
+    );
+
+    set({ _unsubscribePublishedSchedule: unsubscribePublishedSchedule });
+    return unsubscribePublishedSchedule;
+  },
+
   startAdminDataSubscriptions: () => {
     if (!isFirebaseConfigured) return;
 
@@ -517,6 +567,7 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const unsubscribeAbsences = get().startAbsencesSubscription({ adminOnly: false });
+    const unsubscribePublishedSchedule = get().startPublishedScheduleSubscription(get().weekStart);
 
     const unsubscribeAuth = subscribeAdminAuth(
       async (user) => {
@@ -581,6 +632,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({
       _unsubscribeAbsences: unsubscribeAbsences,
+      _unsubscribePublishedSchedule: unsubscribePublishedSchedule,
       _unsubscribeAuth: unsubscribeAuth,
     });
   },
@@ -593,6 +645,7 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeAbsences,
       _unsubscribeAnnouncements,
       _unsubscribeSchedulerSettings,
+      _unsubscribePublishedSchedule,
       _unsubscribeAuth,
       _shiftTemplatesRetryTimer,
     } = get();
@@ -605,10 +658,12 @@ export const useSchedulerStore = create((set, get) => ({
     _unsubscribeAbsences?.();
     _unsubscribeAnnouncements?.();
     _unsubscribeSchedulerSettings?.();
+    _unsubscribePublishedSchedule?.();
     _unsubscribeAuth?.();
     set({
       _shiftTemplatesRetryTimer: null,
       _shiftTemplatesRetryCount: 0,
+      _unsubscribePublishedSchedule: null,
     });
   },
 
@@ -644,39 +699,58 @@ export const useSchedulerStore = create((set, get) => ({
 
   setWeekStart: async (weekStart) => {
     set({ weekStart });
+    get().startPublishedScheduleSubscription(weekStart);
     await get().refreshWeekLockStatus();
   },
 
   setWeekFromDate: async (dateValue) => {
     if (!dateValue) return;
     const monday = getMonday(new Date(`${dateValue}T00:00:00`));
-    set({ weekStart: getIsoDate(monday) });
+    const nextWeekStart = getIsoDate(monday);
+    set({ weekStart: nextWeekStart });
+    get().startPublishedScheduleSubscription(nextWeekStart);
     await get().refreshWeekLockStatus();
   },
 
   goToPreviousWeek: async () => {
     const current = new Date(`${get().weekStart}T00:00:00`);
     current.setDate(current.getDate() - 7);
-    set({ weekStart: getIsoDate(current) });
+    const nextWeekStart = getIsoDate(current);
+    set({ weekStart: nextWeekStart });
+    get().startPublishedScheduleSubscription(nextWeekStart);
     await get().refreshWeekLockStatus();
   },
 
   goToNextWeek: async () => {
     const current = new Date(`${get().weekStart}T00:00:00`);
     current.setDate(current.getDate() + 7);
-    set({ weekStart: getIsoDate(current) });
+    const nextWeekStart = getIsoDate(current);
+    set({ weekStart: nextWeekStart });
+    get().startPublishedScheduleSubscription(nextWeekStart);
     await get().refreshWeekLockStatus();
   },
 
   goToCurrentWeek: async () => {
-    set({ weekStart: getCurrentWeekStart() });
+    const nextWeekStart = getCurrentWeekStart();
+    set({ weekStart: nextWeekStart });
+    get().startPublishedScheduleSubscription(nextWeekStart);
     await get().refreshWeekLockStatus();
   },
 
   refreshWeekLockStatus: async () => {
+    if (!get().isAdmin) {
+      set({ isWeekLocked: false });
+      return;
+    }
+
     const weekStart = get().weekStart;
     const weekDays = getWeekDays(weekStart);
-    const finalizedInFirestore = await isWeekFinalized(weekStart);
+    let finalizedInFirestore = false;
+    try {
+      finalizedInFirestore = await isWeekFinalized(weekStart);
+    } catch {
+      finalizedInFirestore = false;
+    }
     const hasWeekData = hasWeekShiftData(get().shifts, weekDays);
     set({ isWeekLocked: finalizedInFirestore && hasWeekData });
   },
@@ -1651,14 +1725,25 @@ export const useSchedulerStore = create((set, get) => ({
     const weekStart = get().weekStart;
     if (!weekStart) return;
 
-    if (isWeekEditingLocked(get(), getWeekDays(weekStart))) {
-      set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί.' });
-      return;
-    }
-
     const weekDays = getWeekDays(weekStart);
     const weekSet = new Set(weekDays);
     const weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
+
+    if (isWeekEditingLocked(get(), weekDays)) {
+      try {
+        await publishWeekSchedule({
+          weekStart,
+          weekDays,
+          shifts: weekShifts,
+          employees: get().employees,
+        });
+        get().startPublishedScheduleSubscription(weekStart);
+        set({ warningMessage: 'Η εβδομάδα είναι ήδη οριστικοποιημένη και το δημόσιο πρόγραμμα ενημερώθηκε.' });
+      } catch {
+        set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί, αλλά η δημόσια δημοσίευση απέτυχε.' });
+      }
+      return;
+    }
 
     const entries = weekShifts.map((shift) => ({
       employeeId: shift.employeeId,
@@ -1687,12 +1772,24 @@ export const useSchedulerStore = create((set, get) => ({
     });
 
     if (response.alreadyFinalized) {
-      set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί.' });
+      try {
+        await publishWeekSchedule({
+          weekStart,
+          weekDays,
+          shifts: weekShifts,
+          employees: get().employees,
+        });
+        get().startPublishedScheduleSubscription(weekStart);
+        set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί και το δημόσιο πρόγραμμα ενημερώθηκε.' });
+      } catch {
+        set({ warningMessage: 'Η εβδομάδα έχει ήδη οριστικοποιηθεί, αλλά η δημόσια δημοσίευση απέτυχε.' });
+      }
       await get().refreshWeekLockStatus();
       return;
     }
 
     let snapshotSaved = true;
+    let publicSchedulePublished = true;
     try {
       await get().saveCurrentWeekSnapshot('finalize');
       await get().loadWeekHistory();
@@ -1700,10 +1797,27 @@ export const useSchedulerStore = create((set, get) => ({
       snapshotSaved = false;
     }
 
+    try {
+      await publishWeekSchedule({
+        weekStart,
+        weekDays,
+        shifts: weekShifts,
+        employees: get().employees,
+      });
+      get().startPublishedScheduleSubscription(weekStart);
+    } catch {
+      publicSchedulePublished = false;
+    }
+
     set({
-      warningMessage: snapshotSaved
-        ? `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές και αποθηκεύτηκε snapshot ιστορικού.`
-        : `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές, αλλά το snapshot ιστορικού απέτυχε.`,
+      warningMessage:
+        snapshotSaved && publicSchedulePublished
+          ? `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές, αποθηκεύτηκε snapshot ιστορικού και δημοσιεύτηκε το δημόσιο πρόγραμμα.`
+          : snapshotSaved
+            ? `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές και αποθηκεύτηκε snapshot ιστορικού, αλλά η δημόσια δημοσίευση απέτυχε.`
+            : publicSchedulePublished
+              ? `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές και δημοσιεύτηκε το δημόσιο πρόγραμμα, αλλά το snapshot ιστορικού απέτυχε.`
+              : `Η εβδομάδα οριστικοποιήθηκε. Αρχειοθετήθηκαν ${response.created} εγγραφές, αλλά το snapshot ιστορικού και η δημόσια δημοσίευση απέτυχαν.`,
       isWeekLocked: true,
     });
     await get().loadAttendanceHistory();
@@ -1770,20 +1884,23 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const monthSet = new Set(monthDays);
+    const publishedWeekStarts = getWeekStartsForDates(monthDays);
     set({ isSaving: true });
     const removedById = new Map();
+    let removedPublishedWeekCount = 0;
 
     try {
       const removedShifts = await removeShiftsByDates(monthDays);
       removedShifts.forEach((shift) => {
         if (shift?.id) removedById.set(shift.id, shift);
       });
+      removedPublishedWeekCount = await deletePublishedSchedulesByWeekStarts(publishedWeekStarts);
       await recordAuditLog(get, {
         action: 'schedule.clear_month',
         target: { collection: 'shifts', scope: `${numericYear}-${String(numericMonth + 1).padStart(2, '0')}` },
         before: [...removedById.values()],
         after: [],
-        metadata: { removedShiftCount: removedById.size },
+        metadata: { removedShiftCount: removedById.size, removedPublishedWeekCount },
       });
     } catch (error) {
       set({ warningMessage: error?.message || 'Αποτυχία καθαρισμού μήνα.' });
@@ -1793,14 +1910,26 @@ export const useSchedulerStore = create((set, get) => ({
     }
 
     const monthLabel = String(numericMonth + 1).padStart(2, '0');
+    const removedShiftCount = removedById.size;
     set((state) => ({
       shifts: state.shifts.filter((shift) => !monthSet.has(shift.date)),
-      warningMessage: `Οι βάρδιες για ${monthLabel}/${numericYear} καθαρίστηκαν.`,
-      undoState: buildUndoState('clear_month', 'Ο μήνας καθαρίστηκε.', { shifts: [...removedById.values()] }),
+      publishedSchedule: publishedWeekStarts.includes(state.publishedSchedule?.weekStart) ? null : state.publishedSchedule,
+      publishedSchedulesByWeek: {
+        ...state.publishedSchedulesByWeek,
+        ...Object.fromEntries(publishedWeekStarts.map((weekStart) => [weekStart, null])),
+      },
+      warningMessage:
+        removedShiftCount > 0
+          ? `Οι βάρδιες για ${monthLabel}/${numericYear} καθαρίστηκαν.`
+          : `Δεν βρέθηκαν βάρδιες για ${monthLabel}/${numericYear}.`,
+      undoState:
+        removedShiftCount > 0
+          ? buildUndoState('clear_month', 'Ο μήνας καθαρίστηκε.', { shifts: [...removedById.values()] })
+          : state.undoState,
     }));
 
     await get().refreshWeekLockStatus();
-    return true;
+    return { ok: true, removedCount: removedShiftCount, removedPublishedWeekCount };
   },
 
   addAnnouncement: async ({ title, body }) => {
@@ -1982,6 +2111,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     const weekDays = getWeekDays(snapshot.weekStart);
     set({ isSaving: true, weekStart: snapshot.weekStart });
+    get().startPublishedScheduleSubscription(snapshot.weekStart);
     try {
       const existingWeekShifts = await fetchShiftsByDates(weekDays);
       await replaceShiftsBatch({

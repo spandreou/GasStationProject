@@ -989,28 +989,33 @@ export default function WeeklyGrid({
                 }}
                 className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
               />
-              <select
-                className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
-                value={selectedHistoryWeekId}
-                onChange={(event) => onSelectHistoryWeek?.(event.target.value)}
-              >
-                <option value="">Ιστορικό εβδομάδων</option>
-                {weekHistory.map((item) => (
-                  <option key={item.id} value={item.weekId}>
-                    {formatDateGreek(item.weekStart)} ({getSnapshotSourceLabel(item.source)})
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={onLoadSelectedHistoryWeek}
-                disabled={!canManage || !selectedHistoryWeekId}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
-              >
-                Φόρτωση Εβδομάδας
-              </button>
+              {canManage ? (
+                <>
+                  <select
+                    className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    value={selectedHistoryWeekId}
+                    onChange={(event) => onSelectHistoryWeek?.(event.target.value)}
+                  >
+                    <option value="">Ιστορικό εβδομάδων</option>
+                    {weekHistory.map((item) => (
+                      <option key={item.id} value={item.weekId}>
+                        {formatDateGreek(item.weekStart)} ({getSnapshotSourceLabel(item.source)})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={onLoadSelectedHistoryWeek}
+                    disabled={!selectedHistoryWeekId}
+                    className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                  >
+                    Φόρτωση Εβδομάδας
+                  </button>
+                </>
+              ) : null}
             </div>
 
+            {canManage ? (
             <div className="flex flex-wrap items-center gap-2 md:justify-end">
               <select
                 className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
@@ -1053,6 +1058,7 @@ export default function WeeklyGrid({
                 Αυτόματη Δημιουργία
               </button>
             </div>
+            ) : null}
           </div>
 
           <div className="mb-3 flex items-center gap-2 md:hidden">
@@ -1166,21 +1172,23 @@ export default function WeeklyGrid({
               </select>
             </label>
 
-            <button
-              type="button"
-              onClick={onGenerateMonthlySchedule}
-              disabled={!canManage}
-              data-testid="generate-monthly-schedule"
-              className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Αυτόματη δημιουργία μηνιαίου προγράμματος
-            </button>
+            {canManage ? (
+              <button
+                type="button"
+                onClick={onGenerateMonthlySchedule}
+                data-testid="generate-monthly-schedule"
+                className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600"
+              >
+                Αυτόματη δημιουργία μηνιαίου προγράμματος
+              </button>
+            ) : null}
           </div>
 
-          <div
-            data-testid="monthly-role-summary"
-            className="mb-4 rounded-xl border border-slate-300/70 bg-white/45 px-3 py-2.5 text-xs text-slate-900 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-100"
-          >
+          {canManage ? (
+            <div
+              data-testid="monthly-role-summary"
+              className="mb-4 rounded-xl border border-slate-300/70 bg-white/45 px-3 py-2.5 text-xs text-slate-900 dark:border-cyan-300/30 dark:bg-slate-900/40 dark:text-slate-100"
+            >
             <p className="mb-2 font-bold">Ρόλοι από κανόνες εργαζομένων</p>
             {monthlyRoleSummary.hasExplicitRoles ? (
               <div className="grid gap-2 md:grid-cols-3">
@@ -1219,7 +1227,8 @@ export default function WeeklyGrid({
                 Δεν έχουν οριστεί ρόλοι ανά εργαζόμενο. Ο generator θα χρησιμοποιήσει legacy/fallback σειρά.
               </p>
             )}
-          </div>
+            </div>
+          ) : null}
 
           <div className="space-y-4">
             {monthWeekRows.map((weekRow) => (

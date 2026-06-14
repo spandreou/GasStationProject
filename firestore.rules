@@ -282,6 +282,18 @@ service cloud.firestore {
         isOptionalString('savedBy');
     }
 
+    function validPublishedSchedule(scheduleId) {
+      return request.resource.data.keys().hasAll(['weekStart', 'weekEnd', 'shiftCount', 'shifts']) &&
+        request.resource.data.keys().hasOnly([
+          'weekStart', 'weekEnd', 'shiftCount', 'shifts', 'publishedAt', 'updatedAt'
+        ]) &&
+        request.resource.data.weekStart == scheduleId &&
+        isIsoDate(request.resource.data.weekStart) &&
+        isIsoDate(request.resource.data.weekEnd) &&
+        request.resource.data.shiftCount is number &&
+        request.resource.data.shifts is list;
+    }
+
     function validTemplate() {
       return request.resource.data.keys().hasOnly([
         'name', 'label', 'weekStart', 'shifts', 'createdBy', 'createdAt', 'updatedAt',
@@ -350,6 +362,12 @@ service cloud.firestore {
     match /shiftTemplates/{templateId} {
       allow read: if isAdmin();
       allow create, update: if isAdmin() && validTemplate();
+      allow delete: if isAdmin();
+    }
+
+    match /published_schedules/{resourceId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && validPublishedSchedule(resourceId);
       allow delete: if isAdmin();
     }
 

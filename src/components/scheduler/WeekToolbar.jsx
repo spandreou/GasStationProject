@@ -338,118 +338,102 @@ export default function WeekToolbar({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-3">
-          <ToolbarGroup title="Editing">
-            {isAdmin ? (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <LoadingButton
-                    icon={Save}
-                    label="Αποθήκευση"
-                    loadingLabel="Αποθήκευση..."
-                    onClick={onSaveWeek}
-                    className={primaryButtonClass}
-                    isLoading={actionLoading.saveWeek}
-                  />
-
-                  <LoadingButton
-                    icon={Sparkles}
-                    label="Αυτόματη Δημιουργία"
-                    loadingLabel="Δημιουργία..."
-                    onClick={onMagicWand}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.magicWeek}
-                  />
-                </div>
-
-                <select
-                  value={selectedTemplateId}
-                  onChange={(event) => onSelectTemplate?.(event.target.value)}
-                  className="input-glass w-full rounded-lg border border-white/35 bg-white/40 px-2.5 py-2 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
-                >
-                  <option value="">Επιλογή template...</option>
-                  {weekTemplates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name || 'Template'}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <LoadingButton
-                    icon={FileText}
-                    label="Φόρτωση Template"
-                    loadingLabel="Φόρτωση..."
-                    onClick={() => onLoadSelectedTemplate?.()}
-                    disabled={!canLoadTemplate}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.loadTemplate}
-                  />
-
-                  <LoadingButton
-                    icon={Save}
-                    label="Save as Template"
-                    loadingLabel="Αποθήκευση..."
-                    onClick={handleSaveTemplate}
-                    className={neutralButtonClass}
-                    isLoading={actionLoading.saveTemplate}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="rounded-lg border border-slate-300/70 bg-white/45 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/25 dark:bg-slate-900/40 dark:text-slate-300">
-                Read-only preview. Για επεξεργασία, κάνε είσοδο ως διαχειριστής.
-              </div>
-            )}
-          </ToolbarGroup>
-
-          <ToolbarGroup title="Finalize / Share">
-            {isAdmin ? (
-              <>
+        {isAdmin ? (
+          <div className="mt-3 grid gap-3 xl:grid-cols-3">
+            <ToolbarGroup title="Editing">
+              <div className="grid grid-cols-2 gap-2">
                 <LoadingButton
-                  icon={FolderCheck}
-                  label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
-                  loadingLabel="Οριστικοποίηση..."
-                  onClick={() =>
-                    setConfirmDialog({
-                      tone: 'warning',
-                      title: 'Οριστικοποίηση εβδομάδας',
-                      message: 'Θέλεις να οριστικοποιήσεις αυτή την εβδομάδα;',
-                      details: 'Η εβδομάδα θα κλειδώσει και οι αλλαγές θα περιοριστούν.',
-                      confirmLabel: 'Ναι, οριστικοποίηση',
-                      onConfirm: onFinalizeWeek,
-                    })
-                  }
-                  disabled={isWeekLocked}
-                  className={finalizeButtonClass}
-                  isLoading={actionLoading.finalizeWeek}
+                  icon={Save}
+                  label="Αποθήκευση"
+                  loadingLabel="Αποθήκευση..."
+                  onClick={onSaveWeek}
+                  className={primaryButtonClass}
+                  isLoading={actionLoading.saveWeek}
                 />
 
                 <LoadingButton
-                  icon={Copy}
-                  label="Αντιγραφή για WhatsApp"
-                  loadingLabel="Αντιγραφή..."
-                  onClick={onCopyWhatsapp}
-                  className={infoButtonClass}
-                  isLoading={actionLoading.copyWhatsapp}
+                  icon={Sparkles}
+                  label="Αυτόματη Δημιουργία"
+                  loadingLabel="Δημιουργία..."
+                  onClick={onMagicWand}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.magicWeek}
                 />
-
-                <ExportDropdown
-                  onExportWeekPdf={onExportWeekPdf}
-                  onExportMonthPdf={onExportMonthPdf}
-                  onExportExcel={onExportExcel}
-                  onExportWord={onExportWord}
-                  actionLoading={actionLoading}
-                />
-              </>
-            ) : (
-              <div className="rounded-lg border border-slate-300/70 bg-white/45 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/25 dark:bg-slate-900/40 dark:text-slate-300">
-                Read-only preview. Οι εξαγωγές είναι διαθέσιμες μόνο σε διαχειριστή.
               </div>
-            )}
-          </ToolbarGroup>
 
-          {isAdmin ? (
+              <select
+                value={selectedTemplateId}
+                onChange={(event) => onSelectTemplate?.(event.target.value)}
+                className="input-glass w-full rounded-lg border border-white/35 bg-white/40 px-2.5 py-2 text-xs text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+              >
+                <option value="">Επιλογή template...</option>
+                {weekTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name || 'Template'}
+                  </option>
+                ))}
+              </select>
+
+              <div className="grid grid-cols-2 gap-2">
+                <LoadingButton
+                  icon={FileText}
+                  label="Φόρτωση Template"
+                  loadingLabel="Φόρτωση..."
+                  onClick={() => onLoadSelectedTemplate?.()}
+                  disabled={!canLoadTemplate}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.loadTemplate}
+                />
+
+                <LoadingButton
+                  icon={Save}
+                  label="Save as Template"
+                  loadingLabel="Αποθήκευση..."
+                  onClick={handleSaveTemplate}
+                  className={neutralButtonClass}
+                  isLoading={actionLoading.saveTemplate}
+                />
+              </div>
+            </ToolbarGroup>
+
+            <ToolbarGroup title="Finalize / Share">
+              <LoadingButton
+                icon={FolderCheck}
+                label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
+                loadingLabel="Οριστικοποίηση..."
+                onClick={() =>
+                  setConfirmDialog({
+                    tone: 'warning',
+                    title: 'Οριστικοποίηση εβδομάδας',
+                    message: 'Θέλεις να οριστικοποιήσεις αυτή την εβδομάδα;',
+                    details: 'Η εβδομάδα θα κλειδώσει και οι αλλαγές θα περιοριστούν.',
+                    confirmLabel: 'Ναι, οριστικοποίηση',
+                    onConfirm: onFinalizeWeek,
+                  })
+                }
+                disabled={isWeekLocked}
+                className={finalizeButtonClass}
+                isLoading={actionLoading.finalizeWeek}
+              />
+
+              <LoadingButton
+                icon={Copy}
+                label="Αντιγραφή για WhatsApp"
+                loadingLabel="Αντιγραφή..."
+                onClick={onCopyWhatsapp}
+                className={infoButtonClass}
+                isLoading={actionLoading.copyWhatsapp}
+              />
+
+              <ExportDropdown
+                onExportWeekPdf={onExportWeekPdf}
+                onExportMonthPdf={onExportMonthPdf}
+                onExportExcel={onExportExcel}
+                onExportWord={onExportWord}
+                actionLoading={actionLoading}
+              />
+            </ToolbarGroup>
+
             <ToolbarGroup title="Danger Zone">
               <LoadingButton
                 icon={Trash2}
@@ -491,8 +475,8 @@ export default function WeekToolbar({
                 isLoading={actionLoading.clearMonth}
               />
             </ToolbarGroup>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </header>
 
       <ConfirmDialog

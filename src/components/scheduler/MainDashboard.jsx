@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, ShieldCheck, WifiOff } from 'lucide-react';
+import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, WifiOff } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
@@ -1149,8 +1149,6 @@ export default function MainDashboard() {
     };
   }, [lastSavedAt, syncStatusOverride.label, syncStatusOverride.status]);
 
-  const showReadOnlyBanner = !isAdmin && !isAdminTransitioning && isFirebaseConfigured && !prioritizedStatusBanner;
-
   if (isLoading || isAuthLoading) {
     return <p className="p-8 text-center font-medium text-slate-900 dark:text-slate-100">Φόρτωση προγράμματος...</p>;
   }
@@ -1214,17 +1212,6 @@ export default function MainDashboard() {
             message={firebaseConfigErrorMessage || 'Η σύνδεση με τη βάση δεν είναι διαθέσιμη.'}
             impact="Το dashboard εμφανίζεται, αλλά δεδομένα και αποθήκευση μπορεί να λείπουν."
             nextAction="Έλεγξε τα env vars στο local ή στο deployment environment."
-          />
-        ) : null}
-
-        {showReadOnlyBanner ? (
-          <MessageBanner
-            icon={ShieldCheck}
-            tone="info"
-            title="Read-only πρόσβαση"
-            message="Το περιβάλλον είναι σε προβολή χωρίς δικαίωμα επεξεργασίας."
-            impact="Τα admin-only actions είναι κλειδωμένα μέχρι login διαχειριστή."
-            nextAction="Αν χρειάζεσαι αλλαγές, κάνε είσοδο ως διαχειριστής από το toolbar."
           />
         ) : null}
 

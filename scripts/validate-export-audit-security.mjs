@@ -38,7 +38,9 @@ assert(mainDashboard.includes('adminUser?.uid'), 'Export authorization must be b
 assert(!mainDashboard.includes('VITE_ADMIN_EMAIL') && !mainDashboard.includes('adminEmail ==='), 'Exports must not use email-based admin checks.');
 
 assert(weekToolbar.includes('{isAdmin ? (') && weekToolbar.includes('<ExportDropdown'), 'Export dropdown must only render for admins.');
-assert(weekToolbar.includes('Read-only preview'), 'Non-admin toolbar must remain read-only.');
+assert(!weekToolbar.includes('Read-only preview'), 'Non-admin toolbar must not show placeholder export/editing panels.');
+assert(!mainDashboard.includes('Το περιβάλλον είναι σε προβολή χωρίς δικαίωμα επεξεργασίας.'), 'Public dashboard must not show the read-only access banner.');
+assert(!mainDashboard.includes('Τα admin-only actions είναι κλειδωμένα μέχρι login διαχειριστή.'), 'Public dashboard must not show admin-only lock banner text.');
 
 assert(exportService.includes('assertExportAuthorized'), 'Active exportService exports must require explicit authorization.');
 assert(exportUtils.includes('assertExportAuthorized'), 'Legacy exportUtils exports must require explicit authorization.');

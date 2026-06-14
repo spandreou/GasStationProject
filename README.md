@@ -198,6 +198,7 @@ docker compose up -d --build
 - `docs/self-hosting-bp-kallis.md`
 - `docs/saas-tenant-foundation.md`
 - `docs/saas-security-qa-checklist.md`
+- `docs/monthly-pdf-archive-runbook.md`
 
 ## SaaS Tenant Foundation
 

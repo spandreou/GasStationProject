@@ -6,6 +6,7 @@ import useResizableLayout from '../../hooks/useResizableLayout';
 import useToastQueue from '../../hooks/useToastQueue';
 import { exportAuditRepository, runtimeEnvironmentRepository } from '../../repositories';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
+import { createDynamicImportRecoveryError, requestDynamicImportRecovery } from '../../utils/dynamicImportRecovery';
 import { getMonthDays } from '../../utils/scheduleUtils';
 import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
 import { formatDateGreek, getWeekDays } from '../../utils/time';
@@ -41,7 +42,13 @@ let exportServicePromise;
 
 function loadExportService() {
   if (!exportServicePromise) {
-    exportServicePromise = import('../../utils/exportService');
+    exportServicePromise = import('../../utils/exportService').catch((error) => {
+      exportServicePromise = undefined;
+      if (requestDynamicImportRecovery(error)) {
+        throw createDynamicImportRecoveryError();
+      }
+      throw error;
+    });
   }
   return exportServicePromise;
 }

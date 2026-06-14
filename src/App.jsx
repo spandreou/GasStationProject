@@ -6,6 +6,7 @@ import RouteNoticePage from './components/auth/RouteNoticePage';
 import SelectTenantPage from './components/auth/SelectTenantPage';
 import TenantGate from './components/auth/TenantGate';
 import MainDashboard from './components/scheduler/MainDashboard';
+import { requestDynamicImportRecovery } from './utils/dynamicImportRecovery';
 import { getCurrentTenantHostContext } from './utils/tenantHostContext';
 
 const Hyperspeed = lazy(() => import('./components/background/Hyperspeed'));
@@ -109,6 +110,25 @@ export default function App() {
       } else if (typeof mediaQuery.removeListener === 'function') {
         mediaQuery.removeListener(updateBackgroundMode);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleChunkError = (event) => {
+      const error = event?.reason || event?.error || event;
+      if (requestDynamicImportRecovery(error) && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('error', handleChunkError);
+    window.addEventListener('unhandledrejection', handleChunkError);
+
+    return () => {
+      window.removeEventListener('error', handleChunkError);
+      window.removeEventListener('unhandledrejection', handleChunkError);
     };
   }, []);
 

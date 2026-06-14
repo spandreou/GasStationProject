@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const SIDEBAR_STORAGE_KEY = 'gasStation.scheduler.sidebarWidth';
 const SHELL_MODE_STORAGE_KEY = 'gasStation.scheduler.shellWidthMode';
-const SIDEBAR_MIN_WIDTH = 240;
-const SIDEBAR_DEFAULT_WIDTH = 300;
-const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_MIN_WIDTH = 320;
+const SIDEBAR_DEFAULT_WIDTH = 340;
+const SIDEBAR_MAX_WIDTH = 460;
 const DESKTOP_RESIZE_MIN_WIDTH = 1024;
 
 const SHELL_WIDTH_CLASSES = {
@@ -31,13 +31,7 @@ function readStoredSidebarWidth() {
 }
 
 function readStoredShellMode() {
-  if (typeof window === 'undefined') return 'normal';
-  try {
-    const value = window.localStorage.getItem(SHELL_MODE_STORAGE_KEY);
-    return SHELL_WIDTH_CLASSES[value] ? value : 'normal';
-  } catch {
-    return 'normal';
-  }
+  return 'wide';
 }
 
 export default function useResizableLayout() {

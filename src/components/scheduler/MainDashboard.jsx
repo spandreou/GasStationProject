@@ -11,7 +11,6 @@ import { formatDateGreek, getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AnnouncementBoard from './AnnouncementBoard';
 import AnalyticsPanel from './AnalyticsPanel';
-import HistoryView from './HistoryView';
 import SchedulingRulesPanel from './SchedulingRulesPanel';
 import SchedulerSidebar from './SchedulerSidebar';
 import SpecialDaysPanel from './SpecialDaysPanel';
@@ -23,18 +22,12 @@ import ToastStack from '../feedback/ToastStack';
 const AdminLoginModal = lazy(() => import('./AdminLoginModal'));
 const AdminDndShell = lazy(() => import('./AdminDndShell'));
 const EmployeeProfileModal = lazy(() => import('./EmployeeProfileModal'));
-const WeekHistoryViewer = lazy(() => import('./WeekHistoryViewer'));
+const ProgramHistoryPanel = lazy(() => import('./ProgramHistoryPanel'));
 
 const isFirebaseConfigured = runtimeEnvironmentRepository.isPersistenceConfigured();
 const firebaseConfigErrorMessage = runtimeEnvironmentRepository.getPersistenceErrorMessage();
 const adminEmail = runtimeEnvironmentRepository.getConfiguredAdminEmail();
 const isDemoMode = runtimeEnvironmentRepository.isDemoMode();
-
-const SHELL_WIDTH_MODE_OPTIONS = [
-  { value: 'narrow', label: 'Στενό' },
-  { value: 'normal', label: 'Κανονικό' },
-  { value: 'wide', label: 'Φαρδύ' },
-];
 
 let exportServicePromise;
 
@@ -220,9 +213,7 @@ export default function MainDashboard() {
     isResizingSidebar,
     mainPanelRef,
     scheduleDensity,
-    shellWidthMode,
     shellWidthClass,
-    setShellWidthMode,
     handleSidebarResizeStart,
     handleSidebarResizeKeyDown,
   } = useResizableLayout();
@@ -251,9 +242,8 @@ export default function MainDashboard() {
     selectedTemplateId,
     sundayRuleViolations,
     announcements,
-    attendanceHistory,
-    historyFilters,
-    isHistoryLoading,
+    monthlyScheduleExports,
+    isMonthlyScheduleExportsLoading,
     isAbsencesLoading,
     absencesWarningMessage,
     isWeekLocked,
@@ -304,9 +294,11 @@ export default function MainDashboard() {
     assignShiftFromTemplate,
     deleteAnnouncement,
     deleteShiftTemplate,
-    setHistoryFilters,
     setSelectedHistoryWeekId,
     setSelectedTemplateId,
+    loadMonthlyScheduleExports,
+    saveMonthlySchedulePdfArchive,
+    getMonthlyScheduleExportUrl,
     loadSelectedHistoryWeekToGrid,
     saveCurrentWeekManually,
     saveCurrentWeekAsTemplate,
@@ -756,8 +748,8 @@ export default function MainDashboard() {
   async function handleGenerateMonthlySchedule() {
     await runActionWithFeedback({
       actionKey: 'magicMonth',
-      execute: () =>
-        generateMagicMonth({
+      execute: async () => {
+        const generationResult = await generateMagicMonth({
           month: selectedMonth,
           year: selectedYear,
           roleConfig: hasExplicitEmployeeScheduleRoles ? {} : monthlyRoleConfig,
@@ -765,12 +757,68 @@ export default function MainDashboard() {
             ...generatorRules,
             specialDaysByDate,
           },
-        }),
-      successMessage: 'Ο μηνιαίος προγραμματισμός ολοκληρώθηκε.',
+        });
+
+        try {
+          const { exportScheduleToPdf } = await loadExportService();
+          const monthShiftsForArchive = generationResult?.shifts || [];
+          const monthDaysForArchive = generationResult?.monthDays?.length ? generationResult.monthDays : monthDays;
+          const { blob, fileName } = await exportScheduleToPdf({
+            mode: 'month',
+            days: monthDaysForArchive,
+            shifts: monthShiftsForArchive,
+            employees,
+            month: selectedMonth,
+            year: selectedYear,
+            download: false,
+          });
+
+          await saveMonthlySchedulePdfArchive({
+            year: selectedYear,
+            month: selectedMonth,
+            pdfBlob: blob,
+            fileName,
+            shiftCount: monthShiftsForArchive.length,
+          });
+
+          return { ...generationResult, archiveSaved: true };
+        } catch (error) {
+          const archiveWarning = error?.message || 'Το πρόγραμμα δημιουργήθηκε, αλλά απέτυχε η αποθήκευση PDF μήνα.';
+          setWarningMessage(archiveWarning);
+          return { ...generationResult, archiveSaved: false, archiveWarning };
+        }
+      },
+      successMessage: (result) =>
+        result?.archiveSaved
+          ? 'Ο μηνιαίος προγραμματισμός ολοκληρώθηκε και αποθηκεύτηκε PDF μήνα.'
+          : 'Ο μηνιαίος προγραμματισμός ολοκληρώθηκε, αλλά το PDF μήνα δεν αποθηκεύτηκε.',
       errorMessageFallback: 'Αποτυχία αυτόματης δημιουργίας μηνιαίου προγράμματος.',
-      pendingMessage: 'Δημιουργία μηνιαίου προγράμματος...',
+      pendingMessage: 'Δημιουργία μηνιαίου προγράμματος και PDF...',
       retryAction: handleGenerateMonthlySchedule,
       markAsSynced: true,
+    });
+  }
+
+  async function handleDownloadMonthlyArchive(archive) {
+    if (!archive?.storagePath) return false;
+
+    return runActionWithFeedback({
+      actionKey: `downloadMonthlyArchive:${archive.yearMonth || archive.id}`,
+      execute: async () => {
+        const url = await getMonthlyScheduleExportUrl(archive);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = archive.fileName || `program_month_${archive.yearMonth || 'archive'}.pdf`;
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return true;
+      },
+      successMessage: 'Ξεκίνησε η λήψη PDF μήνα.',
+      errorMessageFallback: 'Αποτυχία λήψης PDF μήνα.',
+      pendingMessage: 'Προετοιμασία λήψης PDF...',
+      retryAction: () => handleDownloadMonthlyArchive(archive),
     });
   }
 
@@ -1004,26 +1052,6 @@ export default function MainDashboard() {
           actionLoading={actionLoading}
         />
 
-        <div className="flex justify-end">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-slate-300/70 bg-white/55 p-1 text-xs font-semibold text-slate-800 shadow-sm backdrop-blur-sm dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-100">
-            {SHELL_WIDTH_MODE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setShellWidthMode(option.value)}
-                className={`rounded-md px-2 py-1 transition ${
-                  shellWidthMode === option.value
-                    ? 'bg-brand-500 text-white shadow-sm'
-                    : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
-                }`}
-                aria-pressed={shellWidthMode === option.value}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {!isFirebaseConfigured ? (
           <MessageBanner
             icon={WifiOff}
@@ -1165,17 +1193,7 @@ export default function MainDashboard() {
                 onDeleteAnnouncement={deleteAnnouncement}
               />
 
-              <div className={`grid gap-4 lg:gap-5 ${isAdmin ? 'xl:grid-cols-2' : ''}`}>
-                {isAdmin ? (
-                  <HistoryView
-                    isAdmin={isAdmin}
-                    employees={employees}
-                    historyRows={attendanceHistory}
-                    filters={historyFilters}
-                    isLoading={isHistoryLoading}
-                    onFilterChange={setHistoryFilters}
-                  />
-                ) : null}
+              <div className="grid gap-4 lg:gap-5">
                 <AnalyticsPanel
                   employees={displayEmployees}
                   mode={scheduleMode}
@@ -1212,7 +1230,16 @@ export default function MainDashboard() {
 
               {isAdmin ? (
                 <Suspense fallback={null}>
-                  <WeekHistoryViewer isAdmin={isAdmin} weekHistory={weekHistory} employees={employees} />
+                  <ProgramHistoryPanel
+                    isAdmin={isAdmin}
+                    weekHistory={weekHistory}
+                    employees={employees}
+                    monthlyArchives={monthlyScheduleExports}
+                    isMonthlyLoading={isMonthlyScheduleExportsLoading}
+                    actionLoading={actionLoading}
+                    onRefreshMonthly={() => loadMonthlyScheduleExports({ force: true })}
+                    onDownloadMonthlyArchive={handleDownloadMonthlyArchive}
+                  />
                 </Suspense>
               ) : null}
             </div>

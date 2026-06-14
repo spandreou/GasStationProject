@@ -31,3 +31,21 @@
 ## Ενδεικτικοί indexes
 - `shifts`: `date` ASC
 - `shifts`: `employeeId` ASC, `date` ASC
+
+## Collection: `monthly_schedule_exports`
+Admin-only index για τα αποθηκευμένα PDF μηνιαίου προγράμματος.
+
+### Fields
+- `yearMonth` (string): Μήνας snapshot σε μορφή `YYYY-MM`.
+- `monthStart` / `monthEnd` (string): ISO ημερομηνίες αρχής/τέλους μήνα.
+- `fileName` (string): Όνομα PDF, π.χ. `program_month_2026-06.pdf`.
+- `storagePath` (string): Firebase Storage path, π.χ. `monthly_schedule_pdfs/2026-06/program_month_2026-06.pdf`.
+- `contentType` (string): `application/pdf`.
+- `size` (number): Μέγεθος αρχείου σε bytes.
+- `shiftCount` (number): Πλήθος βαρδιών που μπήκαν στο PDF.
+- `createdBy` (string): Email admin που δημιούργησε το snapshot.
+- `createdAt` / `updatedAt` (timestamp): Χρόνοι δημιουργίας/τελευταίας αντικατάστασης.
+
+## Firebase Storage
+- `monthly_schedule_pdfs/{YYYY-MM}/program_month_{YYYY-MM}.pdf`: Admin-only μηνιαία PDF snapshots.
+- Deploy rules με `npm run deploy:storage-rules` ή μαζί με Firestore μέσω `npm run deploy:firebase-rules`.

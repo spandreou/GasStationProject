@@ -206,6 +206,7 @@ admin@homelabshare.gr
 Services:
 
 - `config.js`: Firebase app/Auth/Firestore initialization και env validation.
+- `monthlyScheduleArchiveService.js`: αποθήκευση μηνιαίων PDF snapshots σε Firebase Storage με Firestore metadata index.
 - `authService.js`: admin sign-in/sign-out/reset και Firebase custom claim checks.
 - `firestoreCore.js`: shared Firestore helpers, collection names, batch/chunk helpers και common error handling.
 - `employeeService.js`: employee subscribe/create/update/delete.

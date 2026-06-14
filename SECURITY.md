@@ -70,6 +70,7 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - `employees` is admin-only because it contains private data and scheduling role fields.
 - `employeeAbsences` is admin-only and remains the private source of truth for the scheduler generator.
 - `attendance_history` and `week_history` are admin-only because they are loaded through admin-only UI flows.
+- `monthly_schedule_exports` and Storage files under `monthly_schedule_pdfs/` are admin-only because they contain downloadable PDF schedule archives.
 - Public/employee views must read only dedicated sanitized collections.
 - Sanitized public collections are readable without sign-in and writable only by admins.
 

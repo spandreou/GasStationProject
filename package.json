@@ -14,6 +14,8 @@
     "security:audit": "npm audit --audit-level=high",
     "admin:bootstrap": "node scripts/bootstrap-admin-user.mjs",
     "deploy:firestore-rules": "npx --yes firebase-tools deploy --only firestore:rules",
+    "deploy:storage-rules": "npx --yes firebase-tools deploy --only storage",
+    "deploy:firebase-rules": "npx --yes firebase-tools deploy --only firestore:rules,storage",
     "security:cve": "npx --yes cve-lite-cli@1 . --all --verbose --fail-on high",
     "security:integrity": "node scripts/validate-firestore-integrity.mjs",
     "security:hardening": "node scripts/validate-security-hardening.mjs",

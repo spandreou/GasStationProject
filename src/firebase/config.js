@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const REQUIRED_FIREBASE_ENV_KEYS = [
   'VITE_FIREBASE_API_KEY',
@@ -79,6 +80,7 @@ const firebaseConfig = isFirebaseConfigured
 const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
+const storage = app ? getStorage(app) : null;
 let analytics = null;
 
 if (typeof window !== 'undefined' && app) {
@@ -91,4 +93,4 @@ if (typeof window !== 'undefined' && app) {
     .catch(() => {});
 }
 
-export { analytics, app, auth, db };
+export { analytics, app, auth, db, storage };

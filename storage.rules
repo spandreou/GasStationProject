@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    match /monthly_schedule_pdfs/{yearMonth}/{fileName} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && yearMonth.matches('^\\d{4}-\\d{2}$')
+        && fileName == 'program_month_' + yearMonth + '.pdf'
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

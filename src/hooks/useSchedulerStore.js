@@ -5,6 +5,7 @@ import {
   auditLogRepository,
   authRepository,
   employeesRepository,
+  monthlyScheduleArchivesRepository,
   publishedSchedulesRepository,
   schedulerSettingsRepository,
   shiftsRepository,
@@ -97,6 +98,12 @@ const {
 } = templatesRepository;
 
 const { writeAuditLog } = auditLogRepository;
+
+const {
+  getDownloadUrl: getMonthlyScheduleExportDownloadUrl,
+  list: fetchMonthlyScheduleExports,
+  save: saveMonthlyScheduleExport,
+} = monthlyScheduleArchivesRepository;
 
 const {
   deleteByWeekStarts: deletePublishedSchedulesByWeekStarts,
@@ -350,6 +357,7 @@ export const useSchedulerStore = create((set, get) => ({
   attendanceHistory: [],
   weekHistory: [],
   weekTemplates: [],
+  monthlyScheduleExports: [],
   publishedSchedule: null,
   publishedSchedulesByWeek: {},
   generatorRules: { ...defaultGeneratorRules },
@@ -362,6 +370,7 @@ export const useSchedulerStore = create((set, get) => ({
     yearMonth: getCurrentYearMonth(),
   },
   isHistoryLoading: false,
+  isMonthlyScheduleExportsLoading: false,
   isAbsencesLoading: true,
   absencesWarningMessage: '',
   isWeekLocked: false,
@@ -586,9 +595,9 @@ export const useSchedulerStore = create((set, get) => ({
           }
           await get().refreshWeekLockStatus();
           await Promise.all([
-            get().loadAttendanceHistory({ force: false }),
             get().loadWeekHistory({ force: false }),
             get().loadWeekTemplates({ force: false }),
+            get().loadMonthlyScheduleExports({ force: false }),
           ]);
         } else {
           const {
@@ -612,6 +621,7 @@ export const useSchedulerStore = create((set, get) => ({
             attendanceHistory: [],
             weekHistory: [],
             weekTemplates: [],
+            monthlyScheduleExports: [],
             _attendanceHistoryCacheKey: '',
             _attendanceHistoryFetchedAt: 0,
             _attendanceHistoryInflightKey: '',
@@ -825,6 +835,64 @@ export const useSchedulerStore = create((set, get) => ({
     } else {
       set({ isHistoryLoading: false });
     }
+  },
+
+  loadMonthlyScheduleExports: async ({ force = false } = {}) => {
+    if (!get().isAdmin) return;
+    if (!force && get().monthlyScheduleExports.length) return;
+
+    set({ isMonthlyScheduleExportsLoading: true });
+    try {
+      const monthlyScheduleExports = await fetchMonthlyScheduleExports(36);
+      set({ monthlyScheduleExports });
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία φόρτωσης μηνιαίων PDF.' });
+    } finally {
+      set({ isMonthlyScheduleExportsLoading: false });
+    }
+  },
+
+  saveMonthlySchedulePdfArchive: async ({
+    year,
+    month,
+    pdfBlob,
+    fileName,
+    shiftCount = 0,
+  }) => {
+    if (!requireAdmin(get, set)) return null;
+
+    const saved = await saveMonthlyScheduleExport({
+      year,
+      month,
+      pdfBlob,
+      fileName,
+      shiftCount,
+      createdBy: get().adminUser?.email || '',
+    });
+
+    set((state) => ({
+      monthlyScheduleExports: [
+        saved,
+        ...state.monthlyScheduleExports.filter((item) => item.yearMonth !== saved.yearMonth),
+      ].sort((a, b) => String(b.yearMonth || '').localeCompare(String(a.yearMonth || ''))),
+    }));
+
+    await recordAuditLog(get, {
+      action: 'monthly_schedule_export.save',
+      target: { collection: 'monthly_schedule_exports', id: saved.yearMonth, scope: saved.yearMonth },
+      metadata: {
+        storagePath: saved.storagePath,
+        fileName: saved.fileName,
+        shiftCount: saved.shiftCount,
+      },
+    });
+
+    return saved;
+  },
+
+  getMonthlyScheduleExportUrl: async (archive) => {
+    if (!requireAdmin(get, set)) return '';
+    return getMonthlyScheduleExportDownloadUrl(archive?.storagePath || '');
   },
 
   setWarningMessage: (warningMessage) => set({ warningMessage }),
@@ -2457,11 +2525,20 @@ export const useSchedulerStore = create((set, get) => ({
           await get().refreshWeekLockStatus();
         }
       }
+
+      return {
+        monthDays: meta?.monthDays || [...monthDateSet].sort(),
+        shifts: savedMonthShifts,
+        warnings: warnings || [],
+        generatedShiftCount: generatedShifts.length,
+        manualOverrideCount: manualOverrides.length,
+      };
     } catch (error) {
       set({
         warningMessage:
           error?.message || 'Αποτυχία αυτόματης δημιουργίας μηνιαίου προγράμματος.',
       });
+      throw error;
     } finally {
       set({ isSaving: false });
     }

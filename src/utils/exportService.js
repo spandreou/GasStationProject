@@ -321,6 +321,10 @@ function buildPdfFileName({ mode, days, month, year }) {
   return createFileName('program_week_pdf', days, 'pdf');
 }
 
+export function buildSchedulePdfFileName(params = {}) {
+  return buildPdfFileName(params);
+}
+
 function buildPdfTitle({ mode, days, month, year }) {
   if (mode === 'month') {
     return `\u03A0\u03C1\u03CC\u03B3\u03C1\u03B1\u03BC\u03BC\u03B1 \u039C\u03AE\u03BD\u03B1: ${formatMonthYearLabel(month, year, days)}`;
@@ -359,6 +363,7 @@ export async function exportScheduleToPdf({
   shifts = [],
   month,
   year,
+  download = true,
 } = {}) {
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
@@ -394,7 +399,13 @@ export async function exportScheduleToPdf({
     rows,
   });
 
-  doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
+  const fileName = buildPdfFileName({ mode, days: targetDays, month, year });
+  const blob = doc.output('blob');
+  if (download) {
+    downloadBlob(blob, fileName);
+  }
+
+  return { blob, fileName };
 }
 
 export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {

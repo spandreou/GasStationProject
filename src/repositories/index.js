@@ -9,4 +9,5 @@ export { firebaseTemplatesRepository as templatesRepository } from './firebase/f
 export { firebaseAnnouncementsRepository as announcementsRepository } from './firebase/firebaseAnnouncementsRepository';
 export { firebaseAuditLogRepository as auditLogRepository } from './firebase/firebaseAuditLogRepository';
 export { firebasePublishedSchedulesRepository as publishedSchedulesRepository } from './firebase/firebasePublishedSchedulesRepository';
+export { firebaseMonthlyScheduleArchivesRepository as monthlyScheduleArchivesRepository } from './firebase/firebaseMonthlyScheduleArchivesRepository';
 export { firebaseRuntimeEnvironmentRepository as runtimeEnvironmentRepository } from './firebase/firebaseRuntimeEnvironmentRepository';

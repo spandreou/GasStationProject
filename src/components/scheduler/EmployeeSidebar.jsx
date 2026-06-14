@@ -77,33 +77,35 @@ export default function EmployeeSidebar({
         />
       ) : null}
 
-      <div className="max-h-[220px] space-y-2 overflow-auto pr-1 scrollbar-thin sm:max-h-[260px]">
+      <div className="max-h-[220px] space-y-2 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin sm:max-h-[260px]">
         {sortedEmployees.map((employee) => (
-          <div key={employee.id} className="flex items-center gap-2">
-            <div className="flex-1">
+          <div key={employee.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <div className="min-w-0">
               <ShiftCard employee={employee} disabled={!isAdmin} showRole={isAdmin} />
             </div>
 
-            <button
-              type="button"
-              onClick={() => onOpenProfile(employee)}
-              disabled={!isAdmin}
-              className="rounded-lg border border-white/35 bg-white/55 p-2 text-slate-700 backdrop-blur-sm hover:bg-white/80 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Προφίλ / Επεξεργασία"
-            >
-              <Pencil size={15} />
-            </button>
-
-            {isAdmin ? (
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => askDeleteEmployee(employee)}
-                className="rounded-lg border border-white/35 bg-white/55 p-2 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
-                title="Διαγραφή"
+                onClick={() => onOpenProfile(employee)}
+                disabled={!isAdmin}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/35 bg-white/55 text-slate-700 backdrop-blur-sm hover:bg-white/80 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-800/70 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Προφίλ / Επεξεργασία"
               >
-                <Trash2 size={15} />
+                <Pencil size={15} />
               </button>
-            ) : null}
+
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => askDeleteEmployee(employee)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/35 bg-white/55 text-red-700 backdrop-blur-sm hover:bg-red-50/80 dark:border-red-300/40 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25"
+                  title="Διαγραφή"
+                >
+                  <Trash2 size={15} />
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
 

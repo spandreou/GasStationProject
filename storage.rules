@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function isArchiveFile(tenantId, yearMonth, fileName) {
+      return tenantId.matches('^[a-z0-9-]{1,60}$') &&
+        yearMonth.matches('^\\d{4}-\\d{2}$') &&
+        fileName == 'program_month_' + yearMonth + '.pdf';
+    }
+
+    match /tenants/{tenantId}/monthly_schedule_pdfs/{yearMonth}/{fileName} {
+      allow read: if isAdmin() && isArchiveFile(tenantId, yearMonth, fileName);
+      allow write: if isAdmin() &&
+        isArchiveFile(tenantId, yearMonth, fileName) &&
+        request.resource != null &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType == 'application/pdf';
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

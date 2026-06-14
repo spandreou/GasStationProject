@@ -1,11 +1,13 @@
 import {
   browserLocalPersistence,
+  confirmPasswordReset,
   getIdTokenResult,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
+  verifyPasswordResetCode,
 } from 'firebase/auth';
 import {
   adminEmail,
@@ -78,6 +80,15 @@ export function subscribeAdminAuth(onUserChange, onError) {
   );
 }
 
+export function subscribeAuth(onUserChange, onError) {
+  if (!isFirebaseConfigured || !auth) {
+    onUserChange(null);
+    return () => {};
+  }
+
+  return onAuthStateChanged(auth, onUserChange, onError);
+}
+
 export async function signInAdmin({ email, password }) {
   assertAdminAuthConfigured();
 
@@ -118,4 +129,28 @@ export async function sendAdminPasswordResetEmail(email) {
   }
 
   await sendPasswordResetEmail(auth, normalizedEmail);
+}
+
+export async function verifyAdminPasswordResetCode(oobCode) {
+  assertAdminAuthConfigured();
+
+  if (!oobCode?.trim()) {
+    throw new Error('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει.');
+  }
+
+  return verifyPasswordResetCode(auth, oobCode);
+}
+
+export async function confirmAdminPasswordReset({ oobCode, newPassword }) {
+  assertAdminAuthConfigured();
+
+  if (!oobCode?.trim()) {
+    throw new Error('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει.');
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    throw new Error('Ο νέος κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες.');
+  }
+
+  await confirmPasswordReset(auth, oobCode, newPassword);
 }

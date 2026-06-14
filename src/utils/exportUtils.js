@@ -4,6 +4,15 @@ import jsPDF from 'jspdf';
 import * as XLSX from '@e965/xlsx';
 import { formatDateGreek, formatShiftTime } from './time.js';
 
+function assertExportAuthorized(exportAuthorization, onBeforeDownload) {
+  if (!exportAuthorization?.isAdmin || exportAuthorization.auditRequired !== true) {
+    throw new Error('Η εξαγωγή απαιτεί σύνδεση διαχειριστή.');
+  }
+  if (typeof onBeforeDownload !== 'function') {
+    throw new Error('Η εξαγωγή δεν ολοκληρώθηκε. Δοκίμασε ξανά.');
+  }
+}
+
 function buildEmployeeDayMap(shifts) {
   const map = new Map();
 
@@ -64,7 +73,13 @@ function downloadBlob(blob, fileName) {
   URL.revokeObjectURL(url);
 }
 
-export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-grid-export' }) {
+export async function exportScheduleToPdf({
+  weekDays,
+  gridSelector = '#weekly-grid-export',
+  exportAuthorization,
+  onBeforeDownload,
+}) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const gridElement = document.querySelector(gridSelector);
   if (!gridElement) {
     throw new Error(`WeeklyGrid container was not found: ${gridSelector}`);
@@ -99,10 +114,19 @@ export async function exportScheduleToPdf({ weekDays, gridSelector = '#weekly-gr
   const y = (pageHeight - imageHeight) / 2;
 
   doc.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, imageWidth, imageHeight, undefined, 'FAST');
+  await onBeforeDownload();
   doc.save(createFileName('program_pdf', weekDays, 'pdf'));
 }
 
-export function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToExcel({
+  weekDays,
+  weekdayLabels,
+  shifts,
+  employees,
+  exportAuthorization,
+  onBeforeDownload,
+}) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
 
@@ -117,10 +141,19 @@ export function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employe
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Πρόγραμμα');
+  await onBeforeDownload();
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
-export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees }) {
+export async function exportScheduleToWord({
+  weekDays,
+  weekdayLabels,
+  shifts,
+  employees,
+  exportAuthorization,
+  onBeforeDownload,
+}) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
 
@@ -168,5 +201,6 @@ export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, em
   });
 
   const blob = await Packer.toBlob(doc);
+  await onBeforeDownload();
   downloadBlob(blob, createFileName('program_word', weekDays, 'docx'));
 }

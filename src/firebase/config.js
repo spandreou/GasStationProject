@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const REQUIRED_FIREBASE_ENV_KEYS = [
   'VITE_FIREBASE_API_KEY',
@@ -22,7 +23,7 @@ function normalizeStorageBucket(value) {
 
   // Accept inputs like:
   // - gasstationproject-xxxx.appspot.com
-  // - gasstationproject-xxxx.firebasestorage.app (legacy/wrong host for direct DNS)
+  // - gasstationproject-xxxx.firebasestorage.app
   // - gs://gasstationproject-xxxx.appspot.com
   // - https://gasstationproject-xxxx.appspot.com
   const raw = value
@@ -30,10 +31,6 @@ function normalizeStorageBucket(value) {
     .replace(/^https?:\/\//i, '')
     .split('/')[0]
     .trim();
-
-  if (raw.endsWith('.firebasestorage.app')) {
-    return raw.replace(/\.firebasestorage\.app$/i, '.appspot.com');
-  }
 
   return raw;
 }
@@ -79,6 +76,7 @@ const firebaseConfig = isFirebaseConfigured
 const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
+const storage = app ? getStorage(app, `gs://${firebaseEnv.storageBucket}`) : null;
 let analytics = null;
 
 if (typeof window !== 'undefined' && app) {
@@ -91,4 +89,12 @@ if (typeof window !== 'undefined' && app) {
     .catch(() => {});
 }
 
-export { analytics, app, auth, db };
+function getEnvFlag(name, fallback = false) {
+  const value = getEnvValue(name).toLowerCase();
+  if (!value) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(value);
+}
+
+export const isMonthlyPdfArchiveEnabled = getEnvFlag('VITE_ENABLE_MONTHLY_PDF_ARCHIVE', false);
+
+export { analytics, app, auth, db, storage };

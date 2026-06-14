@@ -3,19 +3,25 @@ import {
   isFirebaseConfigured,
 } from '../../firebase/config';
 import {
+  confirmAdminPasswordReset,
   getAdminAuthModeLabel,
   getPublicConfiguredAdminEmail,
   sendAdminPasswordResetEmail,
   signInAdmin,
   signOutAdmin,
+  subscribeAuth,
   subscribeAdminAuth,
+  verifyAdminPasswordResetCode,
 } from '../../firebase/authService';
 
 export const firebaseAuthRepository = {
+  subscribeAuth,
   subscribeAdminAuth,
   signInAdmin,
   signOutAdmin,
   sendAdminPasswordResetEmail,
+  verifyAdminPasswordResetCode,
+  confirmAdminPasswordReset,
   getConfiguredAdminEmail: getPublicConfiguredAdminEmail,
   getAuthModeLabel: getAdminAuthModeLabel,
   isPersistenceConfigured: () => isFirebaseConfigured,

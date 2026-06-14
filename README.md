@@ -11,6 +11,8 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 - Production authorization μέσω Firebase custom claim `admin=true`
 - Demo admin email allowlist μόνο όταν `VITE_APP_MODE=demo`
 - Χωρίς fallback admin credentials μέσα στον κώδικα
+- Πρώτος production-like pilot tenant: `bp-kallis.homelabshare.gr`
+- Μελλοντικός SaaS portal στόχος: `gas.homelabshare.gr`
 
 ## Repository / Deployment Map
 
@@ -19,7 +21,8 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 - GitHub remote: `https://github.com/spandreou/GasStationProject.git`.
 - Live BP Kallis URL: `https://bp-kallis.homelabshare.gr/`.
 - Active homelab server path: `/home/spandreou/projects/GasStationProject`.
-- Active homelab deployment branch: `chore/dependabot-config`.
+- Current verified homelab deployment branch before final sync: `chore/dependabot-config`.
+- Target homelab deployment branch after successful sync and deliberate server switch: `main`.
 - Compose project/container: `gasstationproject` / `gasstation-bp-kallis`.
 - Host port: `8085` -> container port `8080`.
 
@@ -65,6 +68,7 @@ npm run qa:scheduler-engine
 npm run qa:scheduler
 npm run build
 npm run test:e2e:scheduler
+npm run qa:saas-foundation
 ```
 
 Security checks:
@@ -161,10 +165,77 @@ npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Sta
 Προτεινόμενο test admin email:
 
 ```txt
-admin@homelabshare.gr
+homelabshare@gmail.com
 ```
 
 Ο κωδικός είναι αυτός που ορίζεις εσύ στο `ADMIN_BOOTSTRAP_PASSWORD` ή αυτός που θα αλλάξεις μέσω Firebase password reset. Δεν πρέπει να αποθηκεύεται στο repo ή να μοιράζεται σε logs/chat.
+
+## Self-Hosted BP Kallis Pilot
+
+Το πρώτο self-hosted deployment target είναι:
+
+```text
+bp-kallis.homelabshare.gr
+```
+
+Προστέθηκαν deployment artifacts:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `nginx.conf`
+- `.env.example`
+
+Βασική εκκίνηση σε server:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Το Vite build παίρνει τα `VITE_*` values ως build-time env/args. Μην κάνεις commit πραγματικό `.env`.
+
+Αναλυτικά:
+
+- `docs/self-hosting-bp-kallis.md`
+- `docs/saas-tenant-foundation.md`
+- `docs/saas-security-qa-checklist.md`
+- `docs/monthly-pdf-archive-runbook.md`
+
+## SaaS Tenant Foundation
+
+Η κατεύθυνση είναι μία κοινή εφαρμογή, όχι διαφορετικό codebase ανά πρατήριο.
+
+Αρχική στρατηγική:
+
+- `bp-kallis.homelabshare.gr` -> tenant subdomain
+- `gas.homelabshare.gr` -> future central portal
+- Firebase Auth για identity
+- Firestore `tenants` και `tenantMemberships` ως foundation
+- UID-based memberships, όχι hardcoded email-to-domain mappings
+
+Foundation files:
+
+- `src/utils/tenantHostContext.js`
+- `src/utils/tenantDataPaths.js`
+- `src/repositories/firebase/firebaseTenantsRepository.js`
+- `src/repositories/firebase/firebaseTenantMembershipsRepository.js`
+- `src/repositories/firebase/firebaseTenantSubscriptionRepository.js`
+- `src/repositories/firebase/firebaseTenantTokenRequestsRepository.js`
+
+Prepared auth routes:
+
+- `/login`
+- `/forgot-password`
+- `/reset-password`
+- `/select-tenant`
+
+Το `/login` χρησιμοποιεί Firebase Auth και προετοιμάζει το central portal flow:
+
+- 0 memberships -> safe no-access message
+- 1 membership -> redirect στο tenant domain
+- 2+ memberships -> `/select-tenant`
+
+Τα reset routes χρησιμοποιούν Firebase action codes και δεν κάνουν log κωδικούς ή reset tokens.
 
 ## Demo-only Σημεία
 

@@ -1,5 +1,13 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
+import LoginPage from './components/auth/LoginPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import RouteNoticePage from './components/auth/RouteNoticePage';
+import SelectTenantPage from './components/auth/SelectTenantPage';
+import TenantGate from './components/auth/TenantGate';
 import MainDashboard from './components/scheduler/MainDashboard';
+import { requestDynamicImportRecovery } from './utils/dynamicImportRecovery';
+import { getCurrentTenantHostContext } from './utils/tenantHostContext';
 
 const Hyperspeed = lazy(() => import('./components/background/Hyperspeed'));
 
@@ -48,6 +56,10 @@ function StaticBackground() {
 export default function App() {
   const [isInterfaceReady, setIsInterfaceReady] = useState(false);
   const [renderDynamicBackground, setRenderDynamicBackground] = useState(false);
+  const [routePath, setRoutePath] = useState(() =>
+    typeof window === 'undefined' ? '/' : window.location.pathname,
+  );
+  const tenantHostContext = getCurrentTenantHostContext();
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -101,8 +113,64 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleChunkError = (event) => {
+      const error = event?.reason || event?.error || event;
+      if (requestDynamicImportRecovery(error) && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('error', handleChunkError);
+    window.addEventListener('unhandledrejection', handleChunkError);
+
+    return () => {
+      window.removeEventListener('error', handleChunkError);
+      window.removeEventListener('unhandledrejection', handleChunkError);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const handleNavigation = () => setRoutePath(window.location.pathname);
+    window.addEventListener('popstate', handleNavigation);
+    return () => window.removeEventListener('popstate', handleNavigation);
+  }, []);
+
+  let page = <MainDashboard />;
+  if (routePath === '/login') {
+    page = <LoginPage />;
+  } else if (routePath === '/forgot-password') {
+    page = <ForgotPasswordPage />;
+  } else if (routePath === '/reset-password') {
+    page = <ResetPasswordPage />;
+  } else if (routePath === '/select-tenant') {
+    page = <SelectTenantPage />;
+  } else if (routePath === '/request-token') {
+    page = (
+      <RouteNoticePage
+        title="Αίτημα ενεργοποίησης"
+        subtitle="Η ροή token/subscription θα ενεργοποιηθεί σε επόμενη φάση."
+        message="Για ενεργοποίηση ή ανανέωση πρόσβασης, επικοινώνησε προσωρινά με τον διαχειριστή."
+      />
+    );
+  } else if (routePath === '/admin-console') {
+    page = (
+      <RouteNoticePage
+        title="Superadmin console"
+        subtitle="Η κονσόλα superadmin δεν είναι ενεργή στο pilot deployment."
+        message="Η πρόσβαση θα προστατευτεί με Firebase custom claim role=SUPERADMIN πριν εμφανιστούν δεδομένα."
+      />
+    );
+  } else if (routePath === '/app') {
+    page = <MainDashboard />;
+  }
+
   return (
-    <div className="relative isolate min-h-screen overflow-hidden">
+    <div className="relative isolate min-h-screen overflow-hidden" data-tenant-mode={tenantHostContext.mode}>
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {renderDynamicBackground ? (
           <Suspense fallback={<StaticBackground />}>
@@ -116,7 +184,7 @@ export default function App() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58),rgba(2,6,23,0.72)_44%,rgba(2,6,23,0.86))]" />
       </div>
       <div className={`app-content-reveal relative z-10 ${isInterfaceReady ? 'app-content-reveal--ready' : ''}`}>
-        <MainDashboard />
+        <TenantGate hostContext={tenantHostContext} routePath={routePath}>{page}</TenantGate>
       </div>
     </div>
   );

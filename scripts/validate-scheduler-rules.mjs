@@ -490,6 +490,49 @@ assert(groupedRows[0].date === '06/04/2026', `Grouped PDF row should show one da
 assert(groupedRows[0].workRest.includes('ΕΡΓ'), 'Grouped PDF row should contain ΕΡΓ values');
 assert(groupedRows[0].workRest.includes('\n'), 'Grouped PDF row should contain multiline work/rest values');
 
+const absencePdfRows = buildGroupedScheduleRows({
+  days: ['2026-04-07'],
+  employees,
+  shifts: [
+    ...shifts,
+    {
+      id: 'stale-absence-work-shift',
+      employeeId: 'intermediateA',
+      date: '2026-04-07',
+      type: 'work',
+      shiftType: 'intermediate',
+      startTime: '09:00',
+      endTime: '17:00',
+    },
+  ],
+  absences: [
+    {
+      id: 'leave-intermediate-a',
+      employeeId: 'intermediateA',
+      type: 'LEAVE',
+      startDate: '2026-04-07',
+      endDate: '2026-04-07',
+      scope: 'FULL_DAY',
+      replacementMode: 'AUTO',
+      status: 'ACTIVE',
+    },
+  ],
+});
+const absencePdfRow = absencePdfRows[0];
+const absenceNames = absencePdfRow.fullName.split('\n');
+const absenceSchedules = absencePdfRow.schedule.split('\n');
+const absenceWorkRest = absencePdfRow.workRest.split('\n');
+const absentEmployeeIndex = absenceNames.findIndex((name) => name === 'Intermediate A');
+assert(absentEmployeeIndex >= 0, 'PDF absence regression should include absent employee');
+assert(
+  absenceSchedules[absentEmployeeIndex] === '-',
+  `PDF absence regression should suppress stale work schedule, got ${absenceSchedules[absentEmployeeIndex]}`,
+);
+assert(
+  absenceWorkRest[absentEmployeeIndex] === 'Άδεια',
+  `PDF absence regression should mark leave as Άδεια, got ${absenceWorkRest[absentEmployeeIndex]}`,
+);
+
 const workRestColumn = PDF_SCHEDULE_COLUMNS.find((column) => column.key === 'workRest');
 assert(workRestColumn?.title === 'Εργασία/Ανάπαυση', 'PDF work/rest column should be Εργασία/Ανάπαυση');
 

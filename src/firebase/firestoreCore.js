@@ -14,6 +14,7 @@ export const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 export const SCHEDULER_SETTINGS_COLLECTION = 'scheduler_settings';
 export const AUDIT_LOGS_COLLECTION = 'audit_logs';
 export const PUBLISHED_SCHEDULES_COLLECTION = 'published_schedules';
+export const MONTHLY_SCHEDULE_EXPORTS_COLLECTION = 'monthly_schedule_exports';
 export const DEFAULT_SCHEDULER_SETTINGS_DOC = 'default';
 
 const MAX_IN_QUERY_VALUES = 10;

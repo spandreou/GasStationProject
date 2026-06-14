@@ -13,6 +13,15 @@ export const PDF_SCHEDULE_COLUMNS = [
   { key: 'workRest', title: 'Εργασία/Ανάπαυση', widthRatio: 0.16 },
 ];
 
+function assertExportAuthorized(exportAuthorization, onBeforeDownload) {
+  if (!exportAuthorization?.isAdmin || exportAuthorization.auditRequired !== true) {
+    throw new Error('Η εξαγωγή απαιτεί σύνδεση διαχειριστή.');
+  }
+  if (typeof onBeforeDownload !== 'function') {
+    throw new Error('Η εξαγωγή δεν ολοκληρώθηκε. Δοκίμασε ξανά.');
+  }
+}
+
 function loadXlsx() {
   if (!xlsxModulePromise) {
     xlsxModulePromise = import('@e965/xlsx');
@@ -430,7 +439,9 @@ export async function exportScheduleToPdf({
   month,
   year,
   onBeforeDownload,
+  exportAuthorization,
 } = {}) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const targetDays = Array.isArray(days) && days.length ? days : weekDays;
 
   if (!targetDays.length) {
@@ -469,7 +480,8 @@ export async function exportScheduleToPdf({
   doc.save(buildPdfFileName({ mode, days: targetDays, month, year }));
 }
 
-export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload }) {
+export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload, exportAuthorization }) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const XLSX = await loadXlsx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });
@@ -492,7 +504,8 @@ export async function exportScheduleToExcel({ weekDays, weekdayLabels, shifts, e
   XLSX.writeFile(workbook, createFileName('program_excel', weekDays, 'xlsx'), { compression: true });
 }
 
-export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload }) {
+export async function exportScheduleToWord({ weekDays, weekdayLabels, shifts, employees, onBeforeDownload, exportAuthorization }) {
+  assertExportAuthorized(exportAuthorization, onBeforeDownload);
   const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType } = await loadDocx();
   const headers = buildWeeklyHeaders(weekDays, weekdayLabels);
   const matrix = buildWeeklyMatrix({ employees, shifts, weekDays });

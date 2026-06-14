@@ -32,7 +32,7 @@ function matchBlock(collectionName) {
 const publicReadMatches = [...firestoreRules.matchAll(/match\s+\/([A-Za-z0-9_]+)\/\{/g)]
   .map((match) => match[1])
   .filter((collectionName) => matchBlock(collectionName).includes('allow read: if true;'));
-const allowedPublicReadCollections = new Set(['employees_public', 'employeeAbsencesPublic']);
+const allowedPublicReadCollections = new Set(['employees_public', 'employeeAbsencesPublic', 'published_schedules']);
 
 assert(!combinedClientAuth.includes('VITE_ADMIN_PASSWORD'), 'Client/admin docs must not reference VITE_ADMIN_PASSWORD.');
 assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not expose demo admin password fallback.');
@@ -73,6 +73,11 @@ assert(
 );
 assert(matchBlock('employeeAbsencesPublic').includes('allow read: if true;'), 'Sanitized public absence docs must remain public readable.');
 assert(matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin()'), 'Sanitized public absence docs must be admin writable only.');
+assert(matchBlock('published_schedules').includes('allow read: if true;'), 'Sanitized published schedules must remain public readable.');
+assert(
+  matchBlock('published_schedules').includes('allow create, update: if isAdmin() && validPublishedSchedule(resourceId);'),
+  'Sanitized published schedules must be admin writable only.',
+);
 assert(firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must authorize admin writes by custom claim.');
 assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');
 assert(firestoreRules.includes('affectedKeys().hasOnly'), 'Firestore rules must restrict unexpected fields.');

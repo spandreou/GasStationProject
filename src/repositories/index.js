@@ -8,6 +8,7 @@ export { firebaseWeekHistoryRepository as weekHistoryRepository } from './fireba
 export { firebaseTemplatesRepository as templatesRepository } from './firebase/firebaseTemplatesRepository';
 export { firebaseAnnouncementsRepository as announcementsRepository } from './firebase/firebaseAnnouncementsRepository';
 export { firebaseAuditLogRepository as auditLogRepository } from './firebase/firebaseAuditLogRepository';
+export { firebaseExportAuditRepository as exportAuditRepository } from './firebase/firebaseExportAuditRepository';
 export { firebasePublishedSchedulesRepository as publishedSchedulesRepository } from './firebase/firebasePublishedSchedulesRepository';
 export { firebaseRuntimeEnvironmentRepository as runtimeEnvironmentRepository } from './firebase/firebaseRuntimeEnvironmentRepository';
 export { firebaseTenantsRepository as tenantsRepository } from './firebase/firebaseTenantsRepository';

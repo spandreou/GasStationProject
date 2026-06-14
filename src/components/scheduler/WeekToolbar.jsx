@@ -405,42 +405,48 @@ export default function WeekToolbar({
 
           <ToolbarGroup title="Finalize / Share">
             {isAdmin ? (
-              <LoadingButton
-                icon={FolderCheck}
-                label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
-                loadingLabel="Οριστικοποίηση..."
-                onClick={() =>
-                  setConfirmDialog({
-                    tone: 'warning',
-                    title: 'Οριστικοποίηση εβδομάδας',
-                    message: 'Θέλεις να οριστικοποιήσεις αυτή την εβδομάδα;',
-                    details: 'Η εβδομάδα θα κλειδώσει και οι αλλαγές θα περιοριστούν.',
-                    confirmLabel: 'Ναι, οριστικοποίηση',
-                    onConfirm: onFinalizeWeek,
-                  })
-                }
-                disabled={isWeekLocked}
-                className={finalizeButtonClass}
-                isLoading={actionLoading.finalizeWeek}
-              />
-            ) : null}
+              <>
+                <LoadingButton
+                  icon={FolderCheck}
+                  label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
+                  loadingLabel="Οριστικοποίηση..."
+                  onClick={() =>
+                    setConfirmDialog({
+                      tone: 'warning',
+                      title: 'Οριστικοποίηση εβδομάδας',
+                      message: 'Θέλεις να οριστικοποιήσεις αυτή την εβδομάδα;',
+                      details: 'Η εβδομάδα θα κλειδώσει και οι αλλαγές θα περιοριστούν.',
+                      confirmLabel: 'Ναι, οριστικοποίηση',
+                      onConfirm: onFinalizeWeek,
+                    })
+                  }
+                  disabled={isWeekLocked}
+                  className={finalizeButtonClass}
+                  isLoading={actionLoading.finalizeWeek}
+                />
 
-            <LoadingButton
-              icon={Copy}
-              label="Αντιγραφή για WhatsApp"
-              loadingLabel="Αντιγραφή..."
-              onClick={onCopyWhatsapp}
-              className={infoButtonClass}
-              isLoading={actionLoading.copyWhatsapp}
-            />
+                <LoadingButton
+                  icon={Copy}
+                  label="Αντιγραφή για WhatsApp"
+                  loadingLabel="Αντιγραφή..."
+                  onClick={onCopyWhatsapp}
+                  className={infoButtonClass}
+                  isLoading={actionLoading.copyWhatsapp}
+                />
 
-            <ExportDropdown
-              onExportWeekPdf={onExportWeekPdf}
-              onExportMonthPdf={onExportMonthPdf}
-              onExportExcel={onExportExcel}
-              onExportWord={onExportWord}
-              actionLoading={actionLoading}
-            />
+                <ExportDropdown
+                  onExportWeekPdf={onExportWeekPdf}
+                  onExportMonthPdf={onExportMonthPdf}
+                  onExportExcel={onExportExcel}
+                  onExportWord={onExportWord}
+                  actionLoading={actionLoading}
+                />
+              </>
+            ) : (
+              <div className="rounded-lg border border-slate-300/70 bg-white/45 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/25 dark:bg-slate-900/40 dark:text-slate-300">
+                Read-only preview. Οι εξαγωγές είναι διαθέσιμες μόνο σε διαχειριστή.
+              </div>
+            )}
           </ToolbarGroup>
 
           {isAdmin ? (

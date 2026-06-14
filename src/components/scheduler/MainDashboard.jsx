@@ -4,9 +4,10 @@ import { WEEKDAY_LABELS } from '../../data/constants';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import useResizableLayout from '../../hooks/useResizableLayout';
 import useToastQueue from '../../hooks/useToastQueue';
-import { runtimeEnvironmentRepository } from '../../repositories';
+import { exportAuditRepository, runtimeEnvironmentRepository } from '../../repositories';
 import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../utils/analytics';
 import { getMonthDays } from '../../utils/scheduleUtils';
+import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
 import { formatDateGreek, getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AnnouncementBoard from './AnnouncementBoard';
@@ -264,6 +265,7 @@ export default function MainDashboard() {
     warningMessage,
     errorMessage,
     isAdmin,
+    adminUser,
     isLoginModalOpen,
     undoState,
     initializeData,
@@ -377,6 +379,7 @@ export default function MainDashboard() {
   const displayMonthShifts = isAdmin ? monthShifts : publicMonthShifts;
   const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
   const visibleShifts = scheduleMode === 'month' ? displayMonthShifts : displayWeekShifts;
+  const tenantHostContext = useMemo(() => getCurrentTenantHostContext(), []);
 
   useEffect(() => {
     previousWeekFingerprintRef.current = weekFingerprint;
@@ -637,11 +640,21 @@ export default function MainDashboard() {
     await runActionWithFeedback({
       actionKey: 'copyWhatsapp',
       execute: async () => {
+        createExportAuthorization();
         const text = buildWhatsappSummary({
           shifts: displayWeekShifts,
           employees: displayEmployees,
           weekDays,
           weekdayLabels: WEEKDAY_LABELS,
+        });
+        await writeExportAudit({
+          exportType: 'WHATSAPP',
+          exportScope: 'WEEK',
+          dateRange: getDateRangeForDays(weekDays),
+          week: weekDays[0] || '',
+          recordCount: displayWeekShifts.length,
+          shiftCount: displayWeekShifts.length,
+          status: 'SUCCESS',
         });
         await navigator.clipboard.writeText(text);
         return true;
@@ -694,6 +707,79 @@ export default function MainDashboard() {
     };
   }
 
+  function createExportAuthorization() {
+    if (!isAdmin || !adminUser?.uid) {
+      throw new Error('Η εξαγωγή απαιτεί σύνδεση διαχειριστή.');
+    }
+
+    return {
+      isAdmin: true,
+      auditRequired: true,
+    };
+  }
+
+  function getExportTenantId() {
+    return tenantHostContext?.tenantSlug || 'bp-kallis';
+  }
+
+  function getDateRangeForDays(days = []) {
+    return {
+      start: days[0] || '',
+      end: days[days.length - 1] || days[0] || '',
+    };
+  }
+
+  function getMonthAuditLabel(year, month) {
+    return `${year}-${String(month + 1).padStart(2, '0')}`;
+  }
+
+  async function writeExportAudit(metadata) {
+    await exportAuditRepository.writeExportAuditLog({
+      tenantId: getExportTenantId(),
+      uid: adminUser?.uid || '',
+      userEmail: adminUser?.email || '',
+      ...metadata,
+    });
+  }
+
+  async function runAdminExportWithAudit({
+    exportType,
+    exportScope,
+    days = [],
+    month = '',
+    week = '',
+    fileName = '',
+    recordCount = 0,
+    shiftCount = 0,
+    showSuccess,
+    performExport,
+  }) {
+    const exportAuthorization = createExportAuthorization();
+
+    await performExport({
+      exportAuthorization,
+      onBeforeDownload: async () => {
+        await writeExportAudit({
+          exportType,
+          exportScope,
+          dateRange: getDateRangeForDays(days),
+          month,
+          week,
+          fileName,
+          recordCount,
+          shiftCount,
+          status: 'SUCCESS',
+        });
+
+        if (typeof showSuccess === 'function') {
+          await showSuccess();
+        }
+      },
+    });
+
+    return true;
+  }
+
   async function showExportSuccessBeforeDownload({ title, message }) {
     pushToast({
       type: 'success',
@@ -712,19 +798,30 @@ export default function MainDashboard() {
       loadingMessage: 'Γίνεται εξαγωγή PDF εβδομάδας...',
       execute: async () => {
         const { exportScheduleToPdf } = await loadExportService();
-        await exportScheduleToPdf({
-          mode: 'week',
+        return runAdminExportWithAudit({
+          exportType: 'PDF',
+          exportScope: 'WEEK',
           days: weekDays,
-          shifts: displayWeekShifts,
-          employees: displayEmployees,
-          absences,
-          onBeforeDownload: () =>
+          week: weekDays[0] || '',
+          fileName: `program_week_pdf_${weekDays[0] || 'week'}_${weekDays[weekDays.length - 1] || 'end'}.pdf`,
+          recordCount: displayWeekShifts.length,
+          shiftCount: displayWeekShifts.length,
+          showSuccess: () =>
             showExportSuccessBeforeDownload({
               title: 'Επιτυχής εξαγωγή PDF',
               message: 'Το PDF εβδομάδας δημιουργήθηκε και η λήψη ξεκινά.',
             }),
+          performExport: ({ exportAuthorization, onBeforeDownload }) =>
+            exportScheduleToPdf({
+              mode: 'week',
+              days: weekDays,
+              shifts: displayWeekShifts,
+              employees: displayEmployees,
+              absences,
+              exportAuthorization,
+              onBeforeDownload,
+            }),
         });
-        return true;
       },
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF εβδομάδας.',
       pendingMessage: 'Εξαγωγή PDF εβδομάδας...',
@@ -738,21 +835,33 @@ export default function MainDashboard() {
       loadingMessage: 'Γίνεται εξαγωγή PDF μήνα...',
       execute: async () => {
         const { exportScheduleToPdf } = await loadExportService();
-        await exportScheduleToPdf({
-          mode: 'month',
+        const monthLabel = getMonthAuditLabel(selectedYear, selectedMonth);
+        return runAdminExportWithAudit({
+          exportType: 'PDF',
+          exportScope: 'MONTH',
           days: monthDays,
-          shifts: displayMonthShifts,
-          employees: displayEmployees,
-          absences,
-          month: selectedMonth,
-          year: selectedYear,
-          onBeforeDownload: () =>
+          month: monthLabel,
+          fileName: `program_month_${monthLabel}.pdf`,
+          recordCount: displayMonthShifts.length,
+          shiftCount: displayMonthShifts.length,
+          showSuccess: () =>
             showExportSuccessBeforeDownload({
               title: 'Επιτυχής εξαγωγή PDF',
               message: 'Το PDF μήνα δημιουργήθηκε και η λήψη ξεκινά.',
             }),
+          performExport: ({ exportAuthorization, onBeforeDownload }) =>
+            exportScheduleToPdf({
+              mode: 'month',
+              days: monthDays,
+              shifts: displayMonthShifts,
+              employees: displayEmployees,
+              absences,
+              month: selectedMonth,
+              year: selectedYear,
+              exportAuthorization,
+              onBeforeDownload,
+            }),
         });
-        return true;
       },
       errorMessageFallback: 'Αποτυχία εξαγωγής PDF μήνα.',
       pendingMessage: 'Εξαγωγή PDF μήνα...',
@@ -766,15 +875,26 @@ export default function MainDashboard() {
       loadingMessage: 'Γίνεται εξαγωγή Excel...',
       execute: async () => {
         const { exportScheduleToExcel } = await loadExportService();
-        await exportScheduleToExcel({
-          ...getExportPayload(),
-          onBeforeDownload: () =>
+        return runAdminExportWithAudit({
+          exportType: 'EXCEL',
+          exportScope: 'WEEK',
+          days: weekDays,
+          week: weekDays[0] || '',
+          fileName: `program_excel_${weekDays[0] || 'week'}_${weekDays[weekDays.length - 1] || 'end'}.xlsx`,
+          recordCount: displayWeekShifts.length,
+          shiftCount: displayWeekShifts.length,
+          showSuccess: () =>
             showExportSuccessBeforeDownload({
               title: 'Επιτυχής εξαγωγή Excel',
               message: 'Το αρχείο Excel δημιουργήθηκε και η λήψη ξεκινά.',
             }),
+          performExport: ({ exportAuthorization, onBeforeDownload }) =>
+            exportScheduleToExcel({
+              ...getExportPayload(),
+              exportAuthorization,
+              onBeforeDownload,
+            }),
         });
-        return true;
       },
       errorMessageFallback: 'Αποτυχία εξαγωγής Excel.',
       pendingMessage: 'Εξαγωγή Excel...',
@@ -788,15 +908,26 @@ export default function MainDashboard() {
       loadingMessage: 'Γίνεται εξαγωγή Word...',
       execute: async () => {
         const { exportScheduleToWord } = await loadExportService();
-        await exportScheduleToWord({
-          ...getExportPayload(),
-          onBeforeDownload: () =>
+        return runAdminExportWithAudit({
+          exportType: 'WORD',
+          exportScope: 'WEEK',
+          days: weekDays,
+          week: weekDays[0] || '',
+          fileName: `program_word_${weekDays[0] || 'week'}_${weekDays[weekDays.length - 1] || 'end'}.docx`,
+          recordCount: displayWeekShifts.length,
+          shiftCount: displayWeekShifts.length,
+          showSuccess: () =>
             showExportSuccessBeforeDownload({
               title: 'Επιτυχής εξαγωγή Word',
               message: 'Το αρχείο Word δημιουργήθηκε και η λήψη ξεκινά.',
             }),
+          performExport: ({ exportAuthorization, onBeforeDownload }) =>
+            exportScheduleToWord({
+              ...getExportPayload(),
+              exportAuthorization,
+              onBeforeDownload,
+            }),
         });
-        return true;
       },
       errorMessageFallback: 'Αποτυχία εξαγωγής Word.',
       pendingMessage: 'Εξαγωγή Word...',

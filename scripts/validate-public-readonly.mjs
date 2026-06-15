@@ -103,5 +103,9 @@ assert(mainDashboard.includes('publicEmployees?.length ? publicEmployees'), 'Pub
 assert(schedulerStore.includes('refreshPublicWeekSnapshot'), 'Admin schedule writes must refresh public week snapshots.');
 assert(schedulerStore.includes('refreshPublicMonthSnapshot'), 'Admin monthly generation must refresh public month snapshots.');
 assert(schedulerStore.includes('refreshPublicEmployeesSnapshot'), 'Employee writes must refresh public employee snapshots.');
+assert(
+  !/refreshPublicWeekSnapshot\(\{\s*weekStart,\s*shifts:\s*monthShifts/.test(schedulerStore),
+  'Monthly public refresh must not overwrite boundary week snapshots with month-only shifts.',
+);
 
 console.log('Public read-only tenant checks passed');

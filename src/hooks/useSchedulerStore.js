@@ -881,6 +881,10 @@ export const useSchedulerStore = create((set, get) => ({
     const monthShifts = Array.isArray(shifts)
       ? shifts.filter((shift) => monthSet.has(shift.date))
       : get().shifts.filter((shift) => monthSet.has(shift.date));
+    const publicWeekShifts = [
+      ...get().shifts.filter((shift) => !monthSet.has(shift.date)),
+      ...monthShifts,
+    ];
     const weekStarts = getWeekStartsForDates(resolvedMonthDays);
     const yearMonth = getYearMonthFromParts(numericYear, numericMonth + 1);
 
@@ -898,7 +902,7 @@ export const useSchedulerStore = create((set, get) => ({
 
       await Promise.all(
         weekStarts.map((weekStart) =>
-          get().refreshPublicWeekSnapshot({ weekStart, shifts: monthShifts, silent: true }),
+          get().refreshPublicWeekSnapshot({ weekStart, shifts: publicWeekShifts, silent: true }),
         ),
       );
       return true;

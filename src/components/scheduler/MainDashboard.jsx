@@ -9,7 +9,7 @@ import { calculateWeeklyTotals, getShiftTypeLabel, SHIFT_TYPES } from '../../uti
 import { createDynamicImportRecoveryError, requestDynamicImportRecovery } from '../../utils/dynamicImportRecovery';
 import { getMonthDays } from '../../utils/scheduleUtils';
 import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
-import { formatDateGreek, getWeekDays } from '../../utils/time';
+import { formatDateGreek, getIsoDate, getMonday, getWeekDays } from '../../utils/time';
 import { buildWhatsappSummary } from '../../utils/whatsappExport';
 import AnnouncementBoard from './AnnouncementBoard';
 import AnalyticsPanel from './AnalyticsPanel';
@@ -63,6 +63,49 @@ function createWeekFingerprint(weekShifts = []) {
         ].join('|'),
     )
     .join('||');
+}
+
+function getMonthCalendarDays(monthDays = []) {
+  if (!monthDays.length) return [];
+  const firstWeekStart = getIsoDate(getMonday(new Date(`${monthDays[0]}T00:00:00`)));
+  const lastMonthDay = monthDays[monthDays.length - 1];
+  const lastWeekStart = getIsoDate(getMonday(new Date(`${lastMonthDay}T00:00:00`)));
+  const lastWeekDays = getWeekDays(lastWeekStart);
+  const lastVisibleDay = lastWeekDays[6] || lastMonthDay;
+  const days = [];
+  const cursor = new Date(`${firstWeekStart}T00:00:00`);
+  const end = new Date(`${lastVisibleDay}T00:00:00`);
+  let guard = 0;
+
+  while (cursor <= end && guard < 42) {
+    days.push(getIsoDate(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+    guard += 1;
+  }
+
+  return days;
+}
+
+function dedupeShiftsByPublicKey(shifts = []) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const shift of shifts || []) {
+    const key = [
+      shift?.id,
+      shift?.date,
+      shift?.startTime,
+      shift?.endTime,
+      shift?.employeeId,
+      shift?.employeeName,
+      shift?.type,
+    ].filter(Boolean).join('|');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(shift);
+  }
+
+  return deduped;
 }
 
 function downloadBlob(blob, fileName) {
@@ -326,6 +369,7 @@ export default function MainDashboard() {
     generateMagicMonth,
     toggleShiftManualOverride,
     startPublishedMonthSubscription,
+    startPublishedScheduleSubscriptions,
   } = useSchedulerStore();
 
   useEffect(() => {
@@ -344,6 +388,12 @@ export default function MainDashboard() {
   const monthInfo = useMemo(() => getMonthDays(selectedYear, selectedMonth), [selectedMonth, selectedYear]);
   const monthDays = monthInfo.days;
   const monthSet = useMemo(() => new Set(monthDays), [monthDays]);
+  const monthCalendarDays = useMemo(() => getMonthCalendarDays(monthDays), [monthDays]);
+  const monthCalendarSet = useMemo(() => new Set(monthCalendarDays), [monthCalendarDays]);
+  const monthWeekStarts = useMemo(
+    () => monthCalendarDays.filter((date, index) => index % 7 === 0),
+    [monthCalendarDays],
+  );
 
   const weekShifts = useMemo(
     () => shifts.filter((shift) => weekSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
@@ -365,6 +415,10 @@ export default function MainDashboard() {
     () => shifts.filter((shift) => monthSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, monthSet],
   );
+  const monthCalendarShifts = useMemo(
+    () => shifts.filter((shift) => monthCalendarSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
+    [monthCalendarSet, shifts],
+  );
   const selectedYearMonth = useMemo(
     () => `${String(selectedYear).padStart(4, '0')}-${String(selectedMonth + 1).padStart(2, '0')}`,
     [selectedMonth, selectedYear],
@@ -379,9 +433,23 @@ export default function MainDashboard() {
         .filter((shift) => monthSet.has(shift.date)),
     [activePublishedMonth, monthSet, publishedWeekShifts],
   );
+  const publicMonthCalendarShifts = useMemo(() => {
+    const weekStartSet = new Set(monthWeekStarts);
+    const cachedWeekShifts = Object.entries(publishedSchedulesByWeek || {})
+      .filter(([publicWeekStart, schedule]) => weekStartSet.has(publicWeekStart) && schedule?.shifts?.length)
+      .flatMap(([, schedule]) => schedule.shifts || []);
+
+    return dedupeShiftsByPublicKey([
+      ...(activePublishedMonth?.shifts || []),
+      ...cachedWeekShifts,
+      ...publishedWeekShifts,
+    ])
+      .filter((shift) => monthCalendarSet.has(shift.date))
+      .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+  }, [activePublishedMonth, monthCalendarSet, monthWeekStarts, publishedSchedulesByWeek, publishedWeekShifts]);
   const fallbackPublicEmployees = useMemo(() => {
     const employeeById = new Map();
-    [...publishedWeekShifts, ...publicMonthShifts].forEach((shift, index) => {
+    [...publishedWeekShifts, ...publicMonthCalendarShifts].forEach((shift, index) => {
       const key = shift.employeeName || `employee-${index}`;
       if (!key || employeeById.has(key)) return;
       employeeById.set(key, {
@@ -392,13 +460,14 @@ export default function MainDashboard() {
       });
     });
     return [...employeeById.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, 'el'));
-  }, [publishedWeekShifts, publicMonthShifts]);
+  }, [publishedWeekShifts, publicMonthCalendarShifts]);
   const displayEmployees = isAdmin ? employees : (publicEmployees?.length ? publicEmployees : fallbackPublicEmployees);
   const displayAnnouncements = isAdmin ? announcements : publicAnnouncements;
   const displayWeekShifts = isAdmin ? weekShifts : publishedWeekShifts;
   const displayMonthShifts = isAdmin ? monthShifts : publicMonthShifts;
-  const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
-  const visibleShifts = scheduleMode === 'month' ? displayMonthShifts : displayWeekShifts;
+  const displayMonthCalendarShifts = isAdmin ? monthCalendarShifts : publicMonthCalendarShifts;
+  const visibleDays = scheduleMode === 'month' ? monthCalendarDays : weekDays;
+  const visibleShifts = scheduleMode === 'month' ? displayMonthCalendarShifts : displayWeekShifts;
   const publicEmployeeIdByName = useMemo(() => {
     if (isAdmin) return new Map();
     return new Map(
@@ -433,6 +502,11 @@ export default function MainDashboard() {
   useEffect(() => {
     startPublishedMonthSubscription?.(selectedYearMonth);
   }, [selectedYearMonth, startPublishedMonthSubscription]);
+
+  useEffect(() => {
+    if (isAdmin || scheduleMode !== 'month' || !monthWeekStarts.length) return;
+    startPublishedScheduleSubscriptions?.(monthWeekStarts);
+  }, [isAdmin, monthWeekStarts, scheduleMode, startPublishedScheduleSubscriptions]);
 
   useEffect(() => {
     const previousFingerprint = previousWeekFingerprintRef.current;

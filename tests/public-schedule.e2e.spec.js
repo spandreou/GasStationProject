@@ -68,6 +68,46 @@ const publicAnnouncements = [
   },
 ];
 
+const boundaryWeek = {
+  id: '2026-06-29',
+  weekStart: '2026-06-29',
+  weekEnd: '2026-07-05',
+  shiftCount: 2,
+  shifts: [
+    {
+      id: 'boundary-june-30',
+      employeeId: '',
+      employeeName: 'Δρόση Βασιλική',
+      date: '2026-06-30',
+      startTime: '06:00',
+      endTime: '14:00',
+      type: 'work',
+      label: '',
+      shiftType: 'morning',
+    },
+    {
+      id: 'boundary-july-01',
+      employeeId: '',
+      employeeName: 'Ρόκα Κωνσταντίνα',
+      date: '2026-07-01',
+      startTime: '10:00',
+      endTime: '18:00',
+      type: 'work',
+      label: '',
+      shiftType: 'intermediate',
+    },
+  ],
+};
+
+const juneMonthWithBoundaryWeek = {
+  id: '2026-06',
+  yearMonth: '2026-06',
+  monthStart: '2026-06-01',
+  monthEnd: '2026-06-30',
+  shiftCount: 1,
+  shifts: [boundaryWeek.shifts[0]],
+};
+
 async function seedPublicSchedule(page) {
   await page.evaluate(({ publishedSchedule, publishedMonth, publicEmployees, publicAnnouncements }) => {
     const store = window.__gasStationSchedulerStore;
@@ -129,6 +169,54 @@ test('read-only mode renders a sanitized published schedule without admin data',
   await expect(page.getByRole('button', { name: 'Εξαγωγή' })).toHaveCount(0);
   await expect(page.getByText('Ιστορικό Προγραμμάτων')).toHaveCount(0);
   await expect(page.getByText('Νέος υπάλληλος')).toHaveCount(0);
+});
+
+test('month view fills cross-month week days when a public week snapshot exists', async ({ page }) => {
+  await page.goto(BASE_URL);
+  await page.waitForFunction(() => window.__gasStationSchedulerStore);
+  await page.evaluate(({ boundaryWeek, publishedMonth, publicEmployees }) => {
+    const store = window.__gasStationSchedulerStore;
+    store.getState().cleanupData?.();
+    store.setState({
+      employees: [],
+      shifts: [],
+      publishedSchedulesByWeek: {
+        [boundaryWeek.weekStart]: boundaryWeek,
+      },
+      publishedSchedule: boundaryWeek,
+      publishedMonthsByMonth: {
+        [publishedMonth.yearMonth]: publishedMonth,
+      },
+      publishedMonth,
+      publicEmployees,
+      publicAnnouncements: [],
+      isAdmin: false,
+      adminUser: null,
+      isLoading: false,
+      isAuthLoading: false,
+      isSaving: false,
+      errorMessage: '',
+      warningMessage: '',
+      weekStart: boundaryWeek.weekStart,
+      _unsubscribeEmployees: null,
+      _unsubscribeShifts: null,
+      _unsubscribeTemplates: null,
+      _unsubscribeAnnouncements: null,
+      _unsubscribeSchedulerSettings: null,
+      _unsubscribePublishedSchedule: null,
+      _unsubscribePublishedMonth: null,
+      _unsubscribePublicEmployees: null,
+      _unsubscribePublicAnnouncements: null,
+      _unsubscribeAuth: null,
+    });
+  }, { boundaryWeek, publishedMonth: juneMonthWithBoundaryWeek, publicEmployees });
+
+  await page.getByLabel('Τύπος Προγράμματος').selectOption('month');
+
+  await expect(page.getByRole('heading', { name: 'Εβδομάδα 29/06/2026 - 05/07/2026' })).toBeVisible();
+  await expect(page.locator('[data-testid="day-box"][data-date="2026-07-01"]')).toContainText('Ρόκα Κωνσταντίνα');
+  await expect(page.locator('[data-testid="day-box"][data-date="2026-07-01"]')).toContainText('10:00 - 18:00');
+  await expect(page.locator('[data-testid="day-box"][data-date="2026-07-01"]')).not.toContainText('No shifts');
 });
 
 test('month clear confirmation dialog is portaled to the document body', async ({ page }) => {

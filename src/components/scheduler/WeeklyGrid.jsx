@@ -1239,7 +1239,9 @@ export default function WeeklyGrid({
                 </header>
                 <div className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-visible md:snap-none lg:grid-cols-4 xl:grid-cols-7 ${densityClasses.weekGrid}`}>
                   {weekRow.days.map(({ date, isInMonth }, index) => {
-                    if (!isInMonth) {
+                    const dayShifts = grouped[date] || [];
+
+                    if (!isInMonth && !dayShifts.length) {
                       return (
                         <div key={`placeholder-${weekRow.key}-${index}`} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
                           <div className={`h-full min-h-[120px] rounded-lg border border-dashed border-slate-300/45 bg-white/20 opacity-45 dark:border-cyan-300/20 dark:bg-slate-900/25 ${densityClasses.dayBox}`} aria-hidden="true">
@@ -1252,7 +1254,6 @@ export default function WeeklyGrid({
                       );
                     }
 
-                    const dayShifts = grouped[date] || [];
                     return (
                       <div key={date} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
                         <DayBox

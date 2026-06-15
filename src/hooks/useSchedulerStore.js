@@ -397,6 +397,7 @@ export const useSchedulerStore = create((set, get) => ({
   _unsubscribeAnnouncements: null,
   _unsubscribeSchedulerSettings: null,
   _unsubscribePublishedSchedule: null,
+  _unsubscribePublishedSchedulesByWeek: {},
   _unsubscribePublishedMonth: null,
   _unsubscribePublicEmployees: null,
   _unsubscribePublicAnnouncements: null,
@@ -520,6 +521,47 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ _unsubscribePublishedSchedule: unsubscribePublishedSchedule });
     return unsubscribePublishedSchedule;
+  },
+
+  startPublishedScheduleSubscriptions: (weekStarts = []) => {
+    if (!isFirebaseConfigured) return {};
+
+    const uniqueWeekStarts = [...new Set((weekStarts || []).filter(Boolean))];
+    const nextWeekStartSet = new Set(uniqueWeekStarts);
+    const existingUnsubscribes = get()._unsubscribePublishedSchedulesByWeek || {};
+    const nextUnsubscribes = { ...existingUnsubscribes };
+
+    Object.entries(existingUnsubscribes).forEach(([weekStart, unsubscribe]) => {
+      if (nextWeekStartSet.has(weekStart)) return;
+      unsubscribe?.();
+      delete nextUnsubscribes[weekStart];
+    });
+
+    uniqueWeekStarts.forEach((weekStart) => {
+      if (nextUnsubscribes[weekStart]) return;
+      nextUnsubscribes[weekStart] = subscribePublishedSchedule(
+        { tenantId: getPublicTenantId(), weekStart },
+        (publishedSchedule) =>
+          set((state) => ({
+            publishedSchedule: state.weekStart === weekStart ? publishedSchedule : state.publishedSchedule,
+            publishedSchedulesByWeek: {
+              ...state.publishedSchedulesByWeek,
+              [weekStart]: publishedSchedule,
+            },
+          })),
+        () =>
+          set((state) => ({
+            publishedSchedule: state.weekStart === weekStart ? null : state.publishedSchedule,
+            publishedSchedulesByWeek: {
+              ...state.publishedSchedulesByWeek,
+              [weekStart]: null,
+            },
+          })),
+      );
+    });
+
+    set({ _unsubscribePublishedSchedulesByWeek: nextUnsubscribes });
+    return nextUnsubscribes;
   },
 
   startPublishedMonthSubscription: (yearMonth) => {
@@ -732,6 +774,7 @@ export const useSchedulerStore = create((set, get) => ({
       _unsubscribeAnnouncements,
       _unsubscribeSchedulerSettings,
       _unsubscribePublishedSchedule,
+      _unsubscribePublishedSchedulesByWeek,
       _unsubscribePublishedMonth,
       _unsubscribePublicEmployees,
       _unsubscribePublicAnnouncements,
@@ -748,6 +791,7 @@ export const useSchedulerStore = create((set, get) => ({
     _unsubscribeAnnouncements?.();
     _unsubscribeSchedulerSettings?.();
     _unsubscribePublishedSchedule?.();
+    Object.values(_unsubscribePublishedSchedulesByWeek || {}).forEach((unsubscribe) => unsubscribe?.());
     _unsubscribePublishedMonth?.();
     _unsubscribePublicEmployees?.();
     _unsubscribePublicAnnouncements?.();
@@ -756,6 +800,7 @@ export const useSchedulerStore = create((set, get) => ({
       _shiftTemplatesRetryTimer: null,
       _shiftTemplatesRetryCount: 0,
       _unsubscribePublishedSchedule: null,
+      _unsubscribePublishedSchedulesByWeek: {},
       _unsubscribePublishedMonth: null,
       _unsubscribePublicEmployees: null,
       _unsubscribePublicAnnouncements: null,

@@ -399,6 +399,28 @@ export default function MainDashboard() {
   const displayMonthShifts = isAdmin ? monthShifts : publicMonthShifts;
   const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
   const visibleShifts = scheduleMode === 'month' ? displayMonthShifts : displayWeekShifts;
+  const publicEmployeeIdByName = useMemo(() => {
+    if (isAdmin) return new Map();
+    return new Map(
+      (displayEmployees || [])
+        .filter((employee) => employee?.fullName && employee?.id)
+        .map((employee) => [employee.fullName, employee.id]),
+    );
+  }, [displayEmployees, isAdmin]);
+  const analyticsWeekShifts = useMemo(() => {
+    if (isAdmin) return displayWeekShifts;
+    return displayWeekShifts.map((shift) => ({
+      ...shift,
+      employeeId: shift.employeeId || publicEmployeeIdByName.get(shift.employeeName) || shift.employeeName || '',
+    }));
+  }, [displayWeekShifts, isAdmin, publicEmployeeIdByName]);
+  const analyticsMonthShifts = useMemo(() => {
+    if (isAdmin) return displayMonthShifts;
+    return displayMonthShifts.map((shift) => ({
+      ...shift,
+      employeeId: shift.employeeId || publicEmployeeIdByName.get(shift.employeeName) || shift.employeeName || '',
+    }));
+  }, [displayMonthShifts, isAdmin, publicEmployeeIdByName]);
   const tenantHostContext = useMemo(() => getCurrentTenantHostContext(), []);
   const exportTenantId = tenantHostContext?.tenantSlug || 'bp-kallis';
 
@@ -436,12 +458,12 @@ export default function MainDashboard() {
   }, [isAdmin]);
 
   const weeklyAnalytics = useMemo(
-    () => calculateWeeklyTotals(displayWeekShifts, displayEmployees, weekDays),
-    [displayEmployees, displayWeekShifts, weekDays],
+    () => calculateWeeklyTotals(analyticsWeekShifts, displayEmployees, weekDays),
+    [analyticsWeekShifts, displayEmployees, weekDays],
   );
   const monthlyAnalytics = useMemo(
-    () => calculateWeeklyTotals(displayMonthShifts, displayEmployees, monthDays),
-    [displayEmployees, displayMonthShifts, monthDays],
+    () => calculateWeeklyTotals(analyticsMonthShifts, displayEmployees, monthDays),
+    [analyticsMonthShifts, displayEmployees, monthDays],
   );
   const analytics = scheduleMode === 'month' ? monthlyAnalytics : weeklyAnalytics;
   const hasExplicitEmployeeScheduleRoles = useMemo(

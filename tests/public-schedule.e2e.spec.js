@@ -10,7 +10,7 @@ const publishedWeek = {
   shifts: [
     {
       id: 'published-1',
-      employeeId: 'public-drossi',
+      employeeId: '',
       employeeName: 'Δρόση Βασιλική',
       date: '2026-06-08',
       startTime: '06:00',
@@ -21,7 +21,7 @@ const publishedWeek = {
     },
     {
       id: 'published-2',
-      employeeId: 'public-roka',
+      employeeId: '',
       employeeName: 'Ρόκα Κωνσταντίνα',
       date: '2026-06-09',
       startTime: '14:00',
@@ -119,6 +119,8 @@ test('read-only mode renders a sanitized published schedule without admin data',
   await expect(page.locator('[data-testid="day-box"][data-date="2026-06-09"]')).toContainText('Ρόκα Κωνσταντίνα');
   await expect(page.getByText('Ενημέρωση προγράμματος')).toBeVisible();
   await expect(page.getByText('Το πρόγραμμα της εβδομάδας είναι διαθέσιμο.')).toBeVisible();
+  await expect(page.getByText('Σύνολο εβδομάδας: 16 ώρες')).toBeVisible();
+  await expect(page.getByText('8 ώρες')).toHaveCount(2);
   await expect(page.getByText('internal replacement note')).toHaveCount(0);
   await expect(page.getByText('playwright@example.test')).toHaveCount(0);
   await expect(page.getByText('authorEmail')).toHaveCount(0);

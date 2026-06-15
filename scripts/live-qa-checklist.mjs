@@ -146,17 +146,10 @@ async function findDayEditorButtonAndOpen(page) {
 }
 
 async function ensureUnlockedWeekForEditing(page) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const finalizeButton = page.locator('button').filter({ hasText: /Οριστικοποιημένη|Οριστικοποίηση Εβδομάδας/ }).first();
-    const visible = await finalizeButton.isVisible().catch(() => false);
-    if (!visible) return;
-    const text = toText(await finalizeButton.innerText().catch(() => ''));
-    const disabled = await finalizeButton.isDisabled().catch(() => false);
-    if (!disabled && !text.includes('Οριστικοποιημένη')) {
-      return;
-    }
-    await clickVisibleButtonByText(page, 'Προηγούμενη', { withinTopPx: 240 });
-    await page.waitForTimeout(900);
+  const finalizeButton = page.locator('button').filter({ hasText: /Οριστικοποιημένη|Οριστικοποίηση Εβδομάδας/ }).first();
+  const visible = await finalizeButton.isVisible().catch(() => false);
+  if (visible) {
+    throw new Error('Legacy finalize button should not be visible.');
   }
 }
 

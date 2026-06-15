@@ -30,10 +30,31 @@ function matchBlock(collectionName) {
   return firestoreRules.slice(start, next === -1 ? undefined : next);
 }
 
-const publicReadMatches = [...firestoreRules.matchAll(/match\s+\/([A-Za-z0-9_]+)\/\{/g)]
+function matchIndentedBlock(collectionName) {
+  const pattern = new RegExp(`(^[ \\t]*)match\\s+/${collectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\{`, 'm');
+  const match = firestoreRules.match(pattern);
+  if (!match) return '';
+  const start = match.index;
+  const indent = match[1];
+  const nextPattern = new RegExp(`\\n${indent}match\\s+/`, 'g');
+  nextPattern.lastIndex = start + match[0].length;
+  const next = nextPattern.exec(firestoreRules);
+  return firestoreRules.slice(start, next ? next.index : undefined);
+}
+
+const publicReadMatches = [...firestoreRules.matchAll(/^[ \t]*match\s+\/([A-Za-z0-9_]+)\/\{/gm)]
   .map((match) => match[1])
-  .filter((collectionName) => matchBlock(collectionName).includes('allow read: if true;'));
-const allowedPublicReadCollections = new Set(['employees_public', 'employeeAbsencesPublic', 'published_schedules']);
+  .filter((collectionName) => !['databases', 'tenants'].includes(collectionName))
+  .filter((collectionName) => matchIndentedBlock(collectionName).includes('allow read: if true;'));
+const allowedPublicReadCollections = new Set([
+  'employees_public',
+  'employeeAbsencesPublic',
+  'published_schedules',
+  'publicEmployees',
+  'publicSchedules',
+  'publicMonths',
+  'publicAnnouncements',
+]);
 
 assert(!combinedClientAuth.includes('VITE_ADMIN_PASSWORD'), 'Client/admin docs must not reference VITE_ADMIN_PASSWORD.');
 assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not expose demo admin password fallback.');
@@ -96,7 +117,27 @@ assert(matchBlock('tenants').includes('match /settings/{settingsId}'), 'Tenant s
 assert(matchBlock('tenants').includes('match /subscription/{subscriptionId}'), 'Tenant scoped subscription rules must exist.');
 assert(matchBlock('tenants').includes('match /tokenRequests/{requestId}'), 'Tenant scoped token request rules must exist.');
 assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant scoped audit log rules must exist.');
-assert(!matchBlock('tenants').includes('allow read: if true;'), 'Tenant scoped SaaS data must not be public readable.');
+[
+  'match /publicEmployees/{employeeId}',
+  'match /publicSchedules/{weekStart}',
+  'match /publicMonths/{yearMonth}',
+  'match /publicAnnouncements/{announcementId}',
+].forEach((marker) => {
+  assert(matchBlock('tenants').includes(marker), `Tenant scoped public rule missing: ${marker}`);
+});
+[
+  'match /employees/{employeeId}',
+  'match /shifts/{shiftId}',
+  'match /settings/{settingsId}',
+  'match /subscription/{subscriptionId}',
+  'match /tokenRequests/{requestId}',
+  'match /auditLogs/{auditLogId}',
+].forEach((marker) => {
+  const start = matchBlock('tenants').indexOf(marker);
+  const end = matchBlock('tenants').indexOf('\n      match /', start + marker.length);
+  const block = matchBlock('tenants').slice(start, end === -1 ? undefined : end);
+  assert(!block.includes('allow read: if true;'), `Raw tenant scoped SaaS data must not be public readable: ${marker}`);
+});
 assert(matchBlock('monthly_schedule_exports').includes('allow read: if isAdmin();'), 'Monthly PDF archive metadata must be admin-readable only.');
 assert(
   matchBlock('monthly_schedule_exports').includes('allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);'),

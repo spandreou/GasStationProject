@@ -33,8 +33,43 @@ const publishedWeek = {
   ],
 };
 
+const publishedMonth = {
+  id: '2026-06',
+  yearMonth: '2026-06',
+  monthStart: '2026-06-01',
+  monthEnd: '2026-06-30',
+  shiftCount: publishedWeek.shifts.length,
+  shifts: publishedWeek.shifts,
+};
+
+const publicEmployees = [
+  {
+    id: 'public-drossi',
+    fullName: 'Δρόση Βασιλική',
+    role: 'Προσωπικό',
+    color: '#1D4ED8',
+    isActive: true,
+  },
+  {
+    id: 'public-roka',
+    fullName: 'Ρόκα Κωνσταντίνα',
+    role: 'Προσωπικό',
+    color: '#1D4ED8',
+    isActive: true,
+  },
+];
+
+const publicAnnouncements = [
+  {
+    id: 'announcement-public',
+    title: 'Ενημέρωση προγράμματος',
+    body: 'Το πρόγραμμα της εβδομάδας είναι διαθέσιμο.',
+    createdAt: '2026-06-08T08:00:00.000Z',
+  },
+];
+
 async function seedPublicSchedule(page) {
-  await page.evaluate((publishedSchedule) => {
+  await page.evaluate(({ publishedSchedule, publishedMonth, publicEmployees, publicAnnouncements }) => {
     const store = window.__gasStationSchedulerStore;
     if (!store) throw new Error('Scheduler store dev hook was not exposed');
     store.getState().cleanupData?.();
@@ -45,6 +80,12 @@ async function seedPublicSchedule(page) {
         [publishedSchedule.weekStart]: publishedSchedule,
       },
       publishedSchedule,
+      publishedMonthsByMonth: {
+        [publishedMonth.yearMonth]: publishedMonth,
+      },
+      publishedMonth,
+      publicEmployees,
+      publicAnnouncements,
       isAdmin: false,
       adminUser: null,
       isLoading: false,
@@ -59,9 +100,12 @@ async function seedPublicSchedule(page) {
       _unsubscribeAnnouncements: null,
       _unsubscribeSchedulerSettings: null,
       _unsubscribePublishedSchedule: null,
+      _unsubscribePublishedMonth: null,
+      _unsubscribePublicEmployees: null,
+      _unsubscribePublicAnnouncements: null,
       _unsubscribeAuth: null,
     });
-  }, publishedWeek);
+  }, { publishedSchedule: publishedWeek, publishedMonth, publicEmployees, publicAnnouncements });
 }
 
 test('read-only mode renders a sanitized published schedule without admin data', async ({ page }) => {
@@ -73,8 +117,16 @@ test('read-only mode renders a sanitized published schedule without admin data',
   await expect(page.locator('[data-testid="day-box"][data-date="2026-06-08"]')).toContainText('Δρόση Βασιλική');
   await expect(page.locator('[data-testid="day-box"][data-date="2026-06-08"]')).toContainText('06:00 - 14:00');
   await expect(page.locator('[data-testid="day-box"][data-date="2026-06-09"]')).toContainText('Ρόκα Κωνσταντίνα');
+  await expect(page.getByText('Ενημέρωση προγράμματος')).toBeVisible();
+  await expect(page.getByText('Το πρόγραμμα της εβδομάδας είναι διαθέσιμο.')).toBeVisible();
   await expect(page.getByText('internal replacement note')).toHaveCount(0);
+  await expect(page.getByText('playwright@example.test')).toHaveCount(0);
+  await expect(page.getByText('authorEmail')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Αποθήκευση' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Οριστικοποίηση/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Εξαγωγή' })).toHaveCount(0);
+  await expect(page.getByText('Ιστορικό Προγραμμάτων')).toHaveCount(0);
+  await expect(page.getByText('Νέος υπάλληλος')).toHaveCount(0);
 });
 
 test('month clear confirmation dialog is portaled to the document body', async ({ page }) => {

@@ -166,6 +166,23 @@ The SaaS collections are protected in `firestore.rules`:
 
 These rules prepare tenant isolation without enabling public or email-based access.
 
+## Tenant Public Read-Only Snapshots
+
+BP Kallis public/read-only visitors must not read raw admin collections such as `employees`, `shifts`, `announcements`, `week_history`, `audit_logs`, or `monthly_schedule_exports`.
+
+Public schedule data is mirrored into sanitized tenant subcollections:
+
+- `tenants/{tenantId}/publicSchedules/{weekStart}`
+- `tenants/{tenantId}/publicMonths/{YYYY-MM}`
+- `tenants/{tenantId}/publicEmployees/{employeeId}`
+- `tenants/{tenantId}/publicAnnouncements/{announcementId}`
+
+Admin save/generate/edit actions refresh these documents automatically. The legacy root `published_schedules` collection remains only as a non-destructive fallback for older data; new writes should use the tenant-scoped public paths.
+
+Allowed public fields are intentionally narrow: schedule dates/times and display names, employee display name/role/color/active status, and announcement title/body/date. Do not add phone, email, AFM, private notes, audit metadata, Storage paths, public URLs, signed URLs, monthly PDF archive metadata, or internal admin fields to public snapshots.
+
+The old finalized/published-week UI flow is no longer the source of truth. Owners can edit schedules after old `week_locks` data exists, and public snapshots are refreshed by normal save/generate/clear actions.
+
 ## Tenant Gate
 
 `src/components/auth/TenantGate.jsx` wraps tenant views and is controlled by:

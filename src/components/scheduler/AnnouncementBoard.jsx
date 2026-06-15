@@ -106,14 +106,7 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
             {isSaving ? 'Δημοσίευση...' : 'Δημοσίευση Ανακοίνωσης'}
           </button>
         </form>
-      ) : (
-        <StateNotice
-          state="info"
-          compact
-          title="Read-only"
-          message="Μόνο ο διαχειριστής μπορεί να δημοσιεύει ή να διαγράφει ανακοινώσεις."
-        />
-      )}
+      ) : null}
 
       <div className="space-y-3">
         {isSaving && !announcements.length ? (
@@ -153,7 +146,7 @@ export default function AnnouncementBoard({ announcements, isAdmin, isSaving, on
             <p className="whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">{announcement.body}</p>
             <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
               {formatAnnouncementDate(announcement.createdAt)}
-              {announcement.authorEmail ? ` - ${announcement.authorEmail}` : ''}
+              {isAdmin && announcement.authorEmail ? ` - ${announcement.authorEmail}` : ''}
             </p>
           </article>
         ))}

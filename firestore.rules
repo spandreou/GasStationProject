@@ -304,6 +304,59 @@ service cloud.firestore {
         request.resource.data.shifts is list;
     }
 
+    function validTenantPublicSchedule(tenantId, scheduleId) {
+      return request.resource.data.keys().hasAll(['tenantId', 'weekStart', 'weekEnd', 'shiftCount', 'shifts']) &&
+        request.resource.data.keys().hasOnly([
+          'tenantId', 'weekStart', 'weekEnd', 'shiftCount', 'shifts', 'publishedAt', 'updatedAt'
+        ]) &&
+        request.resource.data.tenantId == tenantId &&
+        request.resource.data.weekStart == scheduleId &&
+        isIsoDate(request.resource.data.weekStart) &&
+        isIsoDate(request.resource.data.weekEnd) &&
+        request.resource.data.shiftCount is number &&
+        request.resource.data.shiftCount >= 0 &&
+        request.resource.data.shifts is list;
+    }
+
+    function validTenantPublicMonth(tenantId, yearMonth) {
+      return request.resource.data.keys().hasAll(['tenantId', 'yearMonth', 'monthStart', 'monthEnd', 'shiftCount', 'shifts']) &&
+        request.resource.data.keys().hasOnly([
+          'tenantId', 'yearMonth', 'monthStart', 'monthEnd', 'monthDays',
+          'weekStarts', 'shiftCount', 'shifts', 'publishedAt', 'updatedAt'
+        ]) &&
+        request.resource.data.tenantId == tenantId &&
+        request.resource.data.yearMonth == yearMonth &&
+        request.resource.data.yearMonth.matches('^\\d{4}-\\d{2}$') &&
+        isIsoDate(request.resource.data.monthStart) &&
+        isIsoDate(request.resource.data.monthEnd) &&
+        request.resource.data.shiftCount is number &&
+        request.resource.data.shiftCount >= 0 &&
+        request.resource.data.shifts is list &&
+        (!('monthDays' in request.resource.data) || request.resource.data.monthDays is list) &&
+        (!('weekStarts' in request.resource.data) || request.resource.data.weekStarts is list);
+    }
+
+    function validTenantPublicEmployee(tenantId) {
+      return request.resource.data.keys().hasAll(['tenantId', 'fullName']) &&
+        request.resource.data.keys().hasOnly(['tenantId', 'fullName', 'role', 'color', 'isActive', 'updatedAt']) &&
+        request.resource.data.tenantId == tenantId &&
+        request.resource.data.fullName is string &&
+        request.resource.data.fullName.size() > 0 &&
+        isOptionalString('role') &&
+        isOptionalString('color') &&
+        (!('isActive' in request.resource.data) || request.resource.data.isActive is bool);
+    }
+
+    function validTenantPublicAnnouncement(tenantId) {
+      return request.resource.data.keys().hasAll(['tenantId', 'title', 'body']) &&
+        request.resource.data.keys().hasOnly(['tenantId', 'title', 'body', 'createdAt', 'updatedAt']) &&
+        request.resource.data.tenantId == tenantId &&
+        request.resource.data.title is string &&
+        request.resource.data.title.size() > 0 &&
+        request.resource.data.body is string &&
+        request.resource.data.body.size() > 0;
+    }
+
     function validMonthlyScheduleExport(exportId) {
       return request.resource.data.keys().hasAll([
           'tenantId', 'yearMonth', 'fileName', 'storagePath', 'createdBy', 'shiftCount', 'status', 'createdAt', 'updatedAt'
@@ -560,10 +613,28 @@ service cloud.firestore {
         allow delete: if isAdmin();
       }
 
+      match /publicEmployees/{employeeId} {
+        allow read: if true;
+        allow create, update: if isAdmin() && validTenantPublicEmployee(tenantId);
+        allow delete: if isAdmin();
+      }
+
       match /shifts/{shiftId} {
         allow read: if isAdmin() || isActiveTenantMember(tenantId);
         allow create: if isAdmin() && validShift();
         allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
+        allow delete: if isAdmin();
+      }
+
+      match /publicSchedules/{weekStart} {
+        allow read: if true;
+        allow create, update: if isAdmin() && validTenantPublicSchedule(tenantId, weekStart);
+        allow delete: if isAdmin();
+      }
+
+      match /publicMonths/{yearMonth} {
+        allow read: if true;
+        allow create, update: if isAdmin() && validTenantPublicMonth(tenantId, yearMonth);
         allow delete: if isAdmin();
       }
 
@@ -589,6 +660,12 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow create: if isAdmin() && validAuditLog();
         allow update, delete: if false;
+      }
+
+      match /publicAnnouncements/{announcementId} {
+        allow read: if true;
+        allow create, update: if isAdmin() && validTenantPublicAnnouncement(tenantId);
+        allow delete: if isAdmin();
       }
     }
 

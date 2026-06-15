@@ -76,14 +76,13 @@ export default function SchedulerSidebar({
         icon={UsersRound}
         activeId={activeSection}
         onToggle={handleToggle}
-        helperText="Διαχείριση προσωπικού και drag & drop ανάθεση στο grid."
+        helperText={isAdmin ? 'Διαχείριση προσωπικού και drag & drop ανάθεση στο grid.' : 'Προσωπικό βαρδιών.'}
       >
         <EmployeeSidebar
           employees={employees}
           isAdmin={isAdmin}
           onAddEmployee={onAddEmployee}
           onDeleteEmployee={onDeleteEmployee}
-          onOpenAdminLogin={onOpenAdminLogin}
           onOpenProfile={onOpenProfile}
           compact={compact}
           className="border-white/30 bg-white/18 dark:border-cyan-300/16 dark:bg-slate-900/20"
@@ -114,16 +113,18 @@ export default function SchedulerSidebar({
         />
       </SidebarSection>
 
-      <SidebarSection
-        id="manual"
-        title="Χειροκίνητη Βάρδια"
-        icon={LayoutPanelTop}
-        activeId={activeSection}
-        onToggle={handleToggle}
-        helperText="Γρήγορη προσθήκη custom βάρδιας χωρίς να φύγεις από το dashboard."
-      >
-        <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={onCreateShift} canManage={isAdmin} />
-      </SidebarSection>
+      {isAdmin ? (
+        <SidebarSection
+          id="manual"
+          title="Χειροκίνητη Βάρδια"
+          icon={LayoutPanelTop}
+          activeId={activeSection}
+          onToggle={handleToggle}
+          helperText="Γρήγορη προσθήκη custom βάρδιας χωρίς να φύγεις από το dashboard."
+        >
+          <ManualShiftForm employees={employees} weekDays={visibleDays} onCreateShift={onCreateShift} canManage={isAdmin} />
+        </SidebarSection>
+      ) : null}
 
       <SidebarSection
         id="analytics"

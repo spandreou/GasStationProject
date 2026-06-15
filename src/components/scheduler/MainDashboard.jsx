@@ -94,9 +94,6 @@ function humanizeStoreMessage(rawMessage) {
   if (normalized.includes('overlapping shift')) {
     return 'Υπάρχει επικάλυψη βάρδιας για τον ίδιο υπάλληλο. Διόρθωσε τις ώρες και ξαναπροσπάθησε.';
   }
-  if (normalized.includes('this week is locked')) {
-    return 'Η εβδομάδα είναι κλειδωμένη μετά την οριστικοποίηση. Δεν επιτρέπονται αλλαγές.';
-  }
   if (normalized.includes('template') || normalized.includes('custom βαρδι')) {
     return 'Δεν μπορέσαμε να φορτώσουμε τις custom βάρδιες. Οι κάρτες templates μπορεί να λείπουν προσωρινά, οπότε δεν θα μπορείς να τις αναθέσεις. Δοκίμασε ξανά φόρτωση ή ανανέωσε τη σελίδα.';
   }
@@ -154,7 +151,7 @@ function classifyStoreFeedback(message) {
   const normalized = String(message || '').toLowerCase();
   if (!normalized) return 'info';
 
-  const successSignals = ['αποθηκε', 'οριστικ', 'ολοκληρ', 'δημοσι', 'φορτώθηκε', 'αντιγράφηκε'];
+  const successSignals = ['αποθηκε', 'ολοκληρ', 'δημοσι', 'φορτώθηκε', 'αντιγράφηκε'];
   const errorSignals = ['αποτυχ', 'failed', 'error', 'cannot', 'unable'];
   const warningSignals = ['δεν ', 'επικάλυψη', 'κλειδω', 'προσοχή', 'μερικ'];
 
@@ -259,6 +256,10 @@ export default function MainDashboard() {
     weekTemplates,
     publishedSchedule,
     publishedSchedulesByWeek,
+    publishedMonth,
+    publishedMonthsByMonth,
+    publicEmployees,
+    publicAnnouncements,
     generatorRules,
     specialDaysByDate,
     selectedHistoryWeekId,
@@ -267,7 +268,6 @@ export default function MainDashboard() {
     announcements,
     isAbsencesLoading,
     absencesWarningMessage,
-    isWeekLocked,
     weekStart,
     isLoading,
     isAuthLoading,
@@ -325,7 +325,7 @@ export default function MainDashboard() {
     generateMagicWeek,
     generateMagicMonth,
     toggleShiftManualOverride,
-    finalizeCurrentWeek,
+    startPublishedMonthSubscription,
   } = useSchedulerStore();
 
   useEffect(() => {
@@ -361,29 +361,40 @@ export default function MainDashboard() {
     [activePublishedSchedule, weekSet],
   );
   const weekFingerprint = useMemo(() => createWeekFingerprint(weekShifts), [weekShifts]);
-  const isWeekEffectivelyLocked = isWeekLocked && weekShifts.length > 0;
   const monthShifts = useMemo(
     () => shifts.filter((shift) => monthSet.has(shift.date)).sort((a, b) => a.date.localeCompare(b.date)),
     [shifts, monthSet],
   );
-  const publicMonthShifts = useMemo(
-    () => publishedWeekShifts.filter((shift) => monthSet.has(shift.date)),
-    [monthSet, publishedWeekShifts],
+  const selectedYearMonth = useMemo(
+    () => `${String(selectedYear).padStart(4, '0')}-${String(selectedMonth + 1).padStart(2, '0')}`,
+    [selectedMonth, selectedYear],
   );
-  const publicEmployees = useMemo(() => {
+  const activePublishedMonth = useMemo(() => {
+    if (publishedMonth?.yearMonth === selectedYearMonth) return publishedMonth;
+    return publishedMonthsByMonth?.[selectedYearMonth] || null;
+  }, [publishedMonth, publishedMonthsByMonth, selectedYearMonth]);
+  const publicMonthShifts = useMemo(
+    () =>
+      (activePublishedMonth?.shifts?.length ? activePublishedMonth.shifts : publishedWeekShifts)
+        .filter((shift) => monthSet.has(shift.date)),
+    [activePublishedMonth, monthSet, publishedWeekShifts],
+  );
+  const fallbackPublicEmployees = useMemo(() => {
     const employeeById = new Map();
-    publishedWeekShifts.forEach((shift) => {
-      if (!shift.employeeId || employeeById.has(shift.employeeId)) return;
-      employeeById.set(shift.employeeId, {
-        id: shift.employeeId,
+    [...publishedWeekShifts, ...publicMonthShifts].forEach((shift, index) => {
+      const key = shift.employeeName || `employee-${index}`;
+      if (!key || employeeById.has(key)) return;
+      employeeById.set(key, {
+        id: key,
         fullName: shift.employeeName || 'Άγνωστος',
-        role: 'Δημοσιευμένο πρόγραμμα',
+        role: 'Πρόγραμμα',
         isActive: true,
       });
     });
     return [...employeeById.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, 'el'));
-  }, [publishedWeekShifts]);
-  const displayEmployees = isAdmin ? employees : publicEmployees;
+  }, [publishedWeekShifts, publicMonthShifts]);
+  const displayEmployees = isAdmin ? employees : (publicEmployees?.length ? publicEmployees : fallbackPublicEmployees);
+  const displayAnnouncements = isAdmin ? announcements : publicAnnouncements;
   const displayWeekShifts = isAdmin ? weekShifts : publishedWeekShifts;
   const displayMonthShifts = isAdmin ? monthShifts : publicMonthShifts;
   const visibleDays = scheduleMode === 'month' ? monthDays : weekDays;
@@ -396,6 +407,10 @@ export default function MainDashboard() {
     setHasUnsavedChanges(false);
     setSyncStatusOverride((prev) => ({ ...prev, status: 'saved', label: '' }));
   }, [weekStart]);
+
+  useEffect(() => {
+    startPublishedMonthSubscription?.(selectedYearMonth);
+  }, [selectedYearMonth, startPublishedMonthSubscription]);
 
   useEffect(() => {
     const previousFingerprint = previousWeekFingerprintRef.current;
@@ -711,10 +726,6 @@ export default function MainDashboard() {
     event.preventDefault();
     const { employeeId, date, startTime, endTime, type } = quickAssignDraft;
     if (!employeeId || !date) return;
-    if (isWeekEffectivelyLocked) {
-      setWarningMessage('Η εβδομάδα είναι κλειδωμένη. Δεν επιτρέπεται νέα ανάθεση.');
-      return;
-    }
 
     const shiftData = {
       employeeId,
@@ -1127,7 +1138,10 @@ export default function MainDashboard() {
       runActionWithFeedback({
         actionKey: 'saveWeek',
         execute: saveCurrentWeekManually,
-        successMessage: 'Η εβδομάδα αποθηκεύτηκε.',
+        successMessage: (result) =>
+          result?.publicUpdated === false
+            ? 'Η εβδομάδα αποθηκεύτηκε, αλλά η δημόσια προβολή δεν ενημερώθηκε.'
+            : 'Η εβδομάδα αποθηκεύτηκε.',
         errorMessageFallback: 'Αποτυχία αποθήκευσης εβδομάδας.',
         pendingMessage: 'Αποθήκευση εβδομάδας...',
         markAsSynced: true,
@@ -1146,19 +1160,6 @@ export default function MainDashboard() {
         markAsSynced: true,
       }),
     [generateMagicWeek, runActionWithFeedback],
-  );
-
-  const handleFinalizeFromToolbar = useCallback(
-    () =>
-      runActionWithFeedback({
-        actionKey: 'finalizeWeek',
-        execute: finalizeCurrentWeek,
-        successMessage: 'Η εβδομάδα οριστικοποιήθηκε.',
-        errorMessageFallback: 'Η οριστικοποίηση απέτυχε.',
-        pendingMessage: 'Οριστικοποίηση και δημοσίευση...',
-        markAsSynced: true,
-      }),
-    [finalizeCurrentWeek, runActionWithFeedback],
   );
 
   const handleClearWeekFromToolbar = useCallback(
@@ -1321,13 +1322,11 @@ export default function MainDashboard() {
           onCopyWhatsapp={handleCopyWhatsapp}
           onClearWeek={handleClearWeekFromToolbar}
           onClearMonth={handleClearMonthFromToolbar}
-          onFinalizeWeek={handleFinalizeFromToolbar}
           onMagicWand={handleMagicWeekFromToolbar}
           onExportWeekPdf={handleExportWeekPdf}
           onExportMonthPdf={handleExportMonthPdf}
           onExportExcel={handleExportExcel}
           onExportWord={handleExportWord}
-          isWeekLocked={isWeekEffectivelyLocked}
           syncStatus={syncStatus}
           actionLoading={actionLoading}
         />
@@ -1449,13 +1448,13 @@ export default function MainDashboard() {
                 onDeleteShiftTemplate={deleteShiftTemplate}
                 onClearDayShifts={clearDayShifts}
                 canManage={isAdmin}
-                isWeekLocked={isWeekEffectivelyLocked}
+                isWeekLocked={false}
                 isSaving={isSaving}
                 density={scheduleDensity}
               />
 
               <AnnouncementBoard
-                announcements={announcements}
+                announcements={displayAnnouncements}
                 isAdmin={isAdmin}
                 isSaving={isSaving}
                 onAddAnnouncement={addAnnouncement}
@@ -1493,24 +1492,26 @@ export default function MainDashboard() {
                 ) : null}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
-                <SchedulingRulesPanel
-                  isAdmin={isAdmin}
-                  isSaving={isSaving}
-                  employees={employees}
-                  generatorRules={generatorRules}
-                  onSaveRules={saveGeneratorRules}
-                  onSaveEmployeeRules={saveEmployeeSchedulingRules}
-                />
+              {isAdmin ? (
+                <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
+                  <SchedulingRulesPanel
+                    isAdmin={isAdmin}
+                    isSaving={isSaving}
+                    employees={employees}
+                    generatorRules={generatorRules}
+                    onSaveRules={saveGeneratorRules}
+                    onSaveEmployeeRules={saveEmployeeSchedulingRules}
+                  />
 
-                <SpecialDaysPanel
-                  isAdmin={isAdmin}
-                  isSaving={isSaving}
-                  specialDaysByDate={specialDaysByDate}
-                  onSaveSpecialDay={handleSaveSpecialDay}
-                  onRemoveSpecialDay={removeSpecialDay}
-                />
-              </div>
+                  <SpecialDaysPanel
+                    isAdmin={isAdmin}
+                    isSaving={isSaving}
+                    specialDaysByDate={specialDaysByDate}
+                    onSaveSpecialDay={handleSaveSpecialDay}
+                    onRemoveSpecialDay={removeSpecialDay}
+                  />
+                </div>
+              ) : null}
 
             </div>
           </div>
@@ -1529,17 +1530,19 @@ export default function MainDashboard() {
         >
           <PanelLeft size={20} />
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMobileSidebarSection('manual');
-            setIsSidebarOpen(true);
-          }}
-          className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600"
-          aria-label="Γρήγορη χειροκίνητη βάρδια"
-        >
-          <Plus size={24} />
-        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => {
+              setMobileSidebarSection('manual');
+              setIsSidebarOpen(true);
+            }}
+            className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-xl shadow-slate-900/20 transition hover:bg-brand-600"
+            aria-label="Γρήγορη χειροκίνητη βάρδια"
+          >
+            <Plus size={24} />
+          </button>
+        ) : null}
       </div>
 
       {isSidebarOpen ? (
@@ -1554,7 +1557,7 @@ export default function MainDashboard() {
             <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
             <div className="max-h-[78vh] overflow-y-auto pb-4">
                 <SchedulerSidebar
-                  employees={employees}
+                  employees={displayEmployees}
                   shiftTemplates={shiftTemplates}
                   absences={absences}
                   isAbsencesLoading={isAbsencesLoading}
@@ -1668,9 +1671,9 @@ export default function MainDashboard() {
               <button
                 type="submit"
                 className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
-                disabled={isSaving || isWeekEffectivelyLocked}
+                disabled={isSaving}
               >
-                {isWeekEffectivelyLocked ? 'Η εβδομάδα είναι κλειδωμένη' : isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
+                {isSaving ? 'Αποθήκευση...' : 'Αποθήκευση'}
               </button>
             </form>
           </div>

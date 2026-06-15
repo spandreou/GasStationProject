@@ -6,7 +6,6 @@ import {
   FileDown,
   FileSpreadsheet,
   FileText,
-  FolderCheck,
   Loader2,
   LockKeyhole,
   LogOut,
@@ -230,8 +229,6 @@ const neutralButtonClass =
   'inline-flex items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65';
 const primaryButtonClass =
   'inline-flex items-center justify-center gap-1 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50';
-const finalizeButtonClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg border border-indigo-300/70 bg-indigo-50/90 px-3 py-2 text-xs font-semibold text-indigo-900 transition active:scale-[0.99] hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-300/40 dark:bg-indigo-500/15 dark:text-indigo-100 dark:hover:bg-indigo-500/25';
 const infoButtonClass =
   'inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-300/60 bg-emerald-50/85 px-3 py-2 text-xs font-semibold text-emerald-900 transition active:scale-[0.99] hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-300/35 dark:bg-emerald-500/15 dark:text-emerald-100 dark:hover:bg-emerald-500/25';
 const dangerButtonClass =
@@ -256,13 +253,11 @@ export default function WeekToolbar({
   onCopyWhatsapp,
   onClearWeek,
   onClearMonth,
-  onFinalizeWeek,
   onMagicWand,
   onExportWeekPdf,
   onExportMonthPdf,
   onExportExcel,
   onExportWord,
-  isWeekLocked = false,
   syncStatus,
   actionLoading = {},
 }) {
@@ -396,26 +391,7 @@ export default function WeekToolbar({
               </div>
             </ToolbarGroup>
 
-            <ToolbarGroup title="Finalize / Share">
-              <LoadingButton
-                icon={FolderCheck}
-                label={isWeekLocked ? 'Οριστικοποιημένη' : 'Οριστικοποίηση Εβδομάδας'}
-                loadingLabel="Οριστικοποίηση..."
-                onClick={() =>
-                  setConfirmDialog({
-                    tone: 'warning',
-                    title: 'Οριστικοποίηση εβδομάδας',
-                    message: 'Θέλεις να οριστικοποιήσεις αυτή την εβδομάδα;',
-                    details: 'Η εβδομάδα θα κλειδώσει και οι αλλαγές θα περιοριστούν.',
-                    confirmLabel: 'Ναι, οριστικοποίηση',
-                    onConfirm: onFinalizeWeek,
-                  })
-                }
-                disabled={isWeekLocked}
-                className={finalizeButtonClass}
-                isLoading={actionLoading.finalizeWeek}
-              />
-
+            <ToolbarGroup title="Share">
               <LoadingButton
                 icon={Copy}
                 label="Αντιγραφή για WhatsApp"
@@ -489,7 +465,7 @@ export default function WeekToolbar({
         onClose={() => setConfirmDialog(null)}
         onConfirm={() => runWithConfirm(confirmDialog?.onConfirm)}
         isConfirming={Boolean(
-          actionLoading.clearWeek || actionLoading.clearMonth || actionLoading.finalizeWeek,
+          actionLoading.clearWeek || actionLoading.clearMonth,
         )}
       />
     </>

@@ -44,13 +44,12 @@ export default function DropShiftSlot({
           />
         ))}
 
-        {!shifts.length ? (
+        {!shifts.length && canManage ? (
           <p className="text-[9px] text-slate-500 sm:text-[11px] dark:text-slate-400">
-            {canManage ? 'Σύρε υπάλληλο εδώ' : 'Read-only προβολή'}
+            Σύρε υπάλληλο εδώ
           </p>
         ) : null}
       </div>
     </section>
   );
 }
-

@@ -231,7 +231,7 @@ function getSnapshotSourceLabel(source) {
     case 'magic_wand':
       return 'Magic Wand';
     case 'finalize':
-      return 'Οριστικοποίηση';
+      return 'Αποθήκευση';
     case 'template_load':
       return 'Φόρτωση Προτύπου';
     case 'history_load':
@@ -485,13 +485,9 @@ const DayBox = memo(function DayBox({
         {isEmptyDay ? (
           <div className={`rounded-md border border-dashed border-slate-300/80 bg-white/45 px-2.5 py-2 text-slate-700 dark:border-cyan-300/30 dark:bg-slate-900/45 dark:text-slate-300 ${densityClasses.helperText}`}>
             <p className="font-semibold text-slate-800 dark:text-slate-100">No shifts</p>
-            <p className="mt-0.5">
-              {isWeekLocked
-                ? 'This week is locked. You can only view this day.'
-                : canManage
-                  ? 'Drop a card here or use day edit to add a shift.'
-                  : 'Read-only mode: changes are disabled.'}
-            </p>
+            {canManage ? (
+              <p className="mt-0.5">Drop a card here or use day edit to add a shift.</p>
+            ) : null}
             {canManage && !isWeekLocked ? (
               <button
                 type="button"

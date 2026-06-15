@@ -22,6 +22,17 @@ function matchBlock(collectionName) {
   return firestoreRules.slice(start, next === -1 ? undefined : next);
 }
 
+function matchIndentedBlockByMarker(marker) {
+  const start = firestoreRules.indexOf(marker);
+  if (start === -1) return '';
+  const lineStart = firestoreRules.lastIndexOf('\n', start) + 1;
+  const indent = firestoreRules.slice(lineStart, start);
+  const nextPattern = new RegExp(`\\n${indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}match\\s+/`, 'g');
+  nextPattern.lastIndex = start + marker.length;
+  const next = nextPattern.exec(firestoreRules);
+  return firestoreRules.slice(start, next ? next.index : undefined);
+}
+
 const schedulerService = read('src/firebase/schedulerService.js');
 const firestoreCore = read('src/firebase/firestoreCore.js');
 const shiftService = read('src/firebase/shiftService.js');
@@ -75,7 +86,26 @@ assert(matchBlock('tenants').includes('match /subscription/{subscriptionId}'), '
 assert(matchBlock('tenants').includes('match /tokenRequests/{requestId}'), 'Tenant scoped token request rules must exist.');
 assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant scoped audit log rules must exist.');
 assert(matchBlock('tenants').includes('allow update, delete: if false;'), 'Tenant scoped audit logs must be immutable from the client.');
-assert(!matchBlock('tenants').includes('allow read: if true;'), 'Tenant scoped data must not be public readable.');
+[
+  'match /publicEmployees/{employeeId}',
+  'match /publicSchedules/{weekStart}',
+  'match /publicMonths/{yearMonth}',
+  'match /publicAnnouncements/{announcementId}',
+].forEach((marker) => {
+  const block = matchIndentedBlockByMarker(marker);
+  assert(block.includes('allow read: if true;'), `Sanitized tenant public path must be public readable: ${marker}`);
+  assert(block.includes('allow create, update: if isAdmin()'), `Sanitized tenant public path writes must be admin-only: ${marker}`);
+});
+[
+  'match /employees/{employeeId}',
+  'match /shifts/{shiftId}',
+  'match /settings/{settingsId}',
+  'match /subscription/{subscriptionId}',
+  'match /tokenRequests/{requestId}',
+  'match /auditLogs/{auditLogId}',
+].forEach((marker) => {
+  assert(!matchIndentedBlockByMarker(marker).includes('allow read: if true;'), `Raw tenant scoped data must not be public readable: ${marker}`);
+});
 assert(firestoreRules.includes('generationRunId'), 'Firestore rules must allow generationRunId on generated shifts/audit logs.');
 assert(matchBlock('attendance_history').includes('allow read: if isAdmin();'), 'Attendance history must be readable only by admins.');
 assert(matchBlock('week_history').includes('allow read: if isAdmin();'), 'Week history must be readable only by admins.');

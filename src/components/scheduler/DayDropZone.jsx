@@ -16,7 +16,7 @@ export default function DayDropZone({ date, canManage }) {
           : 'border-cyan-300/60 bg-cyan-50/60 text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-200'
       }`}
     >
-      {canManage ? 'Drop custom βάρδια εδώ' : 'Custom βάρδιες (read-only)'}
+      {canManage ? 'Drop custom βάρδια εδώ' : ''}
     </div>
   );
 }

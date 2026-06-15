@@ -47,6 +47,8 @@ assert(!mainDashboard.includes('VITE_ADMIN_EMAIL') && !mainDashboard.includes('a
 
 assert(weekToolbar.includes('{isAdmin ? (') && weekToolbar.includes('<ExportDropdown'), 'Export dropdown must only render for admins.');
 assert(!weekToolbar.includes('Read-only preview'), 'Non-admin toolbar must not show placeholder export/editing panels.');
+assert(!weekToolbar.includes('Οριστικοποίηση Εβδομάδας') && !weekToolbar.includes('Finalize / Share'), 'Toolbar must not render legacy finalize/publish controls.');
+assert(!mainDashboard.includes('handleFinalizeFromToolbar') && !mainDashboard.includes('finalizeCurrentWeek'), 'Dashboard must not wire legacy finalize actions.');
 assert(!mainDashboard.includes('Το περιβάλλον είναι σε προβολή χωρίς δικαίωμα επεξεργασίας.'), 'Public dashboard must not show the read-only access banner.');
 assert(!mainDashboard.includes('Τα admin-only actions είναι κλειδωμένα μέχρι login διαχειριστή.'), 'Public dashboard must not show admin-only lock banner text.');
 assert(!mainDashboard.includes('HistoryView'), 'Attendance HistoryView must be removed from the dashboard UI.');

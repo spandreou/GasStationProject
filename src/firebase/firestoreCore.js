@@ -14,6 +14,10 @@ export const WEEK_TEMPLATES_COLLECTION = 'week_templates';
 export const SCHEDULER_SETTINGS_COLLECTION = 'scheduler_settings';
 export const AUDIT_LOGS_COLLECTION = 'audit_logs';
 export const PUBLISHED_SCHEDULES_COLLECTION = 'published_schedules';
+export const PUBLIC_SCHEDULES_COLLECTION = 'publicSchedules';
+export const PUBLIC_MONTHS_COLLECTION = 'publicMonths';
+export const PUBLIC_EMPLOYEES_COLLECTION = 'publicEmployees';
+export const PUBLIC_ANNOUNCEMENTS_COLLECTION = 'publicAnnouncements';
 export const MONTHLY_SCHEDULE_EXPORTS_COLLECTION = 'monthly_schedule_exports';
 export const DEFAULT_SCHEDULER_SETTINGS_DOC = 'default';
 

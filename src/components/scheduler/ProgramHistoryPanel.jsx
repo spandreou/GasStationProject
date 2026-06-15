@@ -38,7 +38,7 @@ function sourceLabel(source) {
     case 'magic_wand':
       return 'Magic Wand';
     case 'finalize':
-      return 'Οριστικοποίηση';
+      return 'Αποθήκευση';
     case 'template_load':
       return 'Template';
     case 'history_load':

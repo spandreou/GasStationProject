@@ -65,7 +65,7 @@ export default function ProgramHistoryPanel({
   onCreateMonthlyArchive,
   onDownloadMonthlyArchive,
 }) {
-  const [mode, setMode] = useState('week');
+  const [mode, setMode] = useState('month');
   const [selectedEntryId, setSelectedEntryId] = useState('');
   const [historyStartIndex, setHistoryStartIndex] = useState(0);
 

@@ -22,6 +22,7 @@ import {
 import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, SHIFT_TYPES } from '../utils/analytics';
 import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
+import { verifyTenantAccessForHost, TENANT_ACCESS_MESSAGES } from '../services/tenantAccessService';
 import { formatDateGreek, getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 import { getCurrentTenantHostContext } from '../utils/tenantHostContext';
 
@@ -32,7 +33,7 @@ const {
   sendAdminPasswordResetEmail,
   signInAdmin,
   signOutAdmin,
-  subscribeAdminAuth,
+  subscribeAuth,
 } = authRepository;
 
 const {
@@ -194,6 +195,44 @@ function requireAdmin(get, set) {
   if (get().isAdmin) return true;
   set({ warningMessage: 'Η ενέργεια απαιτεί σύνδεση διαχειριστή.' });
   return false;
+}
+
+function stopAdminDataSubscriptions(get) {
+  const {
+    _unsubscribeEmployees,
+    _unsubscribeShifts,
+    _unsubscribeTemplates,
+    _unsubscribeAnnouncements,
+    _unsubscribeSchedulerSettings,
+  } = get();
+  _unsubscribeEmployees?.();
+  _unsubscribeShifts?.();
+  _unsubscribeTemplates?.();
+  _unsubscribeAnnouncements?.();
+  _unsubscribeSchedulerSettings?.();
+}
+
+function clearAdminDataState() {
+  return {
+    employees: [],
+    shifts: [],
+    shiftTemplates: [],
+    announcements: [],
+    attendanceHistory: [],
+    weekHistory: [],
+    weekTemplates: [],
+    _attendanceHistoryCacheKey: '',
+    _attendanceHistoryFetchedAt: 0,
+    _attendanceHistoryInflightKey: '',
+    _attendanceHistoryInflightPromise: null,
+    _weekHistoryFetchedAt: 0,
+    _weekTemplatesFetchedAt: 0,
+    _unsubscribeEmployees: null,
+    _unsubscribeShifts: null,
+    _unsubscribeTemplates: null,
+    _unsubscribeAnnouncements: null,
+    _unsubscribeSchedulerSettings: null,
+  };
 }
 
 function getAuditActor(state) {
@@ -696,62 +735,72 @@ export const useSchedulerStore = create((set, get) => ({
     const unsubscribePublicEmployees = get().startPublicEmployeesSubscription();
     const unsubscribePublicAnnouncements = get().startPublicAnnouncementsSubscription();
 
-    const unsubscribeAuth = subscribeAdminAuth(
+    const unsubscribeAuth = subscribeAuth(
       async (user) => {
+        if (!user) {
+          stopAdminDataSubscriptions(get);
+          get().startAbsencesSubscription({ adminOnly: false });
+          set({
+            ...clearAdminDataState(),
+            adminUser: null,
+            isAdmin: false,
+            isAuthLoading: false,
+            isLoginModalOpen: false,
+            isLoading: false,
+          });
+          return;
+        }
+
+        let access;
+        try {
+          access = await verifyTenantAccessForHost({
+            uid: user.uid,
+            hostname: getCurrentTenantHostContext().hostname,
+          });
+        } catch {
+          access = {
+            allowed: false,
+            message: TENANT_ACCESS_MESSAGES.denied,
+          };
+        }
+
+        if (!access.allowed) {
+          stopAdminDataSubscriptions(get);
+          get().startAbsencesSubscription({ adminOnly: false });
+          set({
+            ...clearAdminDataState(),
+            adminUser: null,
+            isAdmin: false,
+            isAuthLoading: false,
+            isLoginModalOpen: false,
+            isLoading: false,
+            warningMessage: access.message || TENANT_ACCESS_MESSAGES.denied,
+          });
+          return;
+        }
+
         set({
-          adminUser: user,
-          isAdmin: Boolean(user),
+          adminUser: {
+            uid: user.uid,
+            email: user.email || '',
+            tenantId: access.tenant?.id || '',
+            tenantRole: access.role || access.membership?.role || '',
+          },
+          isAdmin: true,
           isAuthLoading: false,
           isLoginModalOpen: false,
         });
 
-        if (user) {
-          get().startAdminDataSubscriptions();
-          get().startAbsencesSubscription({ adminOnly: true });
-          if ((get()._shiftTemplatesRetryCount || 0) > 0) {
-            get().startShiftTemplatesSubscription();
-          }
-          await get().refreshWeekLockStatus();
-          await Promise.all([
-            get().loadWeekHistory({ force: false }),
-            get().loadWeekTemplates({ force: false }),
-          ]);
-        } else {
-          const {
-            _unsubscribeEmployees,
-            _unsubscribeShifts,
-            _unsubscribeTemplates,
-            _unsubscribeAnnouncements,
-            _unsubscribeSchedulerSettings,
-          } = get();
-          _unsubscribeEmployees?.();
-          _unsubscribeShifts?.();
-          _unsubscribeTemplates?.();
-          _unsubscribeAnnouncements?.();
-          _unsubscribeSchedulerSettings?.();
-          get().startAbsencesSubscription({ adminOnly: false });
-          set({
-            employees: [],
-            shifts: [],
-            shiftTemplates: [],
-            announcements: [],
-            attendanceHistory: [],
-            weekHistory: [],
-            weekTemplates: [],
-            _attendanceHistoryCacheKey: '',
-            _attendanceHistoryFetchedAt: 0,
-            _attendanceHistoryInflightKey: '',
-            _attendanceHistoryInflightPromise: null,
-            _weekHistoryFetchedAt: 0,
-            _weekTemplatesFetchedAt: 0,
-            _unsubscribeEmployees: null,
-            _unsubscribeShifts: null,
-            _unsubscribeTemplates: null,
-            _unsubscribeAnnouncements: null,
-            _unsubscribeSchedulerSettings: null,
-            isLoading: false,
-          });
+        get().startAdminDataSubscriptions();
+        get().startAbsencesSubscription({ adminOnly: true });
+        if ((get()._shiftTemplatesRetryCount || 0) > 0) {
+          get().startShiftTemplatesSubscription();
         }
+        await get().refreshWeekLockStatus();
+        await Promise.all([
+          get().loadWeekHistory({ force: false }),
+          get().loadWeekTemplates({ force: false }),
+        ]);
       },
       () => set({ warningMessage: 'Αποτυχία ελέγχου σύνδεσης διαχειριστή.', isAuthLoading: false }),
     );
@@ -812,7 +861,25 @@ export const useSchedulerStore = create((set, get) => ({
 
   loginAsAdmin: async ({ email, password }) => {
     try {
-      await signInAdmin({ email, password });
+      const user = await signInAdmin({ email, password });
+      let access;
+      try {
+        access = await verifyTenantAccessForHost({
+          uid: user.uid,
+          hostname: getCurrentTenantHostContext().hostname,
+        });
+      } catch {
+        access = {
+          allowed: false,
+          message: TENANT_ACCESS_MESSAGES.denied,
+        };
+      }
+      if (!access.allowed) {
+        await signOutAdmin();
+        const message = access.message || TENANT_ACCESS_MESSAGES.denied;
+        set({ warningMessage: message });
+        throw new Error(message);
+      }
       set({ warningMessage: 'Σύνδεση διαχειριστή επιτυχής.' });
       return true;
     } catch (error) {

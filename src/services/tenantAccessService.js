@@ -1,9 +1,13 @@
 import { tenantMembershipsRepository, tenantsRepository } from '../repositories';
+import {
+  resolveTenantAdminAuthorization,
+  TENANT_ACCESS_DENIED_MESSAGE,
+} from './tenantAuthorization';
 import { resolveTenantHostContext } from '../utils/tenantHostContext';
 
 export const TENANT_ACCESS_MESSAGES = {
   noAccess: 'Δεν υπάρχει ενεργό πρατήριο συνδεδεμένο με αυτόν τον λογαριασμό.',
-  denied: 'Δεν έχετε πρόσβαση σε αυτό το πρατήριο.',
+  denied: TENANT_ACCESS_DENIED_MESSAGE,
 };
 
 function getEnvValue(name, fallback = '') {
@@ -82,10 +86,12 @@ export async function verifyTenantAccessForHost({ uid, hostname }) {
   }
 
   const hostContext = resolveTenantHostContext(hostname);
-  if (hostContext.mode !== 'tenant') {
+  if (!['local', 'tenant'].includes(hostContext.mode)) {
     return {
-      allowed: true,
+      allowed: false,
       hostContext,
+      reason: 'unsupported-host',
+      message: TENANT_ACCESS_MESSAGES.denied,
     };
   }
 
@@ -99,12 +105,18 @@ export async function verifyTenantAccessForHost({ uid, hostname }) {
     };
   }
 
-  const allowed = await tenantMembershipsRepository.hasActiveMembership(uid, tenant.id);
-  return {
-    allowed,
+  const membership = await tenantMembershipsRepository.getActiveAdminMembership(uid, tenant.id);
+  const authorization = resolveTenantAdminAuthorization({
+    user: { uid },
     tenant,
+    membership,
+  });
+
+  return {
+    ...authorization,
+    tenant,
+    membership,
     hostContext,
-    reason: allowed ? 'active-membership' : 'membership-denied',
-    message: allowed ? '' : TENANT_ACCESS_MESSAGES.denied,
+    message: authorization.allowed ? '' : TENANT_ACCESS_MESSAGES.denied,
   };
 }

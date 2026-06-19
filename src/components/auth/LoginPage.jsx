@@ -77,7 +77,7 @@ export default function LoginPage() {
   return (
     <AuthPageShell
       title="Σύνδεση Διαχειριστή"
-      subtitle="Σύνδεση με Firebase Auth λογαριασμό διαχειριστή."
+      subtitle="Σύνδεση με Firebase Auth και ενεργό tenant membership."
     >
       <div className="mb-3 rounded-lg border border-cyan-300/45 bg-cyan-50/70 px-3 py-2 text-xs text-cyan-950 dark:bg-cyan-500/10 dark:text-cyan-50">
         {modeLabel}

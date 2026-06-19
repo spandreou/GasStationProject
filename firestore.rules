@@ -5,8 +5,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isTenantAdminRole(role) {
+      return role in ['OWNER', 'ADMIN', 'MANAGER'];
+    }
+
+    function isTenantAdmin(tenantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)) &&
+        get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.uid == request.auth.uid &&
+        get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.tenantId == tenantId &&
+        get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.status == 'ACTIVE' &&
+        isTenantAdminRole(get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.role);
+    }
+
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isTenantAdmin('bp-kallis');
     }
 
     function isSelf(uid) {
@@ -14,9 +27,7 @@ service cloud.firestore {
     }
 
     function isActiveTenantMember(tenantId) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)) &&
-        get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.status == 'ACTIVE';
+      return isTenantAdmin(tenantId);
     }
 
     function isIsoDate(value) {
@@ -451,8 +462,8 @@ service cloud.firestore {
         request.resource.data.uid.size() > 0 &&
         request.resource.data.tenantId is string &&
         request.resource.data.tenantId.matches('^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$') &&
-        request.resource.data.role in ['TENANT_ADMIN', 'EMPLOYEE', 'VIEWER'] &&
-        request.resource.data.status in ['ACTIVE', 'DISABLED'] &&
+        request.resource.data.role in ['OWNER', 'ADMIN', 'MANAGER'] &&
+        request.resource.data.status in ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'] &&
         isOptionalString('email');
     }
 
@@ -521,9 +532,9 @@ service cloud.firestore {
     }
 
     match /monthly_schedule_exports/{exportId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);
-      allow delete: if isAdmin();
+      allow read: if isTenantAdmin(resource.data.tenantId);
+      allow create, update: if isTenantAdmin(request.resource.data.tenantId) && validMonthlyScheduleExport(exportId);
+      allow delete: if isTenantAdmin(resource.data.tenantId);
     }
 
     match /employeeAbsences/{absenceId} {
@@ -596,76 +607,79 @@ service cloud.firestore {
 
     match /tenantMemberships/{membershipId} {
       allow read: if isAdmin() ||
-        (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'ACTIVE');
+        (isSignedIn() &&
+          resource.data.uid == request.auth.uid &&
+          resource.data.status == 'ACTIVE' &&
+          isTenantAdminRole(resource.data.role));
       allow create, update: if isAdmin() && validTenantMembership();
       allow delete: if isAdmin();
     }
 
     match /tenants/{tenantId} {
-      allow read: if isAdmin() || isActiveTenantMember(tenantId);
+      allow read: if isTenantAdmin(tenantId);
       allow create, update: if isAdmin() && validTenant();
       allow delete: if isAdmin();
 
       match /employees/{employeeId} {
-        allow read: if isAdmin() || isActiveTenantMember(tenantId);
-        allow create: if isAdmin() && validEmployee();
-        allow update: if isAdmin() && onlyChanged(employeeFields()) && validEmployee();
-        allow delete: if isAdmin();
+        allow read: if isTenantAdmin(tenantId);
+        allow create: if isTenantAdmin(tenantId) && validEmployee();
+        allow update: if isTenantAdmin(tenantId) && onlyChanged(employeeFields()) && validEmployee();
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /publicEmployees/{employeeId} {
         allow read: if true;
-        allow create, update: if isAdmin() && validTenantPublicEmployee(tenantId);
-        allow delete: if isAdmin();
+        allow create, update: if isTenantAdmin(tenantId) && validTenantPublicEmployee(tenantId);
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /shifts/{shiftId} {
-        allow read: if isAdmin() || isActiveTenantMember(tenantId);
-        allow create: if isAdmin() && validShift();
-        allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
-        allow delete: if isAdmin();
+        allow read: if isTenantAdmin(tenantId);
+        allow create: if isTenantAdmin(tenantId) && validShift();
+        allow update: if isTenantAdmin(tenantId) && onlyChanged(shiftFields()) && validShift();
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /publicSchedules/{weekStart} {
         allow read: if true;
-        allow create, update: if isAdmin() && validTenantPublicSchedule(tenantId, weekStart);
-        allow delete: if isAdmin();
+        allow create, update: if isTenantAdmin(tenantId) && validTenantPublicSchedule(tenantId, weekStart);
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /publicMonths/{yearMonth} {
         allow read: if true;
-        allow create, update: if isAdmin() && validTenantPublicMonth(tenantId, yearMonth);
-        allow delete: if isAdmin();
+        allow create, update: if isTenantAdmin(tenantId) && validTenantPublicMonth(tenantId, yearMonth);
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /settings/{settingsId} {
-        allow read: if isAdmin() || isActiveTenantMember(tenantId);
-        allow create, update: if isAdmin() && validSchedulerSettings();
-        allow delete: if isAdmin();
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validSchedulerSettings();
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /subscription/{subscriptionId} {
-        allow read: if isAdmin() || isActiveTenantMember(tenantId);
-        allow create, update: if isAdmin() && validTenantSubscription();
-        allow delete: if isAdmin();
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validTenantSubscription();
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /tokenRequests/{requestId} {
-        allow read: if isAdmin() || isActiveTenantMember(tenantId);
-        allow create, update: if isAdmin() && validTenantTokenRequest();
-        allow delete: if isAdmin();
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validTenantTokenRequest();
+        allow delete: if isTenantAdmin(tenantId);
       }
 
       match /auditLogs/{auditLogId} {
-        allow read: if isAdmin();
-        allow create: if isAdmin() && validAuditLog();
+        allow read: if isTenantAdmin(tenantId);
+        allow create: if isTenantAdmin(tenantId) && validAuditLog();
         allow update, delete: if false;
       }
 
       match /publicAnnouncements/{announcementId} {
         allow read: if true;
-        allow create, update: if isAdmin() && validTenantPublicAnnouncement(tenantId);
-        allow delete: if isAdmin();
+        allow create, update: if isTenantAdmin(tenantId) && validTenantPublicAnnouncement(tenantId);
+        allow delete: if isTenantAdmin(tenantId);
       }
     }
 

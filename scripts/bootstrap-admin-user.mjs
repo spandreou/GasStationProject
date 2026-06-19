@@ -17,7 +17,7 @@ Options:
   --project-id <id>             Firebase project id. Defaults to service account or .env VITE_FIREBASE_PROJECT_ID.
   --api-key <key>               Firebase Web API key. Defaults to .env VITE_FIREBASE_API_KEY.
   --password-env <name>         Env var that contains a temporary password. Default: ${DEFAULT_PASSWORD_ENV}.
-  --send-reset                  Send a Firebase reset email after setting admin=true.
+  --send-reset                  Send a Firebase reset email after creating/updating the Auth user.
   --dry-run                     Validate arguments without contacting Google APIs.
 
 Security:
@@ -264,20 +264,9 @@ async function sendResetEmail({ apiKey, email }) {
   );
 }
 
-function parseClaims(customAttributes) {
-  if (!customAttributes) return {};
-  try {
-    const parsed = JSON.parse(customAttributes);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-async function updateUser(projectId, { localId, claims, password }, accessToken) {
+async function updateUser(projectId, { localId, password }, accessToken) {
   const body = {
     localId,
-    customAttributes: JSON.stringify(claims),
     targetProjectId: projectId,
     returnSecureToken: false,
   };
@@ -328,15 +317,14 @@ async function main() {
       { email, password: creationCredential, displayName: args.displayName },
       accessToken,
     );
-    user = { localId: createdUser.localId, customAttributes: createdUser.customAttributes };
+    user = { localId: createdUser.localId };
     created = true;
   }
 
-  const claims = { ...parseClaims(user.customAttributes), admin: true };
   const temporaryCredentialProvided = Boolean(temporaryPassword);
   await updateUser(
     projectId,
-    { localId: user.localId, claims, password: temporaryPassword },
+    { localId: user.localId, password: temporaryPassword },
     accessToken,
   );
 
@@ -349,7 +337,7 @@ async function main() {
     await sendResetEmail({ apiKey: resolveApiKey(args), email });
     console.log('Firebase reset email sent.');
   }
-  console.log('Custom claim admin=true is set. Sign out and sign in again so Firebase refreshes the ID token.');
+  console.log('Auth user is ready. Grant tenant access with tenant:seed-bp-kallis or an equivalent tenantMemberships document.');
 }
 
 main().catch((error) => {

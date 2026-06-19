@@ -70,6 +70,7 @@ const resetPassword = read('src/components/auth/ResetPasswordPage.jsx');
 const selectTenant = read('src/components/auth/SelectTenantPage.jsx');
 const tenantGate = read('src/components/auth/TenantGate.jsx');
 const tenantAccessService = read('src/services/tenantAccessService.js');
+const tenantAuthorization = read('src/services/tenantAuthorization.js');
 const tenantDataPaths = read('src/utils/tenantDataPaths.js');
 const tenantSubscriptionRepository = read('src/repositories/firebase/firebaseTenantSubscriptionRepository.js');
 const tenantTokenRequestsRepository = read('src/repositories/firebase/firebaseTenantTokenRequestsRepository.js');
@@ -128,7 +129,11 @@ assert(repositories.includes('tenantTokenRequestsRepository'), 'Repository expor
 assert(tenantAccessService.includes('listActiveTenantAccessForUser'), 'Tenant access service must load active memberships by uid.');
 assert(tenantAccessService.includes('verifyTenantAccessForHost'), 'Tenant access service must prepare tenant host membership checks.');
 assert(tenantAccessService.includes('Δεν υπάρχει ενεργό πρατήριο'), 'Tenant access service must include safe no-access message.');
-assert(tenantAccessService.includes('Δεν έχετε πρόσβαση σε αυτό το πρατήριο'), 'Tenant access service must include safe denied message.');
+assert(
+  tenantAccessService.includes('TENANT_ACCESS_DENIED_MESSAGE') &&
+    tenantAuthorization.includes('Δεν έχετε πρόσβαση σε αυτό το πρατήριο'),
+  'Tenant access service must use the shared safe denied message.',
+);
 assert(!tenantAccessService.includes('@'), 'Tenant access service must not hardcode email access rules.');
 assert(tenantDataPaths.includes("employees: 'employees'"), 'Tenant data paths must include tenant-scoped employees.');
 assert(tenantDataPaths.includes("shifts: 'shifts'"), 'Tenant data paths must include tenant-scoped shifts.');

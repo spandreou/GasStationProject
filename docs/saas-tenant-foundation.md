@@ -60,8 +60,8 @@ type TenantMembership = {
   uid: string;
   tenantId: string;
   email: string;
-  role: "TENANT_ADMIN" | "EMPLOYEE" | "VIEWER";
-  status: "ACTIVE" | "DISABLED";
+  role: "OWNER" | "ADMIN" | "MANAGER";
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "EXPIRED" | "REVOKED";
   createdAt: Date;
   updatedAt: Date;
 };
@@ -87,7 +87,7 @@ They are exported from `src/repositories/index.js` so future code can switch to 
 - prepare tenant-host membership verification
 - build tenant URLs from `tenant.domain` or `{tenant.slug}.homelabshare.gr`
 
-Tenant membership checks use the raw Firebase Auth user uid. Admin-only scheduler permissions still use the Firebase custom claim `admin=true`.
+Tenant membership checks use the raw Firebase Auth user uid. Admin-only scheduler permissions require an ACTIVE tenant membership for the hostname tenant with role `OWNER`, `ADMIN`, or `MANAGER`; email allowlists and Firebase custom claims do not grant tenant admin access.
 
 `src/utils/tenantDataPaths.js` defines the target tenant-scoped data paths:
 

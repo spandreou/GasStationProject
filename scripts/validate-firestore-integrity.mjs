@@ -77,8 +77,10 @@ assert(matchBlock('users').includes('allow read: if isAdmin() || isSelf(uid);'),
 assert(matchBlock('users').includes('allow create, update: if isAdmin() && validUserProfile(uid);'), 'SaaS users must be admin writable only.');
 assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.auth.uid'), 'Tenant memberships must support uid-based self lookup.');
 assert(matchBlock('tenantMemberships').includes("resource.data.status == 'ACTIVE'"), 'Tenant membership self lookup must require ACTIVE status.');
+assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Tenant admin roles must be OWNER, ADMIN, MANAGER.');
+assert(firestoreRules.includes("'INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'"), 'Tenant memberships must model inactive denied statuses.');
 assert(matchBlock('tenantMemberships').includes('allow create, update: if isAdmin() && validTenantMembership();'), 'Tenant memberships must be admin writable only.');
-assert(matchBlock('tenants').includes('allow read: if isAdmin() || isActiveTenantMember(tenantId);'), 'Tenant docs must require admin or active membership reads.');
+assert(matchBlock('tenants').includes('allow read: if isTenantAdmin(tenantId);'), 'Tenant docs must require matching tenant admin membership reads.');
 assert(matchBlock('tenants').includes('match /employees/{employeeId}'), 'Tenant scoped employee rules must exist.');
 assert(matchBlock('tenants').includes('match /shifts/{shiftId}'), 'Tenant scoped shift rules must exist.');
 assert(matchBlock('tenants').includes('match /settings/{settingsId}'), 'Tenant scoped settings rules must exist.');
@@ -94,7 +96,7 @@ assert(matchBlock('tenants').includes('allow update, delete: if false;'), 'Tenan
 ].forEach((marker) => {
   const block = matchIndentedBlockByMarker(marker);
   assert(block.includes('allow read: if true;'), `Sanitized tenant public path must be public readable: ${marker}`);
-  assert(block.includes('allow create, update: if isAdmin()'), `Sanitized tenant public path writes must be admin-only: ${marker}`);
+  assert(block.includes('allow create, update: if isTenantAdmin(tenantId)'), `Sanitized tenant public path writes must be tenant-admin-only: ${marker}`);
 });
 [
   'match /employees/{employeeId}',

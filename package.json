@@ -10,6 +10,7 @@
     "qa:scheduler": "node scripts/validate-scheduler-rules.mjs && npm run build",
     "qa:export-security": "node scripts/validate-export-audit-security.mjs",
     "qa:public-readonly": "node scripts/validate-public-readonly.mjs",
+    "qa:tenant-authorization": "node scripts/validate-tenant-authorization.mjs",
     "qa:repositories": "node scripts/validate-repository-boundaries.mjs",
     "qa:saas-foundation": "node scripts/validate-saas-foundation.mjs",
     "test:e2e:scheduler": "playwright test tests/scheduler-roles.e2e.spec.js",

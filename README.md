@@ -8,8 +8,8 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 
 - Admin-only πρόσβαση
 - Firebase config μέσω env vars
-- Production authorization μέσω Firebase custom claim `admin=true`
-- Demo admin email allowlist μόνο όταν `VITE_APP_MODE=demo`
+- Production authorization μέσω `tenantMemberships/{uid}_{tenantId}`
+- Καμία email allowlist δεν δίνει admin πρόσβαση
 - Χωρίς fallback admin credentials μέσα στον κώδικα
 - Πρώτος production-like pilot tenant: `bp-kallis.homelabshare.gr`
 - Μελλοντικός SaaS portal στόχος: `gas.homelabshare.gr`
@@ -108,14 +108,13 @@ VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 
 VITE_APP_MODE=demo
-VITE_ADMIN_EMAIL=
 ```
 
 ## Admin Auth Model
 
 - Υποστηρίζεται μόνο **admin login**.
-- Σε production, admin δικαιώματα αποδίδονται μόνο από Firebase custom claim `admin=true`.
-- Σε demo mode, το `VITE_ADMIN_EMAIL` λειτουργεί ως πρόσθετο email allowlist για παρουσίαση.
+- Firebase Auth πιστοποιεί μόνο την ταυτότητα του χρήστη.
+- Admin δικαιώματα αποδίδονται μόνο από ACTIVE tenant membership με role `OWNER`, `ADMIN`, ή `MANAGER`.
 - Δεν υπάρχει client-side admin password env var ή fallback credential.
 - Δεν υπάρχει employee login flow στο τρέχον scope.
 
@@ -124,25 +123,18 @@ VITE_ADMIN_EMAIL=
 Για production deployment:
 
 1. Δημιούργησε τον admin χρήστη στο Firebase Auth.
-2. Από ασφαλές admin περιβάλλον, απόδωσε custom claim:
+2. Δημιούργησε document `tenantMemberships/{uid}_bp-kallis` με `status: "ACTIVE"` και role `OWNER`, `ADMIN`, ή `MANAGER`.
 
-```js
-await admin.auth().setCustomUserClaims(uid, { admin: true });
-```
-
-3. Κάνε sign out / sign in ώστε το ID token να ανανεωθεί.
+3. Κάνε sign out / sign in ώστε το Firebase Auth state να ανανεωθεί.
 4. Κράτα το `VITE_APP_MODE=production`.
 5. Μην ορίζεις admin passwords σε Vite env vars. Τα Vite env vars είναι client-visible.
 
-### Safe Admin Bootstrap Script
+### Safe Tenant Membership Seed Script
 
-Υπάρχει helper script για να δημιουργήσεις ή να αναβαθμίσεις admin χρήστη χωρίς να μπει κωδικός στο frontend bundle ή στο Git:
+Υπάρχει helper script για να δημιουργήσεις tenant και membership χωρίς να μπει κωδικός στο frontend bundle ή στο Git:
 
 ```powershell
-$env:GOOGLE_APPLICATION_CREDENTIALS="C:\secure\gasstation-service-account.json"
-$env:ADMIN_BOOTSTRAP_PASSWORD="temporary-password-you-choose"
-npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Station Admin"
-Remove-Item Env:\ADMIN_BOOTSTRAP_PASSWORD
+npm run tenant:seed-bp-kallis -- --uid "<firebase-uid>" --role ADMIN --use-gcloud
 ```
 
 Εναλλακτικά, μπορείς να δώσεις το service account JSON από `FIREBASE_SERVICE_ACCOUNT_JSON`.
@@ -150,17 +142,17 @@ Remove-Item Env:\ADMIN_BOOTSTRAP_PASSWORD
 Αν έχεις ήδη ενεργό Google Cloud login με τα σωστά Firebase Auth δικαιώματα, μπορείς να χρησιμοποιήσεις:
 
 ```powershell
-npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Station Admin" --use-gcloud --send-reset
+npm run tenant:seed-bp-kallis -- --uid "<firebase-uid>" --role ADMIN --dry-run
 ```
 
 Με το `--send-reset` στέλνεται Firebase password reset email στον admin, ώστε ο κωδικός να οριστεί από τον ίδιο τον διαχειριστή και να μη μπει σε logs/chat/repo.
 
 Το script:
 
-- δημιουργεί τον χρήστη αν δεν υπάρχει,
-- κρατάει τυχόν υπάρχοντα custom claims,
-- θέτει `admin=true`,
-- δεν εκτυπώνει password, private key ή access token.
+- γράφει `tenants/bp-kallis`,
+- γράφει `tenantMemberships/{uid}_bp-kallis`,
+- γράφει safe `users/{uid}` metadata,
+- δεν εκτυπώνει private key ή access token.
 
 Μετά το bootstrap, κάνε sign out / sign in στην εφαρμογή για να ανανεωθεί το Firebase ID token.
 
@@ -170,7 +162,7 @@ npm run admin:bootstrap -- --email admin@homelabshare.gr --display-name "Gas Sta
 homelabshare@gmail.com
 ```
 
-Ο κωδικός είναι αυτός που ορίζεις εσύ στο `ADMIN_BOOTSTRAP_PASSWORD` ή αυτός που θα αλλάξεις μέσω Firebase password reset. Δεν πρέπει να αποθηκεύεται στο repo ή να μοιράζεται σε logs/chat.
+Ο κωδικός είναι αυτός που ορίζεται στον Firebase Auth χρήστη ή αυτός που θα αλλάξει μέσω Firebase password reset. Δεν πρέπει να αποθηκεύεται στο repo ή να μοιράζεται σε logs/chat.
 
 ## Self-Hosted BP Kallis Pilot
 
@@ -241,7 +233,6 @@ Prepared auth routes:
 
 ## Demo-only Σημεία
 
-- Demo admin email allowlist μέσω `VITE_ADMIN_EMAIL`
 - Demo employee/sample ονομασίες
 - Presentation-safe κείμενα/labels
 
@@ -250,7 +241,7 @@ Prepared auth routes:
 - Καταργήθηκαν client-side admin password checks.
 - Καταργήθηκαν fallback demo credentials.
 - Τα Firestore reads απαιτούν authenticated user.
-- Τα Firestore writes απαιτούν custom claim `admin=true`.
+- Τα Firestore writes απαιτούν ACTIVE tenant admin membership.
 - Προστέθηκαν βασικά Firestore field validations για κρίσιμες συλλογές.
 - Προστέθηκαν Vercel security headers.
 - Το CSP μένει για επόμενο focused pass επειδή χρειάζεται browser verification με Firebase Auth/Firestore/Analytics.
@@ -279,7 +270,7 @@ Prepared auth routes:
 Services:
 
 - `config.js`: Firebase app/Auth/Firestore initialization και env validation.
-- `authService.js`: admin sign-in/sign-out/reset και Firebase custom claim checks.
+- `authService.js`: Firebase sign-in/sign-out/reset. Tenant admin authorization γίνεται με UID + tenant membership.
 - `firestoreCore.js`: shared Firestore helpers, collection names, batch/chunk helpers και common error handling.
 - `employeeService.js`: employee subscribe/create/update/delete.
 - `shiftService.js`: shifts, shift templates, batch replacements, date/employee deletes και Sunday lookup.

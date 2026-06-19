@@ -99,20 +99,19 @@ export default function AdminLoginModal({
         </div>
 
         <div className="mb-3 rounded-lg border border-cyan-300/45 bg-cyan-50/60 px-3 py-2 text-xs text-cyan-900 dark:border-cyan-300/35 dark:bg-cyan-500/10 dark:text-cyan-100">
-          {isDemoMode ? 'Demo Admin Mode: πειραματική πρόσβαση μόνο για παρουσίαση.' : 'Admin Mode'}
+          {isDemoMode ? 'Demo Tenant Login' : 'Tenant Admin Login'}
         </div>
 
         <p className="mb-3 text-sm text-slate-700 dark:text-slate-300">
           {isFirebaseConfigured
             ? isDemoMode
-              ? `Χρησιμοποίησε τον configured Firebase Auth demo admin λογαριασμό${defaultEmail ? ` (${defaultEmail})` : ''}.`
-              : 'Χρησιμοποίησε Firebase Auth λογαριασμό που έχει custom claim admin=true.'
+              ? 'Σύνδεση με Firebase Auth. Η πρόσβαση διαχειριστή δίνεται μόνο με ενεργό tenant membership.'
+              : 'Σύνδεση με Firebase Auth. Η πρόσβαση διαχειριστή δίνεται μόνο με ενεργό tenant membership.'
             : 'Το Firebase Auth δεν είναι διαθέσιμο στο τρέχον περιβάλλον.'}
         </p>
         {isDemoMode ? (
           <p className="mb-3 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs text-slate-700 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-300">
-            Δεν υπάρχουν fallback demo credentials. Ο demo admin πρέπει να οριστεί στο Firebase Auth και στο
-            περιβάλλον με `VITE_ADMIN_EMAIL`.
+            Δεν υπάρχουν fallback credentials. Ο χρήστης πρέπει να υπάρχει στο Firebase Auth και να έχει ACTIVE membership στο tenant.
           </p>
         ) : null}
 

@@ -60,7 +60,8 @@ assert(!combinedClientAuth.includes('VITE_ADMIN_PASSWORD'), 'Client/admin docs m
 assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not expose demo admin password fallback.');
 assert(!combinedClientAuth.includes('admin@example.com'), 'Client/admin docs must not expose demo admin email fallback.');
 assert(!authService.includes('adminPassword'), 'Auth service must not import or compare a client-side admin password.');
-assert(authService.includes('getIdTokenResult'), 'Auth service must verify production admin using Firebase custom claims.');
+assert(!authService.includes('getIdTokenResult'), 'Auth service must not authorize tenant admins using Firebase custom claims.');
+assert(!authService.includes('isAllowedAdminEmail'), 'Auth service must not authorize tenant admins using email allowlists.');
 assert(
   !authService.includes('!isFirebaseConfigured || !auth || !isAdminEmailConfigured'),
   'Production auth subscription must not require VITE_ADMIN_EMAIL.',
@@ -68,10 +69,6 @@ assert(
 assert(
   runtimeEnvironmentRepository.includes('getPublicConfiguredAdminEmail'),
   'Runtime repository must hide configured admin email outside demo mode.',
-);
-assert(
-  adminBootstrapScript.includes('customAttributes') && adminBootstrapScript.includes('admin: true'),
-  'Admin bootstrap must set Firebase custom claim admin=true.',
 );
 assert(
   adminBootstrapScript.includes('ADMIN_BOOTSTRAP_PASSWORD'),
@@ -87,6 +84,8 @@ assert(
     .some((line) => /console\.(log|error)/iu.test(line) && /(password|private_key|access_token|serviceAccount)/iu.test(line)),
   'Admin bootstrap must not print passwords, private keys, access tokens, or service account objects.',
 );
+assert(!adminBootstrapScript.includes('customAttributes'), 'Admin bootstrap must not write Firebase custom claims.');
+assert(!adminBootstrapScript.includes('admin: true'), 'Admin bootstrap must not grant admin access by custom claim.');
 
 assert(!firestoreRules.includes('admin@example.com'), 'Firestore rules must not hardcode demo admin emails.');
 assert(
@@ -100,7 +99,8 @@ assert(
   matchBlock('published_schedules').includes('allow create, update: if isAdmin() && validPublishedSchedule(resourceId);'),
   'Sanitized published schedules must be admin writable only.',
 );
-assert(firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must authorize admin writes by custom claim.');
+assert(!firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must not authorize tenant admins by custom claim.');
+assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Firestore rules must validate tenant admin roles.');
 assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');
 assert(firestoreRules.includes('affectedKeys().hasOnly'), 'Firestore rules must restrict unexpected fields.');
 assert(firestoreRules.includes('match /users/{uid}'), 'Firestore rules must define SaaS users/{uid} rules.');
@@ -110,7 +110,7 @@ assert(firestoreRules.includes('isActiveTenantMember'), 'Firestore rules must ve
 assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.auth.uid'), 'Tenant memberships must be readable by the owning uid.');
 assert(matchBlock('tenantMemberships').includes("resource.data.status == 'ACTIVE'"), 'Tenant membership self-read must require ACTIVE status.');
 assert(matchBlock('tenantMemberships').includes('allow create, update: if isAdmin() && validTenantMembership();'), 'Tenant memberships must be admin writable only.');
-assert(matchBlock('tenants').includes('allow read: if isAdmin() || isActiveTenantMember(tenantId);'), 'Tenants must be readable only by admins or active tenant members.');
+assert(matchBlock('tenants').includes('allow read: if isTenantAdmin(tenantId);'), 'Tenants must be readable only by matching tenant admins.');
 assert(matchBlock('tenants').includes('match /employees/{employeeId}'), 'Tenant scoped employees rules must exist.');
 assert(matchBlock('tenants').includes('match /shifts/{shiftId}'), 'Tenant scoped shifts rules must exist.');
 assert(matchBlock('tenants').includes('match /settings/{settingsId}'), 'Tenant scoped settings rules must exist.');
@@ -138,16 +138,17 @@ assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant 
   const block = matchBlock('tenants').slice(start, end === -1 ? undefined : end);
   assert(!block.includes('allow read: if true;'), `Raw tenant scoped SaaS data must not be public readable: ${marker}`);
 });
-assert(matchBlock('monthly_schedule_exports').includes('allow read: if isAdmin();'), 'Monthly PDF archive metadata must be admin-readable only.');
+assert(matchBlock('monthly_schedule_exports').includes('allow read: if isTenantAdmin(resource.data.tenantId);'), 'Monthly PDF archive metadata must be tenant-admin-readable only.');
 assert(
-  matchBlock('monthly_schedule_exports').includes('allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);'),
+  matchBlock('monthly_schedule_exports').includes('allow create, update: if isTenantAdmin(request.resource.data.tenantId) && validMonthlyScheduleExport(exportId);'),
   'Monthly PDF archive metadata must be admin writable only and validated.',
 );
 assert(!matchBlock('monthly_schedule_exports').includes('allow read: if true;'), 'Monthly PDF archive metadata must not be public readable.');
-assert(storageRules.includes('request.auth.token.admin == true'), 'Storage rules must authorize admins by custom claim.');
+assert(!storageRules.includes('request.auth.token.admin == true'), 'Storage rules must not authorize admins by custom claim.');
+assert(storageRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Storage rules must validate tenant admin roles.');
 assert(storageRules.includes('match /tenants/{tenantId}/monthly_schedule_pdfs/{yearMonth}/{fileName}'), 'Storage rules must define private monthly PDF archive paths.');
-assert(storageRules.includes('allow read: if isAdmin()'), 'Monthly PDF archive files must be admin-readable only.');
-assert(storageRules.includes('allow write: if isAdmin()'), 'Monthly PDF archive files must be admin-writable only.');
+assert(storageRules.includes('allow read: if isTenantAdmin(tenantId)'), 'Monthly PDF archive files must be tenant-admin-readable only.');
+assert(storageRules.includes('allow write: if isTenantAdmin(tenantId)'), 'Monthly PDF archive files must be tenant-admin-writable only.');
 assert(!storageRules.includes('allow read: if true;'), 'Storage rules must not expose public reads.');
 
 const allHeaders = vercelConfig.headers.flatMap((entry) => entry.headers || []);

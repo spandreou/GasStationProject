@@ -7,6 +7,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../../firebase/config';
+import { isActiveTenantAdminMembership } from '../../services/tenantAuthorization';
 
 const MEMBERSHIPS_COLLECTION = 'tenantMemberships';
 
@@ -28,10 +29,6 @@ function createMembershipId(uid, tenantId) {
   return `${uid}_${tenantId}`;
 }
 
-function isActiveMembership(membership) {
-  return membership?.status === 'ACTIVE';
-}
-
 async function getMembership(uid, tenantId) {
   if (!uid || !tenantId) return null;
   assertConfigured();
@@ -48,15 +45,28 @@ async function listActiveMembershipsForUser(uid) {
       where('status', '==', 'ACTIVE'),
     ),
   );
-  return result.docs.map(fromMembershipDoc).filter(Boolean);
+  return result.docs
+    .map(fromMembershipDoc)
+    .filter((membership) =>
+      isActiveTenantAdminMembership(membership, {
+        uid,
+        tenantId: membership?.tenantId,
+      }),
+    );
+}
+
+async function getActiveAdminMembership(uid, tenantId) {
+  const membership = await getMembership(uid, tenantId);
+  return isActiveTenantAdminMembership(membership, { uid, tenantId }) ? membership : null;
 }
 
 async function hasActiveMembership(uid, tenantId) {
-  return isActiveMembership(await getMembership(uid, tenantId));
+  return Boolean(await getActiveAdminMembership(uid, tenantId));
 }
 
 export const firebaseTenantMembershipsRepository = {
   createMembershipId,
+  getActiveAdminMembership,
   getMembership,
   hasActiveMembership,
   listActiveMembershipsForUser,

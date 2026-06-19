@@ -60,10 +60,11 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 - Employees do not have app accounts, Firebase Auth identities, role claims, or write access.
 - Employee-facing views, where present, must be public-safe and read-only.
 - UI hiding is not security. Firestore rules are the enforcement layer.
-- Admin/private collections require Firebase Auth with the custom claim `admin=true`.
+- Admin/private collections require Firebase Auth plus an ACTIVE tenant membership for the matching tenant with role `OWNER`, `ADMIN`, or `MANAGER`.
 - Public collections may be readable without sign-in only when every field is intentionally sanitized.
-- Production admin bootstrapping must happen from a trusted local/admin environment with a Firebase service account, never from frontend code.
-- The `admin:bootstrap` helper reads temporary credentials from environment variables and must not print passwords, private keys, access tokens, or service account objects.
+- Production tenant membership bootstrapping must happen from a trusted local/admin environment with a Firebase service account, never from frontend code.
+- The `admin:bootstrap` helper only prepares the Firebase Auth user. It does not grant tenant access. Tenant access comes from `tenantMemberships/{uid}_{tenantId}`.
+- The bootstrap helpers read temporary credentials from environment variables and must not print passwords, private keys, access tokens, or service account objects.
 
 ## Firestore Privacy Model
 
@@ -76,10 +77,10 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 ## Application Security Baseline
 
 - Do not trust frontend-only validation for production authorization decisions.
-- Production admin authorization uses Firebase Auth plus a Firebase custom claim `admin=true`.
-- Demo email allowlists are allowed only in `VITE_APP_MODE=demo` and must not be treated as production authorization.
+- Production admin authorization uses Firebase Auth plus an ACTIVE `tenantMemberships/{uid}_{tenantId}` document for the matching tenant.
+- Email allowlists and Firebase custom claims must not grant tenant admin access.
 - Do not put admin passwords in Vite env vars. Vite env vars are included in the frontend bundle.
-- Firestore protected data must require custom-claim admin authorization for reads and writes unless it is a dedicated sanitized public collection.
+- Firestore protected data must require tenant membership authorization for reads and writes unless it is a dedicated sanitized public collection.
 - Server-side data access must use parameterized queries or a trusted SDK/ORM.
 - Passwords must be hashed with a strong password hashing function such as Argon2id or bcrypt.
 - JWT/session secrets must be high-entropy values stored only in environment-specific secret storage.

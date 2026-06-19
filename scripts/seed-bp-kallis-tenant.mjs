@@ -15,7 +15,7 @@ Options:
   --slug <slug>                Tenant slug. Default: bp-kallis
   --domain <domain>            Tenant domain. Default: bp-kallis.homelabshare.gr
   --display-name <name>        Tenant display name. Default: BP Kallis
-  --role <role>                Membership role. Default: TENANT_ADMIN
+  --role <role>                Membership role. Default: ADMIN
   --email <email>              Optional user email snapshot for users/{uid}.
   --service-account <path>     Service account JSON path. Alternative to GOOGLE_APPLICATION_CREDENTIALS.
   --use-gcloud                 Use the active gcloud account for the Google OAuth token.
@@ -34,7 +34,7 @@ function parseArgs(argv) {
     slug: 'bp-kallis',
     domain: 'bp-kallis.homelabshare.gr',
     displayName: 'BP Kallis',
-    role: 'TENANT_ADMIN',
+    role: 'ADMIN',
     dryRun: false,
   };
 

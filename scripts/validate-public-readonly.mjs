@@ -85,8 +85,8 @@ assert(announcementBoard.includes('isAdmin && announcement.authorEmail'), 'Annou
 ].forEach((collectionName) => {
   const block = matchNestedTenantBlock(firestoreRules, collectionName);
   assert(block.includes('allow read: if true;'), `${collectionName} must be public readable.`);
-  assert(block.includes('allow create, update: if isAdmin()'), `${collectionName} writes must be admin-only.`);
-  assert(block.includes('allow delete: if isAdmin();'), `${collectionName} deletes must be admin-only.`);
+  assert(block.includes('allow create, update: if isTenantAdmin(tenantId)'), `${collectionName} writes must be tenant-admin-only.`);
+  assert(block.includes('allow delete: if isTenantAdmin(tenantId);'), `${collectionName} deletes must be tenant-admin-only.`);
 });
 
 [

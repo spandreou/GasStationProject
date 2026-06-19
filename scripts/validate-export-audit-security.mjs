@@ -80,12 +80,12 @@ assert(auditBlock.includes('allow create: if isAdmin() && validAuditLog();'), 'A
 assert(auditBlock.includes('allow update, delete: if false;'), 'Audit logs must be immutable from clients.');
 
 const monthlyExportsBlock = matchBlock(firestoreRules, 'monthly_schedule_exports');
-assert(monthlyExportsBlock.includes('allow read: if isAdmin();'), 'Monthly schedule export metadata must be admin-read only.');
-assert(monthlyExportsBlock.includes('allow create, update: if isAdmin() && validMonthlyScheduleExport(exportId);'), 'Monthly schedule export metadata writes must be admin-only and validated.');
+assert(monthlyExportsBlock.includes('allow read: if isTenantAdmin(resource.data.tenantId);'), 'Monthly schedule export metadata must be tenant-admin-read only.');
+assert(monthlyExportsBlock.includes('allow create, update: if isTenantAdmin(request.resource.data.tenantId) && validMonthlyScheduleExport(exportId);'), 'Monthly schedule export metadata writes must be tenant-admin-only and validated.');
 assert(!monthlyExportsBlock.includes('allow read: if true;'), 'Monthly schedule export metadata must not be publicly readable.');
 assert(storageRules.includes('match /tenants/{tenantId}/monthly_schedule_pdfs/{yearMonth}/{fileName}'), 'Storage rules must define tenant monthly PDF archive path.');
-assert(storageRules.includes('allow read: if isAdmin()'), 'Storage archive PDFs must be admin-read only.');
-assert(storageRules.includes('allow write: if isAdmin()'), 'Storage archive PDFs must be admin-write only.');
+assert(storageRules.includes('allow read: if isTenantAdmin(tenantId)'), 'Storage archive PDFs must be tenant-admin-read only.');
+assert(storageRules.includes('allow write: if isTenantAdmin(tenantId)'), 'Storage archive PDFs must be tenant-admin-write only.');
 assert(storageRules.includes("request.resource.contentType == 'application/pdf'"), 'Storage archive writes must require PDF content type.');
 assert(!storageRules.includes('allow read: if true;'), 'Storage rules must not expose public reads.');
 

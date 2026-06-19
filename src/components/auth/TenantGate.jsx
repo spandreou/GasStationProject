@@ -14,6 +14,8 @@ function getEnvFlag(name) {
 export const isTenantGateEnabled = getEnvFlag('VITE_ENABLE_TENANT_GATE');
 
 const PUBLIC_TENANT_ROUTES = new Set([
+  '/',
+  '/app',
   '/login',
   '/forgot-password',
   '/reset-password',

@@ -33,8 +33,8 @@ The GitHub repository and server checkout still use `GasStationProject`. The loc
 ```txt
 SSH target: homelab
 Server path: /home/spandreou/projects/GasStationProject
-Current verified deployment branch: chore/dependabot-config
-Target deployment branch after successful production sync: main
+Current verified deployment branch: main
+Production source-of-truth branch: main
 Compose project: gasstationproject
 Compose file: /home/spandreou/projects/GasStationProject/docker-compose.yml
 Frontend service: gasstation-frontend
@@ -92,19 +92,19 @@ GASSTATION_FRONTEND_PORT=8085
 
 ## Deploy
 
-Use this sequence while the active homelab site still tracks `chore/dependabot-config`:
+Use this sequence for the active homelab site, which tracks `main`:
 
 ```bash
 ssh homelab
 cd /home/spandreou/projects/GasStationProject
 git status --short --branch
-git pull --ff-only origin chore/dependabot-config
+git pull --ff-only origin main
 docker compose up -d --build
 docker compose ps
 curl -I --max-time 10 http://127.0.0.1:8085/
 ```
 
-After this production sync is merged to `main` and validated, switch the homelab checkout to `main` deliberately, rebuild Docker, and verify the local and public URLs. Do not treat the GitHub merge as an automatic deploy.
+Do not treat a GitHub merge as an automatic deploy. Pull `main`, rebuild Docker, and verify the local and public URLs deliberately.
 
 Expected container state:
 
@@ -235,4 +235,4 @@ Browser QA checklist:
 
 ## Branch Note
 
-As of the verified rollout, the homelab server tracks `chore/dependabot-config`. After the Docker/SaaS/monthly archive production changes are merged into `main`, the server should be switched to `main` deliberately, followed by a Docker rebuild and normal production verification.
+As of the verified rollout, the homelab server tracks `main`. Keep `main` as the production source of truth for BP Kallis until the central-domain rollout is planned and validated separately.

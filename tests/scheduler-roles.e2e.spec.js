@@ -1,7 +1,7 @@
 import { expect, test } from 'playwright/test';
 import { generateSmartMonthSchedule } from '../src/utils/autoSchedulerService.js';
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5173';
+const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5174';
 
 const seedEmployees = [
   {
@@ -62,8 +62,27 @@ const generatedMay = generateSmartMonthSchedule({
     startWithCoreAMorning: true,
   },
   roleConfig: {
-    coreAId: 'drossi',
-    coreBId: 'loulakakis',
+    coreAId: 'loulakakis',
+    coreBId: 'spourlis',
+    intermediateId: 'roka',
+  },
+});
+
+const generatedJune = generateSmartMonthSchedule({
+  month: 5,
+  year: 2026,
+  employees: finalEmployees,
+  allShifts: [],
+  existingMonthShifts: [],
+  rules: {
+    weeklyRotationEnabled: true,
+    avoidConsecutiveSundays: true,
+    allowManualOverride: true,
+    startWithCoreAMorning: true,
+  },
+  roleConfig: {
+    coreAId: 'loulakakis',
+    coreBId: 'spourlis',
     intermediateId: 'roka',
   },
 });
@@ -75,11 +94,13 @@ function byDate(date) {
 async function seedSchedulerStore(page) {
   const payload = {
     employees: seedEmployees,
-    generatedShifts: generatedMay.shifts,
-    generatedWarnings: generatedMay.warnings || [],
+    generatedSchedulesByMonth: {
+      '2026-05': generatedMay,
+      '2026-06': generatedJune,
+    },
   };
   const applySeed = () =>
-    page.evaluate(({ employees, generatedShifts, generatedWarnings }) => {
+    page.evaluate(({ employees, generatedSchedulesByMonth }) => {
       const store = window.__gasStationSchedulerStore;
       if (!store) throw new Error('Scheduler store dev hook was not exposed');
       store.getState().cleanupData?.();
@@ -139,10 +160,14 @@ async function seedSchedulerStore(page) {
           }));
           return true;
         },
-        generateMagicMonth: async () => {
+        generateMagicMonth: async ({ month, year } = {}) => {
+          const selectedMonth = Number.isInteger(month) ? month : store.getState().selectedMonth;
+          const selectedYear = Number.isInteger(year) ? year : store.getState().selectedYear;
+          const yearMonth = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+          const generated = generatedSchedulesByMonth[yearMonth] || generatedSchedulesByMonth['2026-05'];
           store.setState({
-            shifts: generatedShifts,
-            warningMessage: generatedWarnings.join(' | '),
+            shifts: generated.shifts,
+            warningMessage: (generated.warnings || []).join(' | '),
           });
           return true;
         },
@@ -251,6 +276,9 @@ test('saving generator rules also persists pending employee role drafts before m
   await expect(page.getByTestId('monthly-role-summary')).not.toContainText('Δεν έχει οριστεί');
 
   await page.getByTestId('generate-monthly-schedule').click();
-  await expect(page.locator(`${byDate('2026-06-01')} [data-employee-id="spourlis"]`)).not.toHaveCount(1);
+  await expect(page.locator(`${byDate('2026-06-01')} [data-employee-id="spourlis"]`)).not.toHaveAttribute(
+    'data-shift-type',
+    'intermediate',
+  );
   await expect(page.locator(`${byDate('2026-06-03')} [data-employee-id="spourlis"]`)).toHaveCount(0);
 });

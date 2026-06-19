@@ -1,6 +1,6 @@
 import { expect, test } from 'playwright/test';
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5173';
+const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5174';
 
 const publishedWeek = {
   id: '2026-06-08',
@@ -112,6 +112,7 @@ async function seedPublicSchedule(page) {
   await page.evaluate(({ publishedSchedule, publishedMonth, publicEmployees, publicAnnouncements }) => {
     const store = window.__gasStationSchedulerStore;
     if (!store) throw new Error('Scheduler store dev hook was not exposed');
+    const unsubscribe = () => {};
     store.getState().cleanupData?.();
     store.setState({
       employees: [],
@@ -144,6 +145,11 @@ async function seedPublicSchedule(page) {
       _unsubscribePublicEmployees: null,
       _unsubscribePublicAnnouncements: null,
       _unsubscribeAuth: null,
+      startPublishedScheduleSubscription: () => unsubscribe,
+      startPublishedScheduleSubscriptions: () => ({}),
+      startPublishedMonthSubscription: () => unsubscribe,
+      startPublicEmployeesSubscription: () => unsubscribe,
+      startPublicAnnouncementsSubscription: () => unsubscribe,
     });
   }, { publishedSchedule: publishedWeek, publishedMonth, publicEmployees, publicAnnouncements });
 }
@@ -176,6 +182,7 @@ test('month view fills cross-month week days when a public week snapshot exists'
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await page.evaluate(({ boundaryWeek, publishedMonth, publicEmployees }) => {
     const store = window.__gasStationSchedulerStore;
+    const unsubscribe = () => {};
     store.getState().cleanupData?.();
     store.setState({
       employees: [],
@@ -208,6 +215,11 @@ test('month view fills cross-month week days when a public week snapshot exists'
       _unsubscribePublicEmployees: null,
       _unsubscribePublicAnnouncements: null,
       _unsubscribeAuth: null,
+      startPublishedScheduleSubscription: () => unsubscribe,
+      startPublishedScheduleSubscriptions: () => ({}),
+      startPublishedMonthSubscription: () => unsubscribe,
+      startPublicEmployeesSubscription: () => unsubscribe,
+      startPublicAnnouncementsSubscription: () => unsubscribe,
     });
   }, { boundaryWeek, publishedMonth: juneMonthWithBoundaryWeek, publicEmployees });
 
@@ -239,7 +251,10 @@ test('month clear confirmation dialog is portaled to the document body', async (
     });
   });
 
-  await page.getByRole('button', { name: 'Καθαρισμός Μήνα' }).click();
+  await expect(page.getByText('Admin Mode', { exact: true })).toBeVisible();
+  const clearMonthButton = page.getByRole('button', { name: 'Καθαρισμός Μήνα' });
+  await expect(clearMonthButton).toBeEnabled();
+  await clearMonthButton.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Καθαρισμός μήνα');

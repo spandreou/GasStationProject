@@ -21,8 +21,8 @@ Demo-ready dashboard για διαχείριση βαρδιών πρατηρίο
 - GitHub remote: `https://github.com/spandreou/GasStationProject.git`.
 - Live BP Kallis URL: `https://bp-kallis.homelabshare.gr/`.
 - Active homelab server path: `/home/spandreou/projects/GasStationProject`.
-- Current verified homelab deployment branch before final sync: `chore/dependabot-config`.
-- Target homelab deployment branch after successful sync and deliberate server switch: `main`.
+- Current verified homelab deployment branch: `main`.
+- `main` is the verified production source of truth for the BP Kallis homelab pilot.
 - Compose project/container: `gasstationproject` / `gasstation-bp-kallis`.
 - Host port: `8085` -> container port `8080`.
 
@@ -70,6 +70,8 @@ npm run build
 npm run test:e2e:scheduler
 npm run qa:saas-foundation
 ```
+
+Local Playwright e2e specs default to `http://127.0.0.1:5174/` to avoid colliding with unrelated Vite apps on `5173`. Override with `E2E_BASE_URL` when needed.
 
 Security checks:
 

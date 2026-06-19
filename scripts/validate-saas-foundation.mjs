@@ -128,6 +128,7 @@ assert(repositories.includes('tenantSubscriptionRepository'), 'Repository export
 assert(repositories.includes('tenantTokenRequestsRepository'), 'Repository exports must include tenant token requests.');
 assert(tenantAccessService.includes('listActiveTenantAccessForUser'), 'Tenant access service must load active memberships by uid.');
 assert(tenantAccessService.includes('verifyTenantAccessForHost'), 'Tenant access service must prepare tenant host membership checks.');
+assert(tenantAccessService.includes('getTenantById(hostContext.tenantSlug)'), 'Tenant host access must read tenants/{tenantSlug} directly to satisfy membership-based Firestore rules.');
 assert(tenantAccessService.includes('Δεν υπάρχει ενεργό πρατήριο'), 'Tenant access service must include safe no-access message.');
 assert(
   tenantAccessService.includes('TENANT_ACCESS_DENIED_MESSAGE') &&

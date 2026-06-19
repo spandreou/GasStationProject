@@ -95,7 +95,7 @@ export async function verifyTenantAccessForHost({ uid, hostname }) {
     };
   }
 
-  const tenant = await tenantsRepository.getTenantBySlug(hostContext.tenantSlug);
+  const tenant = await tenantsRepository.getTenantById(hostContext.tenantSlug);
   if (!tenant) {
     return {
       allowed: false,

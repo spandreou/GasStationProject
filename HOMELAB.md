@@ -63,8 +63,8 @@ Verified homelab deployment:
 ```txt
 Public URL: https://bp-kallis.homelabshare.gr/
 Server path: /home/spandreou/projects/GasStationProject
-Current verified branch on server: chore/dependabot-config
-Target branch after production sync: main
+Current verified branch on server: main
+Production source-of-truth branch: main
 Compose project: gasstationproject
 Compose file: /home/spandreou/projects/GasStationProject/docker-compose.yml
 Frontend service: gasstation-frontend
@@ -79,8 +79,9 @@ The server `.env` must include this non-secret runtime setting because port `808
 
 ```env
 GASSTATION_FRONTEND_PORT=8085
-VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false
 ```
+
+`VITE_ENABLE_MONTHLY_PDF_ARCHIVE` remains `false` by default. The verified BP Kallis live deployment may set it to `true` after the monthly PDF archive rollout checks pass.
 
 Do not assume a GitHub push deploys the live site automatically. The current live target is self-hosted Docker and needs a server pull plus Docker rebuild/recreate.
 
@@ -88,19 +89,19 @@ Keep `VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false` by default. The live BP Kallis depl
 
 ## Deploy Commands
 
-Use this while the active homelab deployment still tracks `chore/dependabot-config`:
+Use this for the active homelab deployment, which tracks `main`:
 
 ```bash
 ssh homelab
 cd /home/spandreou/projects/GasStationProject
 git status --short --branch
-git pull --ff-only origin chore/dependabot-config
+git pull --ff-only origin main
 docker compose up -d --build
 docker compose ps
 curl -I --max-time 10 http://127.0.0.1:8085/
 ```
 
-After the production sync is merged to `main` and validated, deliberately switch the server checkout to `main` and update this runbook in the same change. Do not assume a GitHub merge changes the live server automatically.
+Do not assume a GitHub merge changes the live server automatically. Pull `main`, rebuild Docker, and verify local/public URLs deliberately.
 
 If Docker tries to bind `0.0.0.0:8080`, check that `.env` contains `GASSTATION_FRONTEND_PORT=8085`.
 

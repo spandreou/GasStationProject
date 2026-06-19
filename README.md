@@ -71,7 +71,7 @@ npm run test:e2e:scheduler
 npm run qa:saas-foundation
 ```
 
-Local Playwright e2e specs default to `http://127.0.0.1:5174/` to avoid colliding with unrelated Vite apps on `5173`. Override with `E2E_BASE_URL` when needed.
+Local Playwright e2e specs default to `http://127.0.0.1:5174/` to avoid colliding with unrelated Vite apps on `5173`. Start local Vite with `npm run dev -- --host 127.0.0.1 --port 5174 --strictPort` or override with `E2E_BASE_URL` when needed.
 
 Security checks:
 

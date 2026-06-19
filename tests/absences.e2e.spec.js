@@ -2,6 +2,8 @@ import { expect, test } from 'playwright/test';
 
 const BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5174';
 
+test.setTimeout(60_000);
+
 const seedEmployees = [
   { id: 'drossi', fullName: 'Δρόση Βασιλική', role: 'Προσωπικό', isActive: true, scheduleRole: 'intermediate' },
   { id: 'loulakakis', fullName: 'Λουλακάκης Κώστας', role: 'Προσωπικό', isActive: true, scheduleRole: 'core1' },

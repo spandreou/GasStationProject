@@ -155,6 +155,7 @@ async function seedPublicSchedule(page) {
 }
 
 test('read-only mode renders a sanitized published schedule without admin data', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(BASE_URL);
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedPublicSchedule(page);
@@ -175,6 +176,11 @@ test('read-only mode renders a sanitized published schedule without admin data',
   await expect(page.getByRole('button', { name: 'Εξαγωγή' })).toHaveCount(0);
   await expect(page.getByText('Ιστορικό Προγραμμάτων')).toHaveCount(0);
   await expect(page.getByText('Νέος υπάλληλος')).toHaveCount(0);
+
+  const minimumShiftCardWidth = await page
+    .locator('[data-testid="assigned-shift"]')
+    .evaluateAll((nodes) => Math.min(...nodes.map((node) => node.getBoundingClientRect().width)));
+  expect(minimumShiftCardWidth).toBeGreaterThanOrEqual(120);
 });
 
 test('month view fills cross-month week days when a public week snapshot exists', async ({ page }) => {

@@ -459,10 +459,11 @@ const DayBox = memo(function DayBox({
           />
         ))}
 
-        {dayShifts.map((shift) => {
+        {dayShifts.map((shift, index) => {
           const sundayWarning = getSundayViolationMessage(shift.id);
+          const shiftKey = shift.id || `${shift.date || day}-${shift.employeeId || shift.employeeName || 'employee'}-${shift.startTime || 'start'}-${shift.endTime || 'end'}-${index}`;
           return (
-            <div key={shift.id} className="space-y-1">
+            <div key={shiftKey} className="space-y-1">
               <AssignedShiftItem
                 shift={shift}
                 employee={getEmployeeById(shift.employeeId)}
@@ -1099,7 +1100,7 @@ export default function WeeklyGrid({
             <div
               ref={scrollRef}
               onScroll={handleScroll}
-              className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-visible md:snap-none lg:grid-cols-4 xl:grid-cols-7 ${densityClasses.weekGrid}`}
+              className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-x-auto md:snap-none lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {
                 const dayShifts = grouped[day] || [];
@@ -1237,7 +1238,7 @@ export default function WeeklyGrid({
                     Εβδομάδα {formatDateGreek(weekRow.startDate)} - {formatDateGreek(weekRow.endDate)}
                   </h3>
                 </header>
-                <div className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-visible md:snap-none lg:grid-cols-4 xl:grid-cols-7 ${densityClasses.weekGrid}`}>
+                <div className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-x-auto md:snap-none lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}>
                   {weekRow.days.map(({ date, isInMonth }, index) => {
                     const dayShifts = grouped[date] || [];
 

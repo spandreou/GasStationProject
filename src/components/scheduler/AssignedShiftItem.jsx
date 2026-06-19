@@ -123,7 +123,7 @@ export default function AssignedShiftItem({
         </div>
       ) : null}
 
-      <div className="min-w-0 pr-10">
+      <div className={`min-w-0 ${hasActions ? 'pr-10' : ''}`}>
         <p className={`break-words font-bold leading-snug text-slate-900 dark:text-white ${densityClasses.name}`}>
           {employeeName}
         </p>

@@ -122,7 +122,7 @@ export default function ProgramHistoryPanel({
   if (!isAdmin) return null;
 
   return (
-    <section className="glass-panel rounded-2xl p-4 sm:p-5">
+    <section className="glass-panel flex h-full flex-col rounded-2xl p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <History size={17} className="text-brand-700 dark:text-cyan-300" />
@@ -151,7 +151,7 @@ export default function ProgramHistoryPanel({
       </div>
 
       {mode === 'week' ? (
-        <div className="grid gap-3 xl:grid-cols-[1fr,1.15fr]">
+        <div className="grid flex-1 gap-3 xl:grid-cols-[1fr,1.15fr]">
           <div className="space-y-2">
             <div className="flex justify-end gap-1.5">
               <button
@@ -263,7 +263,7 @@ export default function ProgramHistoryPanel({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-300/70 bg-white/45 p-3 dark:border-cyan-300/30 dark:bg-slate-900/45">
             <div className="flex items-center gap-2">
               <CalendarDays size={16} className="text-brand-700 dark:text-cyan-300" />
@@ -293,7 +293,7 @@ export default function ProgramHistoryPanel({
           ) : isMonthlyArchiveLoading ? (
             <StateNotice state="loading" compact title="Φόρτωση ιστορικού" message="Ανάκτηση διαθέσιμων μηνιαίων PDF." />
           ) : monthlyArchives.length ? (
-            <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+            <div className="min-h-[300px] flex-1 space-y-2 overflow-y-auto pr-1">
               {monthlyArchives.map((archive) => (
                 <article
                   key={archive.id || archive.yearMonth}

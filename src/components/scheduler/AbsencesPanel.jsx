@@ -386,7 +386,7 @@ export default function AbsencesPanel({
       )}
 
       <div className="grid gap-2 text-xs">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="space-y-1">
             <span className="font-semibold text-slate-700 dark:text-slate-200">Μήνας</span>
             <select
@@ -425,7 +425,7 @@ export default function AbsencesPanel({
           ))}
         </select>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <select
             value={filters.type}
             onChange={(event) => setFilters((prev) => ({ ...prev, type: event.target.value }))}

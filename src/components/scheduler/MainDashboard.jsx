@@ -1,5 +1,6 @@
-import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, WifiOff } from 'lucide-react';
+import { AlertTriangle, Info, PanelLeft, Plus, RefreshCw, WifiOff, X } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { WEEKDAY_LABELS } from '../../data/constants';
 import { useSchedulerStore } from '../../hooks/useSchedulerStore';
 import useResizableLayout from '../../hooks/useResizableLayout';
@@ -1641,7 +1642,7 @@ export default function MainDashboard() {
         ) : null}
       </div>
 
-      {isSidebarOpen ? (
+      {isSidebarOpen && typeof document !== 'undefined' ? createPortal(
         <div className="fixed inset-0 z-[70] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
@@ -1649,9 +1650,26 @@ export default function MainDashboard() {
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             onClick={() => setIsSidebarOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[92vh] overflow-hidden rounded-t-3xl sm:rounded-t-3xl bg-slate-100/90 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/85">
-            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 dark:bg-slate-700/70" />
-            <div className="max-h-[78vh] overflow-y-auto pb-4">
+          <div className="absolute inset-0 flex flex-col overflow-hidden bg-slate-100/95 p-3 shadow-2xl backdrop-blur-md dark:bg-slate-950/95">
+            <div className="mb-3 flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-white/45 bg-white/55 px-3 py-2 dark:border-cyan-300/30 dark:bg-slate-900/55">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  Εργαλεία
+                </p>
+                <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                  Πίνακας πλαϊνής καρτέλας
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen(false)}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-300/70 bg-white/70 text-slate-800 transition hover:bg-white dark:border-cyan-300/35 dark:bg-slate-950/70 dark:text-slate-100 dark:hover:bg-slate-900"
+                aria-label="Κλείσιμο sidebar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto pb-5">
                 <SchedulerSidebar
                   employees={displayEmployees}
                   shiftTemplates={shiftTemplates}
@@ -1683,7 +1701,8 @@ export default function MainDashboard() {
                 />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
       <Suspense fallback={null}>

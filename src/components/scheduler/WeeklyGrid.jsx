@@ -906,8 +906,11 @@ export default function WeeklyGrid({
     const container = scrollRef.current;
     if (!container) return;
     const safeIndex = Math.max(0, Math.min(index, navItems.length - 1));
-    const step = getScrollStep() || container.clientWidth;
-    container.scrollTo({ left: step * safeIndex, behavior: 'smooth' });
+    container.children?.[safeIndex]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    });
     setActiveIndex(safeIndex);
   }
 
@@ -1058,11 +1061,11 @@ export default function WeeklyGrid({
             ) : null}
           </div>
 
-          <div className="mb-3 flex items-center gap-2 md:hidden">
+          <div className="mb-3 flex items-center gap-2 sm:hidden">
             <button
               type="button"
               onClick={() => scrollToIndex(activeIndex - 1)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               aria-label="Προηγούμενη ημέρα"
             >
               <ChevronLeft size={18} />
@@ -1074,7 +1077,7 @@ export default function WeeklyGrid({
                   key={item.key}
                   type="button"
                   onClick={() => scrollToIndex(index)}
-                  className={`flex w-[110px] shrink-0 snap-center flex-col items-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                  className={`flex min-h-11 w-[116px] shrink-0 snap-center flex-col items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                     activeIndex === index
                       ? 'border-brand-400 bg-brand-500 text-white shadow-sm'
                       : 'border-slate-200 bg-white/70 text-slate-700'
@@ -1089,7 +1092,7 @@ export default function WeeklyGrid({
             <button
               type="button"
               onClick={() => scrollToIndex(activeIndex + 1)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
               aria-label="Επόμενη ημέρα"
             >
               <ChevronRight size={18} />
@@ -1100,14 +1103,14 @@ export default function WeeklyGrid({
             <div
               ref={scrollRef}
               onScroll={handleScroll}
-              className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-x-auto md:snap-none lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
+              className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {
                 const dayShifts = grouped[day] || [];
                 const dayTemplates = placedTemplatesByDay.get(day) || [];
 
                 return (
-                  <div key={day} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                  <div key={day} className="min-w-0">
                     <DayBox
                       day={day}
                       title={WEEKDAY_LABELS[index]}
@@ -1238,13 +1241,13 @@ export default function WeeklyGrid({
                     Εβδομάδα {formatDateGreek(weekRow.startDate)} - {formatDateGreek(weekRow.endDate)}
                   </h3>
                 </header>
-                <div className={`flex overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth md:grid md:w-full md:min-w-0 md:grid-cols-2 md:overflow-x-auto md:snap-none lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}>
+                <div className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}>
                   {weekRow.days.map(({ date, isInMonth }, index) => {
                     const dayShifts = grouped[date] || [];
 
                     if (!isInMonth && !dayShifts.length) {
                       return (
-                        <div key={`placeholder-${weekRow.key}-${index}`} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                        <div key={`placeholder-${weekRow.key}-${index}`} className="min-w-0">
                           <div className={`h-full min-h-[120px] rounded-lg border border-dashed border-slate-300/45 bg-white/20 opacity-45 dark:border-cyan-300/20 dark:bg-slate-900/25 ${densityClasses.dayBox}`} aria-hidden="true">
                             <div className={`rounded-md border border-slate-300/40 bg-slate-900/35 text-xs text-white/70 dark:border-cyan-300/15 dark:bg-slate-950/45 ${densityClasses.placeholderHeader}`}>
                               <p className={`font-bold leading-snug ${densityClasses.dayTitle}`}>{WEEKDAY_LABELS[index]}</p>
@@ -1256,7 +1259,7 @@ export default function WeeklyGrid({
                     }
 
                     return (
-                      <div key={date} className="min-w-full shrink-0 snap-start md:min-w-0 md:snap-none">
+                      <div key={date} className="min-w-0">
                         <DayBox
                           day={date}
                           title={WEEKDAY_LABELS[index]}

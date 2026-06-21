@@ -392,7 +392,9 @@ const DayBox = memo(function DayBox({
   const interactionClasses = canManage
     ? 'hover:-translate-y-[1px] hover:border-sky-300/70 hover:shadow-md hover:shadow-slate-900/10 focus-within:ring-2 focus-within:ring-brand-300/60 dark:hover:border-cyan-300/55 dark:hover:shadow-cyan-500/10 dark:focus-within:ring-cyan-300/45'
     : '';
-  const mobileActiveClasses = isActive ? 'ring-2 ring-brand-300/65 dark:ring-cyan-300/55 md:ring-0' : '';
+  const mobileActiveClasses = isActive
+    ? 'ring-2 ring-brand-300/70 shadow-[0_0_22px_rgba(14,165,233,0.28)] dark:ring-cyan-300/60 dark:shadow-[0_0_26px_rgba(34,211,238,0.34)] lg:ring-0 lg:shadow-sm dark:lg:shadow-sm'
+    : '';
 
   return (
     <section
@@ -593,16 +595,6 @@ export default function WeeklyGrid({
   const grouped = useMemo(() => groupAndSortShiftsByDay(shifts), [shifts]);
   const conflictShiftIds = useMemo(() => buildConflictShiftIdSet(shifts), [shifts]);
 
-  const navItems = useMemo(
-    () =>
-      weekDays.map((day, index) => ({
-        key: day,
-        label: WEEKDAY_LABELS[index],
-        date: formatDateGreek(day),
-      })),
-    [weekDays],
-  );
-
   const placedTemplatesByDay = useMemo(() => {
     const map = new Map(weekDays.map((day) => [day, []]));
     shiftTemplates.forEach((template) => {
@@ -687,6 +679,61 @@ export default function WeeklyGrid({
   useEffect(() => {
     if (scheduleMode !== 'week') return;
     setWeekJumpInput(formatDateGreek(weekDays?.[0] || ''));
+  }, [scheduleMode, weekDays]);
+
+  useEffect(() => {
+    if (scheduleMode !== 'week') {
+      setActiveIndex(0);
+      return undefined;
+    }
+
+    let frameId = 0;
+
+    const updateActiveDay = () => {
+      if (typeof window === 'undefined') return;
+      const container = scrollRef.current;
+      if (!container) return;
+
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        setActiveIndex(0);
+        return;
+      }
+
+      const dayCards = Array.from(container.children || []);
+      if (!dayCards.length) return;
+
+      const viewportFocusY = window.innerHeight * 0.42;
+      let closestIndex = 0;
+      let closestDistance = Number.POSITIVE_INFINITY;
+
+      dayCards.forEach((card, index) => {
+        const rect = card.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+        const cardFocusY = rect.top + rect.height * 0.38;
+        const distance = Math.abs(cardFocusY - viewportFocusY);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      });
+
+      setActiveIndex((current) => (current === closestIndex ? current : closestIndex));
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(updateActiveDay);
+    };
+
+    scheduleUpdate();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+    };
   }, [scheduleMode, weekDays]);
 
   const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
@@ -892,38 +939,6 @@ export default function WeeklyGrid({
     setWeekJumpInput(formatDateGreek(isoDate));
   }, [onJumpToWeekDate, weekDays]);
 
-  function getScrollStep() {
-    const container = scrollRef.current;
-    if (!container) return 0;
-    const firstChild = container.firstElementChild;
-    const childWidth = firstChild ? firstChild.getBoundingClientRect().width : container.clientWidth;
-    const styles = getComputedStyle(container);
-    const gap = Number.parseFloat(styles.columnGap || styles.gap || 0);
-    return childWidth + gap;
-  }
-
-  function scrollToIndex(index) {
-    const container = scrollRef.current;
-    if (!container) return;
-    const safeIndex = Math.max(0, Math.min(index, navItems.length - 1));
-    container.children?.[safeIndex]?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'nearest',
-    });
-    setActiveIndex(safeIndex);
-  }
-
-  function handleScroll() {
-    const container = scrollRef.current;
-    if (!container) return;
-    const step = getScrollStep() || container.clientWidth;
-    const nextIndex = Math.round(container.scrollLeft / step);
-    if (nextIndex !== activeIndex) {
-      setActiveIndex(Math.max(0, Math.min(nextIndex, navItems.length - 1)));
-    }
-  }
-
   return (
     <section
       id="weekly-grid-export"
@@ -1061,48 +1076,9 @@ export default function WeeklyGrid({
             ) : null}
           </div>
 
-          <div className="mb-3 flex items-center gap-2 sm:hidden">
-            <button
-              type="button"
-              onClick={() => scrollToIndex(activeIndex - 1)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
-              aria-label="Προηγούμενη ημέρα"
-            >
-              <ChevronLeft size={18} />
-            </button>
-
-            <div className="flex flex-1 gap-2 overflow-x-auto scrollbar-thin snap-x snap-mandatory scroll-smooth">
-              {navItems.map((item, index) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => scrollToIndex(index)}
-                  className={`flex min-h-11 w-[116px] shrink-0 snap-center flex-col items-center justify-center rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                    activeIndex === index
-                      ? 'border-brand-400 bg-brand-500 text-white shadow-sm'
-                      : 'border-slate-200 bg-white/70 text-slate-700'
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  <span className="text-[10px] font-medium opacity-80">{item.date}</span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => scrollToIndex(activeIndex + 1)}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white/70 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white dark:border-cyan-300/30 dark:bg-slate-900/60 dark:text-slate-100"
-              aria-label="Επόμενη ημέρα"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
           <div className={`w-full min-w-0 rounded-lg border border-white/45 bg-white/25 dark:border-cyan-300/20 dark:bg-slate-900/30 ${densityClasses.weekBlock}`}>
             <div
               ref={scrollRef}
-              onScroll={handleScroll}
               className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {

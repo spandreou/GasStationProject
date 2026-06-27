@@ -46,6 +46,7 @@ function assertThrows(fn, message) {
   'src/repositories/firebase/firebaseTenantSubscriptionRepository.js',
   'src/repositories/firebase/firebaseTenantTokenRequestsRepository.js',
   'src/components/auth/ForgotPasswordPage.jsx',
+  'src/components/auth/CentralLandingPage.jsx',
   'src/components/auth/LoginPage.jsx',
   'src/components/auth/ResetPasswordPage.jsx',
   'src/components/auth/SelectTenantPage.jsx',
@@ -65,6 +66,7 @@ const authService = read('src/firebase/authService.js');
 const tenantHostContext = read('src/utils/tenantHostContext.js');
 const repositories = read('src/repositories/index.js');
 const loginPage = read('src/components/auth/LoginPage.jsx');
+const centralLandingPage = read('src/components/auth/CentralLandingPage.jsx');
 const forgotPassword = read('src/components/auth/ForgotPasswordPage.jsx');
 const resetPassword = read('src/components/auth/ResetPasswordPage.jsx');
 const selectTenant = read('src/components/auth/SelectTenantPage.jsx');
@@ -98,6 +100,7 @@ assert(app.includes('/request-token'), 'App must prepare /request-token.');
 assert(app.includes('/admin-console'), 'App must prepare /admin-console.');
 assert(app.includes('/app'), 'App must prepare /app.');
 assert(app.includes('SelectTenantPage'), 'App must route /select-tenant to the tenant selection page.');
+assert(app.includes('CentralLandingPage'), 'App must route central portal root to the SaaS landing page.');
 assert(app.includes('LoginPage'), 'App must route /login to a dedicated login page.');
 assert(app.includes('TenantGate'), 'App must wrap tenant views in the tenant gate foundation.');
 assert(app.includes('routePath={routePath}'), 'App must pass current route to TenantGate.');
@@ -106,11 +109,17 @@ assert(authService.includes('confirmPasswordReset'), 'Auth service must confirm 
 assert(authService.includes('subscribeAuth'), 'Auth service must expose raw Firebase auth for uid-based tenant membership checks.');
 assert(loginPage.includes('authRepository.signInAdmin'), 'Login page must use Firebase admin auth repository.');
 assert(loginPage.includes('resolveCentralTenantDestination'), 'Login page must use central tenant membership routing.');
-assert(loginPage.includes("window.location.assign('/select-tenant')"), 'Login page must route multi-tenant users to /select-tenant.');
+assert(loginPage.includes("new URL('/select-tenant'"), 'Login page must route multi-tenant users to /select-tenant.');
+assert(loginPage.includes("selectUrl.searchParams.set('returnTo', returnTo)"), 'Login page must preserve returnTo for tenant selection.');
+assert(loginPage.includes('resolveAuthorizedReturnTo'), 'Login page must validate returnTo against tenant membership before redirecting.');
 assert(loginPage.includes("window.location.assign('/app')"), 'Login page must route tenant/local login to /app.');
+assert(loginPage.includes('rememberDevice'), 'Login page must expose remember-device persistence choice.');
 assert(loginPage.includes('MAX_EMAIL_LENGTH'), 'Login page must bound email input length.');
 assert(loginPage.includes('MAX_PASSWORD_LENGTH'), 'Login page must bound password input length.');
 assert(!loginPage.includes('console.log') && !loginPage.includes('console.error'), 'Login page must not log auth failures.');
+assert(centralLandingPage.includes('GasStation Shift Manager'), 'Central landing page must present the GasStation product.');
+assert(centralLandingPage.includes('/login'), 'Central landing page must link to login.');
+assert(centralLandingPage.includes('Request Demo'), 'Central landing page must include a request-demo placeholder.');
 assert(forgotPassword.includes('Αν υπάρχει λογαριασμός με αυτό το email'), 'Forgot password must use a generic response.');
 assert(forgotPassword.includes('MAX_EMAIL_LENGTH'), 'Forgot password must bound email input length.');
 assert(forgotPassword.includes('email.trim()'), 'Forgot password must trim email before sending reset requests.');
@@ -151,6 +160,7 @@ assert(tenantTokenRequestsRepository.includes('listTenantTokenRequests'), 'Tenan
 assert(tenantTokenRequestsRepository.includes('TENANT_SCOPED_COLLECTIONS.tokenRequests'), 'Tenant token requests repository must use tenant-scoped tokenRequests path.');
 assert(!tenantTokenRequestsRepository.includes('secret') && !tenantTokenRequestsRepository.includes('tokenValue'), 'Tenant token requests must not store secret token values.');
 assert(selectTenant.includes('resolveCentralTenantDestination'), 'Select tenant page must use central membership flow.');
+assert(selectTenant.includes('resolveAuthorizedReturnTo'), 'Select tenant page must validate returnTo before tenant redirect.');
 assert(selectTenant.includes('authRepository.subscribeAuth'), 'Select tenant page must use raw auth uid for membership flow.');
 assert(!selectTenant.includes('authRepository.subscribeAdminAuth'), 'Select tenant page must not require admin claim for membership lookup.');
 assert(selectTenant.includes('window.location.assign'), 'Single tenant flow must redirect to tenant domain.');
@@ -158,6 +168,8 @@ assert(!selectTenant.includes('console.log'), 'Select tenant page must not log u
 assert(envExample.includes('VITE_ENABLE_TENANT_GATE=false'), 'Tenant gate must be explicitly default-off for the pilot.');
 assert(tenantGate.includes('VITE_ENABLE_TENANT_GATE'), 'Tenant gate must be controlled by an explicit feature flag.');
 assert(tenantGate.includes('PUBLIC_TENANT_ROUTES'), 'Tenant gate must allow public auth routes through when enabled.');
+assert(tenantGate.includes('buildCentralLoginUrl'), 'Tenant gate must redirect unauthenticated tenant users to central login.');
+assert(tenantGate.includes('createCurrentReturnToUrl'), 'Tenant gate must preserve returnTo when redirecting to central login.');
 assert(tenantGate.includes("'/login'"), 'Tenant gate must not block /login.');
 assert(tenantGate.includes("'/forgot-password'"), 'Tenant gate must not block /forgot-password.');
 assert(tenantGate.includes("'/reset-password'"), 'Tenant gate must not block /reset-password.');

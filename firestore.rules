@@ -537,6 +537,10 @@ service cloud.firestore {
       allow delete: if isTenantAdmin(resource.data.tenantId);
     }
 
+    match /authTickets/{ticketId} {
+      allow read, write: if false;
+    }
+
     match /employeeAbsences/{absenceId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && validAbsence();

@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
+import CentralLandingPage from './components/auth/CentralLandingPage';
 import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
 import LoginPage from './components/auth/LoginPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
@@ -141,7 +142,9 @@ export default function App() {
   }, []);
 
   let page = <MainDashboard />;
-  if (routePath === '/login') {
+  if (routePath === '/' && tenantHostContext.mode === 'central') {
+    page = <CentralLandingPage />;
+  } else if (routePath === '/login') {
     page = <LoginPage />;
   } else if (routePath === '/forgot-password') {
     page = <ForgotPasswordPage />;

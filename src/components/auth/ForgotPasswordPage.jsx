@@ -31,16 +31,16 @@ export default function ForgotPasswordPage() {
   return (
     <AuthPageShell
       title="Επαναφορά κωδικού"
-      subtitle="Συμπλήρωσε το email του λογαριασμού διαχειριστή."
+      subtitle="Συμπλήρωσε το email του λογαριασμού σου και θα σταλεί ασφαλής σύνδεσμος επαναφοράς."
     >
       <form onSubmit={handleSubmit} className="space-y-3">
-        <label className="block text-sm font-bold">
+        <label className="block text-sm font-black text-slate-700">
           Email
           <input
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-cyan-300/45 bg-slate-950/75 px-3 py-2 text-white outline-none"
+            className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
             required
             maxLength={MAX_EMAIL_LENGTH}
             autoComplete="email"
@@ -49,14 +49,21 @@ export default function ForgotPasswordPage() {
 
         <button
           type="submit"
-          className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-bold text-white hover:bg-brand-600 disabled:opacity-60"
+          className="w-full rounded-2xl bg-slate-950 px-3 py-3 text-sm font-black text-white shadow-lg shadow-slate-200 transition hover:bg-slate-800 disabled:opacity-60"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Αποστολή...' : 'Αποστολή συνδέσμου επαναφοράς'}
         </button>
 
+        <a
+          href="/login"
+          className="block rounded-2xl border border-slate-200 px-3 py-3 text-center text-sm font-black text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+        >
+          Back to login
+        </a>
+
         {message ? (
-          <p className="rounded-lg border border-cyan-300/35 bg-cyan-50/70 px-3 py-2 text-xs text-cyan-950 dark:bg-cyan-500/10 dark:text-cyan-50">
+          <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-950">
             {message}
           </p>
         ) : null}

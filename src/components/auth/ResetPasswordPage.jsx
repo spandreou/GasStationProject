@@ -90,18 +90,18 @@ export default function ResetPasswordPage() {
   return (
     <AuthPageShell
       title="Νέος κωδικός"
-      subtitle="Ο σύνδεσμος επαναφοράς ελέγχεται από το Firebase Auth."
+      subtitle="Διάλεξε έναν νέο κωδικό για τον λογαριασμό σου."
     >
       {status === 'checking' ? (
-        <p className="rounded-lg border border-cyan-300/35 bg-slate-950/35 px-3 py-2 text-sm">
+        <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-950">
           Έλεγχος συνδέσμου...
         </p>
       ) : null}
 
       {status === 'invalid' || status === 'done' ? (
         <div className="space-y-3">
-          <p className="rounded-lg border border-cyan-300/35 bg-slate-950/35 px-3 py-2 text-sm">{message}</p>
-          <a href="/login" className="inline-flex rounded-lg bg-brand-500 px-3 py-2 text-sm font-bold text-white hover:bg-brand-600">
+          <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-950">{message}</p>
+          <a href="/login" className="inline-flex rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
             Επιστροφή στη σύνδεση
           </a>
         </div>
@@ -109,17 +109,17 @@ export default function ResetPasswordPage() {
 
       {status === 'ready' || status === 'submitting' ? (
         <form onSubmit={handleSubmit} className="space-y-3">
-          <p className="rounded-lg border border-cyan-300/25 bg-slate-950/25 px-3 py-2 text-xs">
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
             Λογαριασμός: <span className="font-bold">{email}</span>
           </p>
 
-          <label className="block text-sm font-bold">
+          <label className="block text-sm font-black text-slate-700">
             Νέος κωδικός
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-cyan-300/45 bg-slate-950/75 px-3 py-2 text-white outline-none"
+              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               required
               minLength={MIN_PASSWORD_LENGTH}
               maxLength={MAX_PASSWORD_LENGTH}
@@ -127,13 +127,17 @@ export default function ResetPasswordPage() {
             />
           </label>
 
-          <label className="block text-sm font-bold">
+          <p className="text-xs font-semibold text-slate-500">
+            Χρησιμοποίησε τουλάχιστον {MIN_PASSWORD_LENGTH} χαρακτήρες, ιδανικά με γράμματα, αριθμούς και σύμβολα.
+          </p>
+
+          <label className="block text-sm font-black text-slate-700">
             Επιβεβαίωση κωδικού
             <input
               type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-cyan-300/45 bg-slate-950/75 px-3 py-2 text-white outline-none"
+              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               required
               minLength={MIN_PASSWORD_LENGTH}
               maxLength={MAX_PASSWORD_LENGTH}
@@ -143,14 +147,14 @@ export default function ResetPasswordPage() {
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-bold text-white hover:bg-brand-600 disabled:opacity-60"
+            className="w-full rounded-2xl bg-slate-950 px-3 py-3 text-sm font-black text-white shadow-lg shadow-slate-200 transition hover:bg-slate-800 disabled:opacity-60"
             disabled={status === 'submitting'}
           >
             {status === 'submitting' ? 'Αλλαγή...' : 'Αλλαγή κωδικού'}
           </button>
 
           {message ? (
-            <p className="rounded-lg border border-amber-300/45 bg-amber-50/70 px-3 py-2 text-xs text-amber-950 dark:bg-amber-500/10 dark:text-amber-50">
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
               {message}
             </p>
           ) : null}

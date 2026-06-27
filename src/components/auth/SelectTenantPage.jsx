@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { authRepository } from '../../repositories';
+import { createTenantAuthTicketRedirect } from '../../firebase/authBrokerService';
 import {
+  getReturnToParam,
+  resolveAuthorizedReturnTo,
   resolveCentralTenantDestination,
   TENANT_ACCESS_MESSAGES,
 } from '../../services/tenantAccessService';
 import AuthPageShell from './AuthPageShell';
+
+const isAuthBrokerEnabled = String(import.meta.env.VITE_ENABLE_AUTH_BROKER || '').trim().toLowerCase() === 'true';
 
 export default function SelectTenantPage() {
   const [status, setStatus] = useState('checking');
@@ -25,12 +30,41 @@ export default function SelectTenantPage() {
         }
 
         try {
+          const returnTo = getReturnToParam();
+          if (returnTo) {
+            const returnDestination = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
+            if (returnDestination.allowed && returnDestination.url) {
+              setStatus('redirecting');
+              setMessage('Μεταφορά στο πρατήριο...');
+              if (isAuthBrokerEnabled) {
+                const redirectUrl = await createTenantAuthTicketRedirect({
+                  returnTo: returnDestination.url,
+                  tenantId: returnDestination.access?.tenant?.id,
+                });
+                window.location.assign(redirectUrl);
+                return;
+              }
+
+              window.location.assign(returnDestination.url);
+              return;
+            }
+          }
+
           const result = await resolveCentralTenantDestination(user.uid);
           if (cancelled) return;
 
           if (result.type === 'redirect' && result.url) {
             setStatus('redirecting');
             setMessage('Μεταφορά στο πρατήριο...');
+            if (isAuthBrokerEnabled) {
+              const redirectUrl = await createTenantAuthTicketRedirect({
+                returnTo: result.url,
+                tenantId: result.tenant?.id,
+              });
+              window.location.assign(redirectUrl);
+              return;
+            }
+
             window.location.assign(result.url);
             return;
           }
@@ -67,30 +101,64 @@ export default function SelectTenantPage() {
   return (
     <AuthPageShell
       title="Επιλογή πρατηρίου"
-      subtitle="Η πρόσβαση βασίζεται στο Firebase uid και σε ενεργές tenant memberships."
+      subtitle="Επίλεξε το πρατήριο που θέλεις να διαχειριστείς."
     >
       {status === 'checking' || status === 'redirecting' ? (
-        <p className="rounded-lg border border-cyan-300/35 bg-slate-950/35 px-3 py-2 text-sm">
+        <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-950">
           {status === 'checking' ? 'Έλεγχος διαθέσιμων πρατηρίων...' : message}
         </p>
       ) : null}
 
       {status === 'ready' ? (
-        <div className="space-y-2">
-          {tenants.map(({ tenant, url }) => (
-            <a
+        <div className="space-y-3">
+          {tenants.map(({ tenant, membership, url }) => (
+            <article
               key={tenant.id}
-              href={url}
-              className="block rounded-lg border border-cyan-300/35 bg-slate-950/55 px-3 py-2 text-sm font-bold text-white hover:border-cyan-200"
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
             >
-              {tenant.displayName || tenant.name || tenant.slug}
-            </a>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-black text-slate-950">{tenant.displayName || tenant.name || tenant.slug}</h2>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{tenant.domain || url}</p>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">
+                  {membership.status}
+                </span>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+                  {membership.role}
+                </span>
+                <a
+                  href={url}
+                  onClick={async (event) => {
+                    if (!isAuthBrokerEnabled) return;
+                    event.preventDefault();
+                    try {
+                      setStatus('redirecting');
+                      setMessage('Μεταφορά στο πρατήριο...');
+                      const redirectUrl = await createTenantAuthTicketRedirect({
+                        returnTo: url,
+                        tenantId: tenant.id,
+                      });
+                      window.location.assign(redirectUrl);
+                    } catch {
+                      setStatus('error');
+                      setMessage('Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης. Δοκίμασε ξανά.');
+                    }
+                  }}
+                  className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800"
+                >
+                  Open Dashboard
+                </a>
+              </div>
+            </article>
           ))}
         </div>
       ) : null}
 
       {status === 'no-access' || status === 'error' ? (
-        <p className="rounded-lg border border-amber-300/45 bg-amber-50/70 px-3 py-2 text-sm text-amber-950 dark:bg-amber-500/10 dark:text-amber-50">
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
           {message}
         </p>
       ) : null}

@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { authRepository } from '../../repositories';
+import { createTenantAuthTicketRedirect } from '../../firebase/authBrokerService';
 import {
+  getReturnToParam,
+  resolveAuthorizedReturnTo,
   resolveCentralTenantDestination,
   TENANT_ACCESS_MESSAGES,
 } from '../../services/tenantAccessService';
@@ -9,6 +12,7 @@ import AuthPageShell from './AuthPageShell';
 
 const MAX_EMAIL_LENGTH = 254;
 const MAX_PASSWORD_LENGTH = 128;
+const isAuthBrokerEnabled = String(import.meta.env.VITE_ENABLE_AUTH_BROKER || '').trim().toLowerCase() === 'true';
 
 function getSafeLoginError() {
   return 'Δεν ήταν δυνατή η σύνδεση. Έλεγξε τα στοιχεία και δοκίμασε ξανά.';
@@ -16,8 +20,10 @@ function getSafeLoginError() {
 
 export default function LoginPage() {
   const hostContext = useMemo(getCurrentTenantHostContext, []);
+  const returnTo = useMemo(getReturnToParam, []);
   const [email, setEmail] = useState(authRepository.getConfiguredAdminEmail?.() || '');
   const [password, setPassword] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
   const isConfigured = authRepository.isPersistenceConfigured?.() ?? true;
@@ -29,14 +35,42 @@ export default function LoginPage() {
       return;
     }
 
+    if (returnTo) {
+      const returnDestination = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
+      if (returnDestination.allowed && returnDestination.url) {
+        if (isAuthBrokerEnabled && hostContext.mode === 'central') {
+          const redirectUrl = await createTenantAuthTicketRedirect({
+            returnTo: returnDestination.url,
+            tenantId: returnDestination.access?.tenant?.id,
+          });
+          window.location.assign(redirectUrl);
+          return;
+        }
+
+        window.location.assign(returnDestination.url);
+        return;
+      }
+    }
+
     const destination = await resolveCentralTenantDestination(user.uid);
     if (destination.type === 'redirect' && destination.url) {
+      if (isAuthBrokerEnabled && hostContext.mode === 'central') {
+        const redirectUrl = await createTenantAuthTicketRedirect({
+          returnTo: destination.url,
+          tenantId: destination.tenant?.id,
+        });
+        window.location.assign(redirectUrl);
+        return;
+      }
+
       window.location.assign(destination.url);
       return;
     }
 
     if (destination.type === 'select') {
-      window.location.assign('/select-tenant');
+      const selectUrl = new URL('/select-tenant', window.location.origin);
+      if (returnTo) selectUrl.searchParams.set('returnTo', returnTo);
+      window.location.assign(selectUrl.toString());
       return;
     }
 
@@ -63,7 +97,11 @@ export default function LoginPage() {
 
     setStatus('submitting');
     try {
-      const user = await authRepository.signInAdmin({ email: normalizedEmail, password });
+      const user = await authRepository.signInAdmin({
+        email: normalizedEmail,
+        password,
+        rememberDevice,
+      });
       setPassword('');
       setStatus('redirecting');
       setMessage('Η σύνδεση ολοκληρώθηκε. Μεταφορά...');
@@ -76,62 +114,77 @@ export default function LoginPage() {
 
   return (
     <AuthPageShell
-      title="Σύνδεση Διαχειριστή"
-      subtitle="Σύνδεση με Firebase Auth και ενεργό tenant membership."
+      title="Sign in"
+      subtitle="Manage all your fuel stations from one platform."
     >
-      <div className="mb-3 rounded-lg border border-cyan-300/45 bg-cyan-50/70 px-3 py-2 text-xs text-cyan-950 dark:bg-cyan-500/10 dark:text-cyan-50">
+      <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-900">
         {modeLabel}
       </div>
 
       {!isConfigured ? (
-        <p className="rounded-lg border border-amber-300/45 bg-amber-50/70 px-3 py-2 text-sm text-amber-950 dark:bg-amber-500/10 dark:text-amber-50">
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           Το Firebase Auth δεν είναι διαθέσιμο στο τρέχον περιβάλλον.
         </p>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <label className="block text-sm font-bold">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="block text-sm font-black text-slate-700">
             Email
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-cyan-300/45 bg-slate-950/75 px-3 py-2 text-white outline-none"
+              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               required
               maxLength={MAX_EMAIL_LENGTH}
               autoComplete="email"
             />
           </label>
 
-          <label className="block text-sm font-bold">
-            Κωδικός
+          <label className="block text-sm font-black text-slate-700">
+            Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-cyan-300/45 bg-slate-950/75 px-3 py-2 text-white outline-none"
+              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
               required
               maxLength={MAX_PASSWORD_LENGTH}
               autoComplete="current-password"
             />
           </label>
 
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <label className="inline-flex items-center gap-2 font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={rememberDevice}
+                onChange={(event) => setRememberDevice(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-cyan-600"
+              />
+              Remember this device
+            </label>
+            <a href="/forgot-password" className="font-black text-cyan-700 hover:text-cyan-800">
+              Forgot Password
+            </a>
+          </div>
+
           <button
             type="submit"
-            className="w-full rounded-lg bg-brand-500 px-3 py-2 text-sm font-bold text-white hover:bg-brand-600 disabled:opacity-60"
+            className="w-full rounded-2xl bg-slate-950 px-3 py-3 text-sm font-black text-white shadow-lg shadow-slate-200 transition hover:bg-slate-800 disabled:opacity-60"
             disabled={status === 'submitting' || status === 'redirecting'}
           >
-            {status === 'submitting' ? 'Σύνδεση...' : 'Σύνδεση'}
+            {status === 'submitting' ? 'Signing in...' : 'Sign In'}
           </button>
 
           <a
-            href="/forgot-password"
-            className="block rounded-lg border border-cyan-300/35 px-3 py-2 text-center text-sm font-bold text-cyan-100 hover:bg-cyan-500/10"
+            href="mailto:support@homelabshare.gr?subject=GasStation%20Shift%20Manager%20Support"
+            className="block rounded-2xl border border-slate-200 px-3 py-3 text-center text-sm font-black text-slate-700 hover:border-slate-300 hover:bg-slate-50"
           >
-            Ξέχασα τον κωδικό
+            Contact Support
           </a>
 
           {message ? (
-            <p className="rounded-lg border border-cyan-300/35 bg-slate-950/35 px-3 py-2 text-xs">
+            <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-950">
               {message}
             </p>
           ) : null}

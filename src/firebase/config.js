@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -76,6 +77,7 @@ const firebaseConfig = isFirebaseConfigured
 const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
+const functions = app ? getFunctions(app) : null;
 const storage = app ? getStorage(app, `gs://${firebaseEnv.storageBucket}`) : null;
 let analytics = null;
 
@@ -96,5 +98,6 @@ function getEnvFlag(name, fallback = false) {
 }
 
 export const isMonthlyPdfArchiveEnabled = getEnvFlag('VITE_ENABLE_MONTHLY_PDF_ARCHIVE', false);
+export const isAuthBrokerEnabled = getEnvFlag('VITE_ENABLE_AUTH_BROKER', false);
 
-export { analytics, app, auth, db, storage };
+export { analytics, app, auth, db, functions, storage };

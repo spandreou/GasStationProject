@@ -1,10 +1,12 @@
 import {
   browserLocalPersistence,
+  browserSessionPersistence,
   confirmPasswordReset,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signOut,
   verifyPasswordResetCode,
 } from 'firebase/auth';
@@ -60,12 +62,23 @@ export function subscribeAuth(onUserChange, onError) {
   return onAuthStateChanged(auth, onUserChange, onError);
 }
 
-export async function signInAdmin({ email, password }) {
+export async function signInAdmin({ email, password, rememberDevice = true }) {
   assertAdminAuthConfigured();
 
   const normalizedEmail = normalizeEmail(email);
-  await setPersistence(auth, browserLocalPersistence);
+  await setPersistence(auth, rememberDevice ? browserLocalPersistence : browserSessionPersistence);
   const credentials = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+  return credentials.user;
+}
+
+export async function signInWithBrokerCustomToken({ customToken }) {
+  assertAdminAuthConfigured();
+
+  if (!customToken?.trim()) {
+    throw new Error('Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης.');
+  }
+
+  const credentials = await signInWithCustomToken(auth, customToken);
   return credentials.user;
 }
 

@@ -15,6 +15,87 @@ function getEnvValue(name, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function getCentralPortalDomain() {
+  const baseDomain = getEnvValue('VITE_PUBLIC_APP_BASE_DOMAIN', 'homelabshare.gr').toLowerCase();
+  return getEnvValue('VITE_CENTRAL_PORTAL_DOMAIN', `gas.${baseDomain}`).toLowerCase();
+}
+
+function isLocalHost(hostname) {
+  return ['localhost', '127.0.0.1', '::1'].includes(String(hostname || '').toLowerCase());
+}
+
+export function getCentralPortalOrigin() {
+  if (typeof window === 'undefined') {
+    return `https://${getCentralPortalDomain()}`;
+  }
+
+  const currentHostname = window.location.hostname;
+  if (isLocalHost(currentHostname) || currentHostname.toLowerCase() === getCentralPortalDomain()) {
+    return window.location.origin;
+  }
+
+  return `https://${getCentralPortalDomain()}`;
+}
+
+export function buildCentralLoginUrl(returnTo = '') {
+  const url = new URL('/login', getCentralPortalOrigin());
+  if (returnTo) {
+    url.searchParams.set('returnTo', returnTo);
+  }
+  return url.toString();
+}
+
+export function getReturnToParam() {
+  if (typeof window === 'undefined') return '';
+  const params = new URLSearchParams(window.location.search);
+  return params.get('returnTo') || '';
+}
+
+export function createCurrentReturnToUrl() {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function parseSafeReturnTo(returnTo) {
+  if (!returnTo || typeof window === 'undefined') return null;
+
+  try {
+    const url = new URL(returnTo, window.location.origin);
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    if (url.username || url.password) return null;
+
+    const hostContext = resolveTenantHostContext(url.hostname);
+    if (!['local', 'tenant'].includes(hostContext.mode)) return null;
+
+    return { url, hostContext };
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveAuthorizedReturnTo({ uid, returnTo }) {
+  const parsed = parseSafeReturnTo(returnTo);
+  if (!uid || !parsed) {
+    return {
+      allowed: false,
+      reason: 'invalid-return-to',
+      url: '',
+    };
+  }
+
+  const result = await verifyTenantAccessForHost({
+    uid,
+    hostname: parsed.url.hostname,
+  });
+
+  return {
+    allowed: Boolean(result.allowed),
+    reason: result.reason || 'unknown',
+    url: result.allowed ? parsed.url.toString() : '',
+    access: result,
+  };
+}
+
 export function buildTenantUrl(tenant) {
   if (!tenant) return '';
 

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import CentralLandingPage from './components/auth/CentralLandingPage';
+import AuthTicketCallback from './components/auth/AuthTicketCallback';
 import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
 import LoginPage from './components/auth/LoginPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
@@ -187,6 +188,7 @@ export default function App() {
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58),rgba(2,6,23,0.72)_44%,rgba(2,6,23,0.86))]" />
       </div>
       <div className={`app-content-reveal relative z-10 ${isInterfaceReady ? 'app-content-reveal--ready' : ''}`}>
+        <AuthTicketCallback />
         <TenantGate hostContext={tenantHostContext} routePath={routePath}>{page}</TenantGate>
       </div>
     </div>

@@ -10,7 +10,7 @@ GasStation Shift Manager
 - Do not use `GasStationProject-main`; it was the wrong/empty local folder.
 - GitHub remote is currently `https://github.com/spandreou/GasStationProject.git`.
 - Active homelab checkout is `/home/spandreou/projects/GasStationProject`.
-- Active homelab deployment branch is currently `chore/dependabot-config`.
+- Active homelab deployment branch was verified on 2026-06-27 as `main`.
 - Public pilot URL: `https://bp-kallis.homelabshare.gr/`.
 - Homelab compose project: `gasstationproject`.
 - Frontend container: `gasstation-bp-kallis`.
@@ -24,7 +24,7 @@ GasStation Shift Manager
 - Zustand
 - Firebase Auth / Firestore
 - dnd-kit
-- jsPDF / xlsx / docx exports
+- jsPDF / @e965/xlsx / docx exports
 
 ## Main Domain
 
@@ -68,3 +68,4 @@ GasStation Shift Manager
 
 - Project brain: `docs/project-brain.md`
 - Security guidelines: `docs/SECURITY_GUIDELINES.md`
+- SaaS and tenant safety docs: `docs/central-auth-portal-migration.md` and `docs/tenant-authorization-model.md` when present.

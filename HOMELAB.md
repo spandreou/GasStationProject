@@ -30,11 +30,11 @@ Use these locations only as lookup references:
 /home/spandreou/Desktop/Credentials
 /home/spandreou/projects/homelab/.env
 /home/spandreou/projects/homelab/.env.example
-/opt/municipal-police/MunicipalPoliceProject/.env.server.pilot
-/opt/municipal-police/MunicipalPoliceProject/.env*.example
 ```
 
 No project-specific `.env.example` file was found locally.
+
+Do not use MunicipalPolice env files for GasStation tasks. This project currently uses Firebase client configuration and server-side Docker env settings for the BP Kallis deployment.
 
 ## Repository And Folder Map
 
@@ -73,6 +73,7 @@ Image: gasstation-shift-manager:bp-kallis
 Host port: 8085
 Container port: 8080
 Cloudflare tunnel container: gasstation-cloudflared
+server branch verified on 2026-06-27: main
 ```
 
 The server `.env` must include this non-secret runtime setting because port `8080` is already used by Pi-hole:

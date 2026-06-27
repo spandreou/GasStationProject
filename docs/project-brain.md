@@ -12,6 +12,10 @@
   - `docs/scheduler-qa-checklist.md`
 - Για security αλλαγές, ισχύει επίσης:
   - `docs/SECURITY_GUIDELINES.md`
+- Για SaaS, tenant isolation ή central auth αλλαγές, διάβασε πρώτα τα σχετικά docs:
+  - `docs/central-auth-portal-migration.md`
+  - `docs/tenant-authorization-model.md`
+  - `docs/firebase-security-rules.md`
 
 Αν υπάρχει σύγκρουση ανάμεσα σε γενικό κανόνα και πιο ειδικό scheduler/security κανόνα, ο πιο ειδικός κανόνας υπερισχύει.
 
@@ -37,7 +41,7 @@
 - Zustand
 - Firebase Auth / Firestore
 - dnd-kit
-- jsPDF / xlsx / docx exports
+- jsPDF / @e965/xlsx / docx exports
 
 ## Non-Negotiable Rules
 
@@ -153,6 +157,17 @@ npm run test:e2e:scheduler
 
 Αν το e2e απαιτεί dev server, ξεκίνα προσωρινά Vite και κλείσ' το μετά.
 
+Για SaaS, auth, Firebase rules ή export-security αλλαγές, πρόσθεσε τα κατάλληλα checks:
+
+```bash
+npm run qa:tenant-authorization
+npm run qa:public-readonly
+npm run qa:repositories
+npm run qa:export-security
+npm run qa:saas-foundation
+npm run security:scan
+```
+
 ## Git Hygiene
 
 - Μην κάνεις commit/stash/push χωρίς ρητό αίτημα.
@@ -167,4 +182,3 @@ npm run test:e2e:scheduler
 - Κράτα αλλαγές μικρές και εστιασμένες.
 - Μην πειράζεις unrelated dashboard/analytics/export/Firebase code όταν το αίτημα αφορά scheduler UI ή generator.
 - Προτίμησε deterministic logic. Όχι random output για πρόγραμμα.
-

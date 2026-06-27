@@ -194,6 +194,8 @@ docker compose up -d --build
 - `docs/saas-tenant-foundation.md`
 - `docs/saas-security-qa-checklist.md`
 - `docs/monthly-pdf-archive-runbook.md`
+- `docs/central-auth-portal-migration.md`
+- `docs/auth-broker-runbook.md`
 
 ## SaaS Tenant Foundation
 
@@ -218,6 +220,7 @@ Foundation files:
 
 Prepared auth routes:
 
+- `/` on `gas.homelabshare.gr`
 - `/login`
 - `/forgot-password`
 - `/reset-password`
@@ -228,8 +231,11 @@ Prepared auth routes:
 - 0 memberships -> safe no-access message
 - 1 membership -> redirect στο tenant domain
 - 2+ memberships -> `/select-tenant`
+- `returnTo` tenant URLs are verified against uid-based tenant membership before redirect.
 
 Τα reset routes χρησιμοποιούν Firebase action codes και δεν κάνουν log κωδικούς ή reset tokens.
+
+Σημαντικό: Firebase client auth persistence είναι origin-scoped. Πριν γίνει production enforcement του central-only login για tenant domains, χρειάζεται backend/session-cookie bridge ή Firebase auth broker. Δες `docs/central-auth-portal-migration.md` και `docs/auth-broker-runbook.md`.
 
 ## Demo-only Σημεία
 

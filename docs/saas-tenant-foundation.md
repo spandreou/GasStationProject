@@ -84,6 +84,7 @@ They are exported from `src/repositories/index.js` so future code can switch to 
 
 - load active memberships by Firebase Auth `uid`
 - resolve a central portal destination
+- validate `returnTo` tenant URLs before redirecting
 - prepare tenant-host membership verification
 - build tenant URLs from `tenant.domain` or `{tenant.slug}.homelabshare.gr`
 
@@ -124,6 +125,10 @@ load active tenant memberships
 1 membership -> redirect to tenant domain
 2+ memberships -> show /select-tenant
 ```
+
+When a user was redirected from a tenant domain, the central login may receive a
+`returnTo` parameter. The app must validate that URL as a tenant/local URL and
+verify active membership for the target tenant before redirecting.
 
 Safe no-access message:
 
@@ -189,6 +194,7 @@ The old finalized/published-week UI flow is no longer the source of truth. Owner
 
 ```text
 VITE_ENABLE_TENANT_GATE=false
+VITE_ENABLE_AUTH_BROKER=false
 ```
 
 The flag is intentionally default-off for the BP Kallis pilot until tenant seed data exists in Firestore:
@@ -203,9 +209,34 @@ When enabled, the gate:
 - resolves the tenant hostname,
 - reads the authenticated Firebase user uid,
 - checks active membership for `uid + tenantId`,
+- redirects unauthenticated tenant users to `gas.homelabshare.gr/login` with a
+  preserved `returnTo`,
 - shows the safe denied message before tenant data is rendered.
 
 Do not use hostname detection as authorization. The hostname only selects context; membership decides access.
+
+## Central Auth Production Blocker
+
+Firebase client auth persistence is origin-scoped. A login session created on
+`gas.homelabshare.gr` is not automatically available on
+`bp-kallis.homelabshare.gr`.
+
+Do not enable tenant-domain central-login enforcement in production until there
+is a backend/session-cookie bridge or another reviewed auth broker. Do not pass
+Firebase ID tokens, refresh tokens, reset codes, or signed session material in
+query strings.
+
+Detailed rollout and rollback notes live in:
+
+```text
+docs/central-auth-portal-migration.md
+docs/auth-broker-runbook.md
+```
+
+The Firebase auth broker is prepared behind `VITE_ENABLE_AUTH_BROKER=false`.
+Do not deploy or enable it until the Cloud Functions endpoints, denied
+`authTickets` rules, ticket replay protection and tenant callback flow have been
+validated.
 
 ## BP Kallis Seed Command
 

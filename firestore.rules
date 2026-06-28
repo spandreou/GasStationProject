@@ -650,6 +650,19 @@ service cloud.firestore {
         allow delete: if isTenantAdmin(tenantId);
       }
 
+      match /shiftTemplates/{templateId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validTemplate();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /absences/{absenceId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create: if isTenantAdmin(tenantId) && validAbsence();
+        allow update: if isTenantAdmin(tenantId) && onlyChanged(absenceFields()) && validAbsence();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
       match /publicSchedules/{weekStart} {
         allow read: if true;
         allow create, update: if isTenantAdmin(tenantId) && validTenantPublicSchedule(tenantId, weekStart);
@@ -665,6 +678,36 @@ service cloud.firestore {
       match /settings/{settingsId} {
         allow read: if isTenantAdmin(tenantId);
         allow create, update: if isTenantAdmin(tenantId) && validSchedulerSettings();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validAnnouncement();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /attendanceHistory/{historyId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validAttendanceHistory();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /weekLocks/{weekId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validWeekLock();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /weekHistory/{historyId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validWeekHistory();
+        allow delete: if isTenantAdmin(tenantId);
+      }
+
+      match /weekTemplates/{templateId} {
+        allow read: if isTenantAdmin(tenantId);
+        allow create, update: if isTenantAdmin(tenantId) && validTemplate();
         allow delete: if isTenantAdmin(tenantId);
       }
 

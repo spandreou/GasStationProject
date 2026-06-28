@@ -87,7 +87,14 @@ assert(!matchBlock('tenantMemberships').includes('allow delete: if isAdmin()'), 
 assert(matchBlock('tenants').includes('allow read: if isTenantAdmin(tenantId);'), 'Tenant docs must require matching tenant admin membership reads.');
 assert(matchBlock('tenants').includes('match /employees/{employeeId}'), 'Tenant scoped employee rules must exist.');
 assert(matchBlock('tenants').includes('match /shifts/{shiftId}'), 'Tenant scoped shift rules must exist.');
+assert(matchBlock('tenants').includes('match /shiftTemplates/{templateId}'), 'Tenant scoped shift template rules must exist.');
+assert(matchBlock('tenants').includes('match /absences/{absenceId}'), 'Tenant scoped absence rules must exist.');
 assert(matchBlock('tenants').includes('match /settings/{settingsId}'), 'Tenant scoped settings rules must exist.');
+assert(matchBlock('tenants').includes('match /announcements/{announcementId}'), 'Tenant scoped announcement rules must exist.');
+assert(matchBlock('tenants').includes('match /attendanceHistory/{historyId}'), 'Tenant scoped attendance history rules must exist.');
+assert(matchBlock('tenants').includes('match /weekLocks/{weekId}'), 'Tenant scoped week lock rules must exist.');
+assert(matchBlock('tenants').includes('match /weekHistory/{historyId}'), 'Tenant scoped week history rules must exist.');
+assert(matchBlock('tenants').includes('match /weekTemplates/{templateId}'), 'Tenant scoped week template rules must exist.');
 assert(matchBlock('tenants').includes('match /subscription/{subscriptionId}'), 'Tenant scoped subscription rules must exist.');
 assert(matchBlock('tenants').includes('match /tokenRequests/{requestId}'), 'Tenant scoped token request rules must exist.');
 assert(matchBlock('tenants').includes('match /auditLogs/{auditLogId}'), 'Tenant scoped audit log rules must exist.');
@@ -105,7 +112,14 @@ assert(matchBlock('tenants').includes('allow update, delete: if false;'), 'Tenan
 [
   'match /employees/{employeeId}',
   'match /shifts/{shiftId}',
+  'match /shiftTemplates/{templateId}',
+  'match /absences/{absenceId}',
   'match /settings/{settingsId}',
+  'match /announcements/{announcementId}',
+  'match /attendanceHistory/{historyId}',
+  'match /weekLocks/{weekId}',
+  'match /weekHistory/{historyId}',
+  'match /weekTemplates/{templateId}',
   'match /subscription/{subscriptionId}',
   'match /tokenRequests/{requestId}',
   'match /auditLogs/{auditLogId}',

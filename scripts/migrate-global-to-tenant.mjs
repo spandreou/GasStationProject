@@ -218,6 +218,43 @@ async function commitWrites(firestoreBase, writes, accessToken, projectId) {
   }
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function countMissingOrDifferentSourceDocs(sourceDocs, targetDocs) {
+  const targetById = new Map(targetDocs.map((doc) => [doc.name.split('/').pop(), doc]));
+  let missingCount = 0;
+  let differentCount = 0;
+
+  for (const sourceDoc of sourceDocs) {
+    const docId = sourceDoc.name.split('/').pop();
+    const targetDoc = targetById.get(docId);
+    if (!targetDoc) {
+      missingCount++;
+      continue;
+    }
+    if (stableStringify(sourceDoc.fields || {}) !== stableStringify(targetDoc.fields || {})) {
+      differentCount++;
+    }
+  }
+
+  return {
+    missingCount,
+    differentCount,
+    extraCount: Math.max(0, targetDocs.length - sourceDocs.length),
+  };
+}
+
 async function run() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -283,11 +320,13 @@ async function run() {
     if (mode === 'VERIFY') {
       const targetDocs = await listAllDocuments(firestoreBase, `${targetPrefix}/${targetColName}`, accessToken, projectId);
       console.log(`  Target documents found: ${targetDocs.length}`);
-      if (sourceDocs.length !== targetDocs.length) {
-        console.warn(`  [MISMATCH] Counts do not match for ${sourceCol}! Source: ${sourceDocs.length}, Target: ${targetDocs.length}`);
+      const { missingCount, differentCount, extraCount } = countMissingOrDifferentSourceDocs(sourceDocs, targetDocs);
+      if (missingCount || differentCount) {
+        console.warn(`  [MISMATCH] Source docs missing or different in target. Missing: ${missingCount}, Different: ${differentCount}`);
         verificationFailed = true;
       } else {
-        console.log(`  [OK] Counts match.`);
+        const extraMessage = extraCount ? ` Extra target documents: ${extraCount}.` : '';
+        console.log(`  [OK] Source documents verified in target.${extraMessage}`);
       }
       continue;
     }

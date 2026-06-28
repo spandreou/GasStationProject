@@ -79,7 +79,11 @@ assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.au
 assert(matchBlock('tenantMemberships').includes("resource.data.status == 'ACTIVE'"), 'Tenant membership self lookup must require ACTIVE status.');
 assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Tenant admin roles must be OWNER, ADMIN, MANAGER.');
 assert(firestoreRules.includes("'INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'"), 'Tenant memberships must model inactive denied statuses.');
-assert(matchBlock('tenantMemberships').includes('allow create, update: if isAdmin() && validTenantMembership();'), 'Tenant memberships must be admin writable only.');
+assert(matchBlock('tenantMemberships').includes('resource.data.tenantId is string'), 'Tenant membership tenant-admin reads must be bound to the membership tenant.');
+assert(matchBlock('tenantMemberships').includes('isTenantAdmin(resource.data.tenantId)'), 'Tenant admins may only read memberships for their own tenant.');
+assert(matchBlock('tenantMemberships').includes('allow create, update, delete: if false;'), 'Tenant memberships must be server-mediated only and deny client writes.');
+assert(!matchBlock('tenantMemberships').includes('allow create, update: if isAdmin()'), 'Tenant memberships must not be client-writable by any tenant admin.');
+assert(!matchBlock('tenantMemberships').includes('allow delete: if isAdmin()'), 'Tenant memberships must not be client-deletable by any tenant admin.');
 assert(matchBlock('tenants').includes('allow read: if isTenantAdmin(tenantId);'), 'Tenant docs must require matching tenant admin membership reads.');
 assert(matchBlock('tenants').includes('match /employees/{employeeId}'), 'Tenant scoped employee rules must exist.');
 assert(matchBlock('tenants').includes('match /shifts/{shiftId}'), 'Tenant scoped shift rules must exist.');

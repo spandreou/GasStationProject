@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 const PROJECT_ID = 'demo-gasstation-auth-broker';
 const REGION = 'us-central1';
 const AUTH_EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
-const FIRESTORE_EMULATOR = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
+const FIRESTORE_EMULATOR = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8088';
 const FUNCTIONS_EMULATOR = process.env.FIREBASE_FUNCTIONS_EMULATOR_HOST || '127.0.0.1:5001';
 const CENTRAL_ORIGIN = 'https://gas.homelabshare.gr';
 const TENANT_ORIGIN = 'https://bp-kallis.homelabshare.gr';
@@ -117,6 +117,27 @@ async function seedTenant() {
     role: 'VIEWER',
     status: 'ACTIVE',
   });
+
+  await setAdminDoc('tenants/eko-example', {
+    slug: 'eko-example',
+    domain: 'eko-example.homelabshare.gr',
+    displayName: 'EKO Example',
+    status: 'ACTIVE',
+  });
+
+  await setAdminDoc('tenantMemberships/other-uid_eko-example', {
+    uid: 'other-uid',
+    tenantId: 'eko-example',
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+
+  await setAdminDoc(`tenantMemberships/delete-target-uid_${TENANT_ID}`, {
+    uid: 'delete-target-uid',
+    tenantId: TENANT_ID,
+    role: 'MANAGER',
+    status: 'ACTIVE',
+  });
 }
 
 async function callFunction(name, { data, origin, idToken }) {
@@ -169,6 +190,56 @@ async function run() {
 
   const owner = await createAuthUser({ uid: 'test-owner-uid', email: 'owner@example.test' });
   assert.equal(owner.uid, 'test-owner-uid', 'Auth emulator should create the expected owner uid');
+
+  const ownMembershipRead = await fetch(`${firestoreBase}/tenantMemberships/test-owner-uid_${TENANT_ID}`, {
+    headers: { Authorization: `Bearer ${owner.idToken}` },
+  });
+  assert.equal(ownMembershipRead.status, 200, 'client may read its own active tenant membership');
+
+  const crossTenantMembershipRead = await fetch(`${firestoreBase}/tenantMemberships/other-uid_eko-example`, {
+    headers: { Authorization: `Bearer ${owner.idToken}` },
+  });
+  assert.equal(crossTenantMembershipRead.status, 403, 'client must not read memberships from another tenant');
+
+  const crossTenantMembershipCreate = await fetch(`${firestoreBase}/tenantMemberships/escalated-uid_eko-example`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${owner.idToken}`,
+    },
+    body: JSON.stringify(
+      toFirestoreFields({
+        uid: 'escalated-uid',
+        tenantId: 'eko-example',
+        role: 'OWNER',
+        status: 'ACTIVE',
+      }),
+    ),
+  });
+  assert.equal(crossTenantMembershipCreate.status, 403, 'client tenant admin must not create tenantMemberships for another tenant');
+
+  const ownMembershipUpdate = await fetch(`${firestoreBase}/tenantMemberships/test-owner-uid_${TENANT_ID}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${owner.idToken}`,
+    },
+    body: JSON.stringify(
+      toFirestoreFields({
+        uid: 'test-owner-uid',
+        tenantId: TENANT_ID,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      }),
+    ),
+  });
+  assert.equal(ownMembershipUpdate.status, 403, 'client must not update tenantMemberships');
+
+  const sameTenantMembershipDelete = await fetch(`${firestoreBase}/tenantMemberships/delete-target-uid_${TENANT_ID}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${owner.idToken}` },
+  });
+  assert.equal(sameTenantMembershipDelete.status, 403, 'client tenant admin must not delete tenantMemberships');
 
   const { ticket, redirectUrl, expiresAt } = await createTicket({ idToken: owner.idToken });
   assert.ok(redirectUrl.startsWith(`${TENANT_ORIGIN}/app#authTicket=`), 'redirect must target tenant fragment');

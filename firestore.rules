@@ -610,13 +610,19 @@ service cloud.firestore {
     }
 
     match /tenantMemberships/{membershipId} {
-      allow read: if isAdmin() ||
-        (isSignedIn() &&
-          resource.data.uid == request.auth.uid &&
-          resource.data.status == 'ACTIVE' &&
-          isTenantAdminRole(resource.data.role));
-      allow create, update: if isAdmin() && validTenantMembership();
-      allow delete: if isAdmin();
+      allow read: if isSignedIn() &&
+        (
+          (
+            resource.data.uid == request.auth.uid &&
+            resource.data.status == 'ACTIVE' &&
+            isTenantAdminRole(resource.data.role)
+          ) ||
+          (
+            resource.data.tenantId is string &&
+            isTenantAdmin(resource.data.tenantId)
+          )
+        );
+      allow create, update, delete: if false;
     }
 
     match /tenants/{tenantId} {

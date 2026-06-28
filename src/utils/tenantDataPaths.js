@@ -7,10 +7,21 @@ export const ROOT_COLLECTIONS = Object.freeze({
 export const TENANT_SCOPED_COLLECTIONS = Object.freeze({
   employees: 'employees',
   shifts: 'shifts',
+  shiftTemplates: 'shiftTemplates',
+  absences: 'absences',
+  attendanceHistory: 'attendanceHistory',
+  weekLocks: 'weekLocks',
+  weekHistory: 'weekHistory',
+  weekTemplates: 'weekTemplates',
   settings: 'settings',
+  announcements: 'announcements',
   subscription: 'subscription',
   tokenRequests: 'tokenRequests',
   auditLogs: 'auditLogs',
+  publicSchedules: 'publicSchedules',
+  publicMonths: 'publicMonths',
+  publicEmployees: 'publicEmployees',
+  publicAnnouncements: 'publicAnnouncements',
 });
 
 const TENANT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
@@ -24,7 +35,7 @@ function normalizeId(value, label) {
 }
 
 export function normalizeTenantId(tenantId) {
-  const normalized = normalizeId(tenantId, 'tenantId').toLowerCase();
+  const normalized = normalizeId(tenantId, 'tenantId');
   if (!TENANT_ID_PATTERN.test(normalized)) {
     throw new Error('tenantId must be lowercase letters, numbers, and hyphens.');
   }

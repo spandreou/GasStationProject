@@ -548,7 +548,7 @@ assert(
   'Legacy autoSchedulerService must not contain duplicated scheduling engine logic',
 );
 assert(
-  schedulerStoreSource.includes('const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet]);'),
+  schedulerStoreSource.includes('const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet], getTenantArgs());'),
   'Monthly magic generation must refetch saved month shifts after writing to persistence',
 );
 assert(
@@ -557,7 +557,7 @@ assert(
   'Monthly magic generation must replace local month state with freshly saved generated shifts',
 );
 assert(
-  schedulerStoreSource.includes('const savedWeekShifts = await fetchShiftsByDates(weekDays);') &&
+  schedulerStoreSource.includes('const savedWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());') &&
     schedulerStoreSource.includes('...savedWeekShifts'),
   'Weekly magic generation must replace local week state with freshly saved generated shifts',
 );

@@ -1,6 +1,5 @@
 import {
   addDoc,
-  collection,
   doc,
   getDoc,
   getDocs,
@@ -12,19 +11,18 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import {
-  ATTENDANCE_HISTORY_COLLECTION,
   commitBatchChunks,
   ensureFirestoreReady,
   getMonthRange,
+  tenantCollection,
+  tenantDoc,
   toDataWithId,
   toTimestampMillis,
-  WEEK_HISTORY_COLLECTION,
-  WEEK_LOCKS_COLLECTION,
-  WEEK_TEMPLATES_COLLECTION,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export async function fetchAttendanceHistoryByMonth({ yearMonth, employeeId = '' }) {
+export async function fetchAttendanceHistoryByMonth({ tenantId, yearMonth, employeeId = '' }) {
   ensureFirestoreReady();
 
   const { start, end } = getMonthRange(yearMonth);
@@ -33,27 +31,27 @@ export async function fetchAttendanceHistoryByMonth({ yearMonth, employeeId = ''
     constraints.unshift(where('employeeId', '==', employeeId));
   }
 
-  const attendanceQuery = query(collection(db, ATTENDANCE_HISTORY_COLLECTION), ...constraints);
+  const attendanceQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.attendanceHistory), ...constraints);
   const snapshot = await getDocs(attendanceQuery);
   return toDataWithId(snapshot);
 }
 
-export async function isWeekFinalized(weekStart) {
+export async function isWeekFinalized(weekStart, { tenantId } = {}) {
   if (!weekStart) return false;
 
   ensureFirestoreReady();
-  const lockDoc = await getDoc(doc(db, WEEK_LOCKS_COLLECTION, weekStart));
+  const lockDoc = await getDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.weekLocks, weekStart));
   return lockDoc.exists();
 }
 
-export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adminEmail = '' }) {
+export async function finalizeWeekAttendance({ tenantId, weekStart, weekDays, entries, adminEmail = '' }) {
   ensureFirestoreReady();
 
   if (!weekStart || !Array.isArray(weekDays) || !weekDays.length) {
     throw new Error('Δεν βρέθηκαν δεδομένα εβδομάδας για οριστικοποίηση.');
   }
 
-  const alreadyFinalized = await isWeekFinalized(weekStart);
+  const alreadyFinalized = await isWeekFinalized(weekStart, { tenantId });
   if (alreadyFinalized) {
     return { alreadyFinalized: true, created: 0 };
   }
@@ -66,7 +64,7 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
 
   await commitBatchChunks(operations, (batch, operation) => {
     if (operation.type === 'attendance') {
-      batch.set(doc(collection(db, ATTENDANCE_HISTORY_COLLECTION)), {
+      batch.set(doc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.attendanceHistory)), {
         ...operation.item,
         weekStart,
         finalizedAt: serverTimestamp(),
@@ -76,7 +74,7 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
       return;
     }
 
-    batch.set(doc(db, WEEK_LOCKS_COLLECTION, weekStart), {
+    batch.set(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.weekLocks, weekStart), {
       weekStart,
       weekDays,
       finalizedBy: adminEmail || '',
@@ -89,6 +87,7 @@ export async function finalizeWeekAttendance({ weekStart, weekDays, entries, adm
 }
 
 export async function saveWeekHistorySnapshot({
+  tenantId,
   weekId,
   weekStart,
   weekEnd,
@@ -104,7 +103,7 @@ export async function saveWeekHistorySnapshot({
   const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
 
   await withFirestoreWrite(() =>
-    addDoc(collection(db, WEEK_HISTORY_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.weekHistory), {
       weekId,
       weekStart,
       weekEnd,
@@ -125,23 +124,23 @@ export async function saveWeekHistorySnapshot({
   );
 }
 
-export async function fetchWeekHistoryList(maxRows = 40) {
+export async function fetchWeekHistoryList(maxRows = 40, { tenantId } = {}) {
   ensureFirestoreReady();
 
   const safeLimit = Math.max(1, Math.min(200, Number(maxRows) || 40));
   const historySnapshot = await getDocs(
-    query(collection(db, WEEK_HISTORY_COLLECTION), orderBy('createdAt', 'desc'), limit(safeLimit)),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.weekHistory), orderBy('createdAt', 'desc'), limit(safeLimit)),
   );
 
   return toDataWithId(historySnapshot);
 }
 
-export async function fetchLatestWeekSnapshotByWeekId(weekId) {
+export async function fetchLatestWeekSnapshotByWeekId(weekId, { tenantId } = {}) {
   if (!weekId) return null;
   ensureFirestoreReady();
 
   const historySnapshot = await getDocs(
-    query(collection(db, WEEK_HISTORY_COLLECTION), where('weekId', '==', weekId)),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.weekHistory), where('weekId', '==', weekId)),
   );
 
   const entries = toDataWithId(historySnapshot);
@@ -151,7 +150,7 @@ export async function fetchLatestWeekSnapshotByWeekId(weekId) {
   return entries[0];
 }
 
-export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = '' }) {
+export async function saveWeekTemplate({ tenantId, name, weekStart, shifts, createdBy = '' }) {
   if (!name?.trim()) throw new Error('Δώσε όνομα template.');
   ensureFirestoreReady();
 
@@ -163,7 +162,7 @@ export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = ''
   };
 
   await withFirestoreWrite(() =>
-    addDoc(collection(db, WEEK_TEMPLATES_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.weekTemplates), {
       ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -171,11 +170,11 @@ export async function saveWeekTemplate({ name, weekStart, shifts, createdBy = ''
   );
 }
 
-export async function fetchWeekTemplates() {
+export async function fetchWeekTemplates({ tenantId } = {}) {
   ensureFirestoreReady();
 
   const templatesSnapshot = await getDocs(
-    query(collection(db, WEEK_TEMPLATES_COLLECTION), orderBy('updatedAt', 'desc')),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.weekTemplates), orderBy('updatedAt', 'desc')),
   );
 
   return toDataWithId(templatesSnapshot);

@@ -1,20 +1,22 @@
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './config';
 import {
   createLocalUnsubscribe,
-  DEFAULT_SCHEDULER_SETTINGS_DOC,
   ensureFirestoreReady,
-  SCHEDULER_SETTINGS_COLLECTION,
+  tenantDoc,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export function subscribeSchedulerSettings(onData, onError) {
+const TENANT_SCHEDULER_SETTINGS_DOC = 'scheduler';
+
+export function subscribeSchedulerSettings({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const settingsDoc = doc(db, SCHEDULER_SETTINGS_COLLECTION, DEFAULT_SCHEDULER_SETTINGS_DOC);
+  const settingsDoc = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.settings, TENANT_SCHEDULER_SETTINGS_DOC);
   return onSnapshot(
     settingsDoc,
     (snapshot) => {
@@ -24,10 +26,10 @@ export function subscribeSchedulerSettings(onData, onError) {
   );
 }
 
-export async function upsertSchedulerSettings(payload = {}) {
+export async function upsertSchedulerSettings({ tenantId, ...payload } = {}) {
   ensureFirestoreReady();
 
-  const settingsDoc = doc(db, SCHEDULER_SETTINGS_COLLECTION, DEFAULT_SCHEDULER_SETTINGS_DOC);
+  const settingsDoc = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.settings, TENANT_SCHEDULER_SETTINGS_DOC);
   await withFirestoreWrite(() =>
     setDoc(
       settingsDoc,

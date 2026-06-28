@@ -1,8 +1,6 @@
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   onSnapshot,
   orderBy,
   query,
@@ -12,19 +10,21 @@ import {
 import { db } from './config';
 import {
   createLocalUnsubscribe,
-  EMPLOYEES_COLLECTION,
   ensureFirestoreReady,
+  tenantCollection,
+  tenantDoc,
   toDataWithId,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export function subscribeEmployees(onData, onError) {
+export function subscribeEmployees({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const employeesQuery = query(collection(db, EMPLOYEES_COLLECTION), orderBy('fullName', 'asc'));
+  const employeesQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.employees), orderBy('fullName', 'asc'));
   return onSnapshot(
     employeesQuery,
     (snapshot) => {
@@ -34,11 +34,11 @@ export function subscribeEmployees(onData, onError) {
   );
 }
 
-export async function createEmployee(payload) {
+export async function createEmployee({ tenantId, ...payload }) {
   ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
-    addDoc(collection(db, EMPLOYEES_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.employees), {
       ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -48,16 +48,16 @@ export async function createEmployee(payload) {
   return { id: docRef.id, ...payload };
 }
 
-export async function updateEmployee(employeeId, payload) {
+export async function updateEmployee(employeeId, payload, { tenantId } = {}) {
   ensureFirestoreReady();
 
-  const employeeDoc = doc(db, EMPLOYEES_COLLECTION, employeeId);
+  const employeeDoc = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.employees, employeeId);
   await withFirestoreWrite(() =>
     updateDoc(employeeDoc, { ...payload, updatedAt: serverTimestamp() }),
   );
 }
 
-export async function removeEmployee(employeeId) {
+export async function removeEmployee(employeeId, { tenantId } = {}) {
   ensureFirestoreReady();
-  await withFirestoreWrite(() => deleteDoc(doc(db, EMPLOYEES_COLLECTION, employeeId)));
+  await withFirestoreWrite(() => deleteDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.employees, employeeId)));
 }

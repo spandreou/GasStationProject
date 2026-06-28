@@ -1,6 +1,5 @@
 import {
   addDoc,
-  collection,
   deleteDoc,
   doc,
   getDoc,
@@ -20,20 +19,21 @@ import {
   createLocalUnsubscribe,
   ensureFirestoreReady,
   handleFirestoreFailure,
-  SHIFTS_COLLECTION,
-  SHIFT_TEMPLATES_COLLECTION,
+  tenantCollection,
+  tenantDoc,
   timestampedPayload,
   toDataWithId,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export function subscribeShifts(onData, onError) {
+export function subscribeShifts({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const shiftsQuery = query(collection(db, SHIFTS_COLLECTION), orderBy('date', 'asc'));
+  const shiftsQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), orderBy('date', 'asc'));
   return onSnapshot(
     shiftsQuery,
     (snapshot) => {
@@ -43,13 +43,13 @@ export function subscribeShifts(onData, onError) {
   );
 }
 
-export function subscribeShiftTemplates(onData, onError) {
+export function subscribeShiftTemplates({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const templatesQuery = query(collection(db, SHIFT_TEMPLATES_COLLECTION));
+  const templatesQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shiftTemplates));
   return onSnapshot(
     templatesQuery,
     (snapshot) => {
@@ -60,11 +60,11 @@ export function subscribeShiftTemplates(onData, onError) {
   );
 }
 
-export async function createShift(payload) {
+export async function createShift({ tenantId, ...payload }) {
   ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
-    addDoc(collection(db, SHIFTS_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), {
       ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -74,11 +74,11 @@ export async function createShift(payload) {
   return { id: docRef.id, ...payload };
 }
 
-export async function createShiftTemplate(payload) {
+export async function createShiftTemplate({ tenantId, ...payload }) {
   ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
-    addDoc(collection(db, SHIFT_TEMPLATES_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shiftTemplates), {
       ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -88,7 +88,7 @@ export async function createShiftTemplate(payload) {
   return { id: docRef.id, ...payload };
 }
 
-export async function restoreShift(shift) {
+export async function restoreShift(shift, { tenantId } = {}) {
   if (!shift?.id) {
     throw new Error('Δεν υπάρχει id βάρδιας για επαναφορά.');
   }
@@ -96,7 +96,7 @@ export async function restoreShift(shift) {
   ensureFirestoreReady();
   const { id, ...payload } = shift;
   await withFirestoreWrite(() =>
-    setDoc(doc(db, SHIFTS_COLLECTION, id), {
+    setDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, id), {
       ...payload,
       updatedAt: serverTimestamp(),
     }),
@@ -105,19 +105,19 @@ export async function restoreShift(shift) {
   return shift;
 }
 
-export async function updateShift(shiftId, payload) {
+export async function updateShift(shiftId, payload, { tenantId } = {}) {
   ensureFirestoreReady();
 
-  const shiftDoc = doc(db, SHIFTS_COLLECTION, shiftId);
+  const shiftDoc = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, shiftId);
   await withFirestoreWrite(() =>
     updateDoc(shiftDoc, { ...payload, updatedAt: serverTimestamp() }),
   );
 }
 
-export async function removeShift(shiftId) {
+export async function removeShift(shiftId, { tenantId } = {}) {
   ensureFirestoreReady();
 
-  const shiftDocRef = doc(db, SHIFTS_COLLECTION, shiftId);
+  const shiftDocRef = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, shiftId);
   const shiftDoc = await getDoc(shiftDocRef);
   const removedShift = shiftDoc.exists() ? { id: shiftDoc.id, ...shiftDoc.data() } : null;
   await withFirestoreWrite(() => deleteDoc(shiftDocRef));
@@ -125,22 +125,22 @@ export async function removeShift(shiftId) {
   return removedShift;
 }
 
-export async function removeShiftsByEmployee(employeeId) {
+export async function removeShiftsByEmployee(employeeId, { tenantId } = {}) {
   ensureFirestoreReady();
 
   const shiftsSnapshot = await getDocs(
-    query(collection(db, SHIFTS_COLLECTION), where('employeeId', '==', employeeId)),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), where('employeeId', '==', employeeId)),
   );
 
   const removed = shiftsSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
   await commitBatchChunks(shiftsSnapshot.docs, (batch, item) => {
-    batch.delete(doc(db, SHIFTS_COLLECTION, item.id));
+    batch.delete(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, item.id));
   });
 
   return removed;
 }
 
-export async function removeShiftsByDates(dates) {
+export async function removeShiftsByDates(dates, { tenantId } = {}) {
   ensureFirestoreReady();
 
   const dateValues = [...new Set(dates || [])].filter(Boolean);
@@ -150,7 +150,7 @@ export async function removeShiftsByDates(dates) {
 
   for (const dateChunk of chunkValues(dateValues)) {
     const shiftsSnapshot = await getDocs(
-      query(collection(db, SHIFTS_COLLECTION), where('date', 'in', dateChunk)),
+      query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), where('date', 'in', dateChunk)),
     );
 
     shiftsSnapshot.docs.forEach((item) => {
@@ -162,30 +162,30 @@ export async function removeShiftsByDates(dates) {
   const removed = matchedDocs.map((item) => ({ id: item.id, ...item.data() }));
 
   await commitBatchChunks(matchedDocs, (batch, item) => {
-    batch.delete(doc(db, SHIFTS_COLLECTION, item.id));
+    batch.delete(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, item.id));
   });
 
   return removed;
 }
 
-export async function removeShiftTemplate(templateId) {
+export async function removeShiftTemplate(templateId, { tenantId } = {}) {
   ensureFirestoreReady();
-  await withFirestoreWrite(() => deleteDoc(doc(db, SHIFT_TEMPLATES_COLLECTION, templateId)));
+  await withFirestoreWrite(() => deleteDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shiftTemplates, templateId)));
 }
 
-export async function updateShiftTemplate(templateId, payload) {
+export async function updateShiftTemplate(templateId, payload, { tenantId } = {}) {
   ensureFirestoreReady();
 
-  const templateDoc = doc(db, SHIFT_TEMPLATES_COLLECTION, templateId);
+  const templateDoc = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shiftTemplates, templateId);
   await withFirestoreWrite(() =>
     updateDoc(templateDoc, { ...payload, updatedAt: serverTimestamp() }),
   );
 }
 
-export async function fetchShiftsOnce() {
+export async function fetchShiftsOnce({ tenantId } = {}) {
   ensureFirestoreReady();
 
-  const shiftsQuery = query(collection(db, SHIFTS_COLLECTION), orderBy('date', 'asc'));
+  const shiftsQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), orderBy('date', 'asc'));
   try {
     const snapshot = await getDocs(shiftsQuery);
     return toDataWithId(snapshot);
@@ -195,7 +195,7 @@ export async function fetchShiftsOnce() {
   }
 }
 
-export async function fetchShiftsByDates(dates) {
+export async function fetchShiftsByDates(dates, { tenantId } = {}) {
   ensureFirestoreReady();
 
   const dateValues = [...new Set(dates || [])].filter(Boolean);
@@ -205,7 +205,7 @@ export async function fetchShiftsByDates(dates) {
 
   for (const dateChunk of chunkValues(dateValues)) {
     const shiftsSnapshot = await getDocs(
-      query(collection(db, SHIFTS_COLLECTION), where('date', 'in', dateChunk)),
+      query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts), where('date', 'in', dateChunk)),
     );
 
     matchedShifts.push(...toDataWithId(shiftsSnapshot));
@@ -214,13 +214,13 @@ export async function fetchShiftsByDates(dates) {
   return matchedShifts.sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
 }
 
-export async function hasConsecutiveSundayAssignment({ employeeId, previousSundayDate }) {
+export async function hasConsecutiveSundayAssignment({ tenantId, employeeId, previousSundayDate }) {
   if (!employeeId || !previousSundayDate) return false;
   ensureFirestoreReady();
 
   const sundaySnapshot = await getDocs(
     query(
-      collection(db, SHIFTS_COLLECTION),
+      tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts),
       where('employeeId', '==', employeeId),
       where('date', '==', previousSundayDate),
       where('type', '==', 'work'),
@@ -233,22 +233,22 @@ export async function hasConsecutiveSundayAssignment({ employeeId, previousSunda
   });
 }
 
-export async function removeWeekShifts(weekDays) {
+export async function removeWeekShifts(weekDays, { tenantId } = {}) {
   ensureFirestoreReady();
 
-  await removeShiftsByDates(weekDays);
+  await removeShiftsByDates(weekDays, { tenantId });
 }
 
-export async function createManyShifts(shifts) {
+export async function createManyShifts(shifts, { tenantId } = {}) {
   ensureFirestoreReady();
 
   if (!Array.isArray(shifts) || !shifts.length) return;
   await commitBatchChunks(shifts, (batch, shift) => {
-    batch.set(doc(collection(db, SHIFTS_COLLECTION)), timestampedPayload(shift, serverTimestamp));
+    batch.set(doc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts)), timestampedPayload(shift, serverTimestamp));
   });
 }
 
-export async function replaceShiftsBatch({ shiftsToRemove = [], shiftsToCreate = [] }) {
+export async function replaceShiftsBatch({ tenantId, shiftsToRemove = [], shiftsToCreate = [] }) {
   ensureFirestoreReady();
 
   const removeItems = (shiftsToRemove || []).filter((shift) => shift?.id).map((shift) => ({ operation: 'delete', shift }));
@@ -258,11 +258,11 @@ export async function replaceShiftsBatch({ shiftsToRemove = [], shiftsToCreate =
 
   await commitBatchChunks(operations, (batch, item) => {
     if (item.operation === 'delete') {
-      batch.delete(doc(db, SHIFTS_COLLECTION, item.shift.id));
+      batch.delete(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.shifts, item.shift.id));
       return;
     }
 
-    const shiftDoc = doc(collection(db, SHIFTS_COLLECTION));
+    const shiftDoc = doc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.shifts));
     created.push({ id: shiftDoc.id, ...item.shift });
     batch.set(shiftDoc, timestampedPayload(item.shift, serverTimestamp));
   });

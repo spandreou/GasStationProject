@@ -128,7 +128,15 @@ function getCurrentYearMonth() {
 }
 
 function getPublicTenantId() {
-  return getCurrentTenantHostContext()?.tenantSlug || 'bp-kallis';
+  const tenantSlug = getCurrentTenantHostContext()?.tenantSlug;
+  if (!tenantSlug) {
+    throw new Error('Δεν βρέθηκε tenant context για το πρατήριο.');
+  }
+  return tenantSlug;
+}
+
+function getTenantArgs() {
+  return { tenantId: getPublicTenantId() };
 }
 
 function getYearMonthFromParts(year, month) {
@@ -253,6 +261,7 @@ function createGenerationRunId(scope) {
 async function recordAuditLog(get, payload) {
   try {
     await writeAuditLog({
+      tenantId: getPublicTenantId(),
       ...payload,
       actor: getAuditActor(get()),
     });
@@ -462,6 +471,7 @@ export const useSchedulerStore = create((set, get) => ({
     existingUnsubscribe?.();
 
     const unsubscribeTemplates = subscribeShiftTemplates(
+      getTenantArgs(),
       (shiftTemplates) => {
         const retryTimer = get()._shiftTemplatesRetryTimer;
         if (retryTimer) {
@@ -515,6 +525,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     const subscribe = adminOnly ? subscribeEmployeeAbsences : subscribePublicEmployeeAbsences;
     const unsubscribeAbsences = subscribe(
+      getTenantArgs(),
       (absences) => set({ absences, isAbsencesLoading: false, absencesWarningMessage: '' }),
       () =>
         set({
@@ -680,6 +691,7 @@ export const useSchedulerStore = create((set, get) => ({
     _unsubscribeSchedulerSettings?.();
 
     const unsubscribeEmployees = subscribeEmployees(
+      getTenantArgs(),
       (employees) => {
         set({ employees, isLoading: false });
         void get().refreshPublicEmployeesSnapshot(employees);
@@ -688,6 +700,7 @@ export const useSchedulerStore = create((set, get) => ({
     );
 
     const unsubscribeShifts = subscribeShifts(
+      getTenantArgs(),
       (shifts) => set({ shifts, isLoading: false }),
       () => set({ errorMessage: 'Αποτυχία φόρτωσης βαρδιών.', isLoading: false }),
     );
@@ -695,11 +708,13 @@ export const useSchedulerStore = create((set, get) => ({
     const unsubscribeTemplates = get().startShiftTemplatesSubscription();
 
     const unsubscribeAnnouncements = subscribeAnnouncements(
+      getTenantArgs(),
       (announcements) => set({ announcements }),
       () => set({ errorMessage: 'Αποτυχία φόρτωσης ανακοινώσεων.' }),
     );
 
     const unsubscribeSchedulerSettings = subscribeSchedulerSettings(
+      getTenantArgs(),
       (settingsDoc) => {
         const generatorRules = normalizeGeneratorRules(settingsDoc?.generatorRules);
         const specialDaysByDate =
@@ -1076,6 +1091,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isHistoryLoading: true });
     const requestPromise = fetchAttendanceHistoryByMonth({
+      tenantId: getPublicTenantId(),
       yearMonth,
       employeeId,
     });
@@ -1118,6 +1134,7 @@ export const useSchedulerStore = create((set, get) => ({
       const createdBy = get().adminUser?.email || '';
       const employeeName = getEmployeeName(get().employees, payload.employeeId);
       const created = await createEmployeeAbsence({
+        tenantId: getPublicTenantId(),
         ...payload,
         employeeName,
         createdBy,
@@ -1165,11 +1182,15 @@ export const useSchedulerStore = create((set, get) => ({
       const payload = normalizeAbsenceInput(patch, current);
       const updatedBy = get().adminUser?.email || '';
       const employeeName = getEmployeeName(get().employees, payload.employeeId) || current.employeeName || '';
-      await updateEmployeeAbsence(absenceId, {
-        ...payload,
-        employeeName,
-        updatedBy,
-      });
+      await updateEmployeeAbsence(
+        absenceId,
+        {
+          ...payload,
+          employeeName,
+          updatedBy,
+        },
+        getTenantArgs(),
+      );
       await recordAuditLog(get, {
         action: 'absence.update',
         target: { collection: 'employeeAbsences', id: absenceId },
@@ -1200,7 +1221,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
-      await cancelEmployeeAbsence(absenceId);
+      await cancelEmployeeAbsence(absenceId, getTenantArgs());
       await recordAuditLog(get, {
         action: 'absence.cancel',
         target: { collection: 'employeeAbsences', id: absenceId },
@@ -1229,7 +1250,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
-      await removeEmployeeAbsence(absenceId);
+      await removeEmployeeAbsence(absenceId, getTenantArgs());
       await recordAuditLog(get, {
         action: 'absence.delete',
         target: { collection: 'employeeAbsences', id: absenceId },
@@ -1254,7 +1275,7 @@ export const useSchedulerStore = create((set, get) => ({
     const nextRules = normalizeGeneratorRules({ ...get().generatorRules, ...(partialRules || {}) });
     set({ isSaving: true });
     try {
-      await upsertSchedulerSettings({ generatorRules: nextRules });
+      await upsertSchedulerSettings({ tenantId: getPublicTenantId(), generatorRules: nextRules });
       await recordAuditLog(get, {
         action: 'settings.generator_rules.update',
         target: { collection: 'scheduler_settings', id: 'default' },
@@ -1302,7 +1323,7 @@ export const useSchedulerStore = create((set, get) => ({
     };
 
     set({ specialDaysByDate: nextSpecialDays });
-    await upsertSchedulerSettings({ specialDaysByDate: nextSpecialDays });
+    await upsertSchedulerSettings({ tenantId: getPublicTenantId(), specialDaysByDate: nextSpecialDays });
     await recordAuditLog(get, {
       action: 'settings.special_day.upsert',
       target: { collection: 'scheduler_settings', id: 'default', scope: date },
@@ -1322,7 +1343,7 @@ export const useSchedulerStore = create((set, get) => ({
     delete nextSpecialDays[date];
 
     set({ specialDaysByDate: nextSpecialDays });
-    await upsertSchedulerSettings({ specialDaysByDate: nextSpecialDays });
+    await upsertSchedulerSettings({ tenantId: getPublicTenantId(), specialDaysByDate: nextSpecialDays });
     await recordAuditLog(get, {
       action: 'settings.special_day.remove',
       target: { collection: 'scheduler_settings', id: 'default', scope: date },
@@ -1344,24 +1365,24 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       switch (undoState.actionType) {
         case 'delete_shift': {
-          await restoreShift(undoState.payload.shift);
+          await restoreShift(undoState.payload.shift, getTenantArgs());
           break;
         }
         case 'move_shift': {
           const { shiftId, previousValues } = undoState.payload;
-          await updateShift(shiftId, previousValues);
+          await updateShift(shiftId, previousValues, getTenantArgs());
           break;
         }
         case 'clear_week':
         case 'clear_month': {
           const shiftsToRestore = undoState.payload.shifts || [];
-          await Promise.all(shiftsToRestore.map((shift) => restoreShift(shift)));
+          await Promise.all(shiftsToRestore.map((shift) => restoreShift(shift, getTenantArgs())));
           break;
         }
         case 'add_shift': {
           const { shiftId } = undoState.payload || {};
           if (shiftId) {
-            await removeShift(shiftId);
+            await removeShift(shiftId, getTenantArgs());
           }
           break;
         }
@@ -1387,6 +1408,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     try {
       const createdEmployee = await createEmployee({
+        tenantId: getPublicTenantId(),
         fullName: fullName.trim(),
         role: role?.trim() || 'Προσωπικό',
         color: color || '#1D4ED8',
@@ -1439,7 +1461,7 @@ export const useSchedulerStore = create((set, get) => ({
         email: email?.trim() || '',
         hireDate: hireDate || '',
       };
-      await updateEmployee(id, payload);
+      await updateEmployee(id, payload, getTenantArgs());
       await recordAuditLog(get, {
         action: 'employee.update',
         target: { collection: 'employees', id },
@@ -1492,7 +1514,7 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const currentEmployee = get().employees.find((employee) => employee.id === employeeId) || null;
-      await updateEmployee(employeeId, nextRules);
+      await updateEmployee(employeeId, nextRules, getTenantArgs());
       await recordAuditLog(get, {
         action: 'employee.scheduling_rules.update',
         target: { collection: 'employees', id: employeeId },
@@ -1528,8 +1550,8 @@ export const useSchedulerStore = create((set, get) => ({
     if (!employeeId) return false;
     try {
       const currentEmployee = get().employees.find((employee) => employee.id === employeeId) || null;
-      const removedShifts = await removeShiftsByEmployee(employeeId);
-      await removeEmployee(employeeId);
+      const removedShifts = await removeShiftsByEmployee(employeeId, getTenantArgs());
+      await removeEmployee(employeeId, getTenantArgs());
       await recordAuditLog(get, {
         action: 'employee.delete',
         target: { collection: 'employees', id: employeeId },
@@ -1564,6 +1586,7 @@ export const useSchedulerStore = create((set, get) => ({
     try {
       parseShiftInput(startTime, endTime);
       await createShiftTemplate({
+        tenantId: getPublicTenantId(),
         label: label.trim(),
         date,
         startTime,
@@ -1588,7 +1611,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
-      await updateShiftTemplate(templateId, { isPlaced: true, date });
+      await updateShiftTemplate(templateId, { isPlaced: true, date }, getTenantArgs());
       set({
         shiftTemplates: get().shiftTemplates.map((item) =>
           item.id === templateId ? { ...item, isPlaced: true, date } : item,
@@ -1619,7 +1642,7 @@ export const useSchedulerStore = create((set, get) => ({
       });
 
       if (!createdShift?.id) return;
-      await removeShiftTemplate(templateId);
+      await removeShiftTemplate(templateId, getTenantArgs());
       set({
         shiftTemplates: get().shiftTemplates.filter((item) => item.id !== templateId),
       });
@@ -1633,7 +1656,7 @@ export const useSchedulerStore = create((set, get) => ({
     if (!templateId) return false;
     set({ isSaving: true });
     try {
-      await removeShiftTemplate(templateId);
+      await removeShiftTemplate(templateId, getTenantArgs());
       set({
         shiftTemplates: get().shiftTemplates.filter((item) => item.id !== templateId),
       });
@@ -1675,7 +1698,8 @@ export const useSchedulerStore = create((set, get) => ({
         date,
         startTime,
         endTime,
-        hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+        hasConsecutiveSundayAssignmentFn: (params) =>
+          hasConsecutiveSundayAssignment({ tenantId: getPublicTenantId(), ...params }),
       });
 
       const isWork = type === SHIFT_TYPES.WORK;
@@ -1690,6 +1714,7 @@ export const useSchedulerStore = create((set, get) => ({
       set({ isSaving: true });
       const normalizedShiftType = shiftType || inferShiftTypeFromTimes(startTime, endTime);
       const createdShift = await createShift({
+        tenantId: getPublicTenantId(),
         employeeId,
         date,
         startTime,
@@ -1794,7 +1819,8 @@ export const useSchedulerStore = create((set, get) => ({
         date,
         startTime,
         endTime,
-        hasConsecutiveSundayAssignmentFn: hasConsecutiveSundayAssignment,
+        hasConsecutiveSundayAssignmentFn: (params) =>
+          hasConsecutiveSundayAssignment({ tenantId: getPublicTenantId(), ...params }),
       });
 
       const payload = buildNormalizedShiftPayload({
@@ -1814,7 +1840,7 @@ export const useSchedulerStore = create((set, get) => ({
       });
 
       set({ isSaving: true });
-      await updateShift(shiftId, payload);
+      await updateShift(shiftId, payload, getTenantArgs());
       await recordAuditLog(get, {
         action: 'shift.manual.update',
         target: { collection: 'shifts', id: shiftId, scope: date },
@@ -1882,14 +1908,18 @@ export const useSchedulerStore = create((set, get) => ({
           return;
         }
       }
-      await updateShift(shiftId, {
-        date,
-        startTime,
-        endTime,
-        label,
-        shiftType: currentShift.shiftType || inferShiftTypeFromTimes(startTime, endTime),
-        isManualOverride: true,
-      });
+      await updateShift(
+        shiftId,
+        {
+          date,
+          startTime,
+          endTime,
+          label,
+          shiftType: currentShift.shiftType || inferShiftTypeFromTimes(startTime, endTime),
+          isManualOverride: true,
+        },
+        getTenantArgs(),
+      );
       await recordAuditLog(get, {
         action: 'shift.manual.move',
         target: { collection: 'shifts', id: shiftId, scope: date },
@@ -1933,7 +1963,7 @@ export const useSchedulerStore = create((set, get) => ({
     const nextValue = typeof value === 'boolean' ? value : !Boolean(currentShift.isManualOverride);
     set({ isSaving: true });
     try {
-      await updateShift(shiftId, { isManualOverride: nextValue });
+      await updateShift(shiftId, { isManualOverride: nextValue }, getTenantArgs());
       await recordAuditLog(get, {
         action: 'shift.manual_override.toggle',
         target: { collection: 'shifts', id: shiftId, scope: currentShift.date },
@@ -1966,7 +1996,7 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     let removedShift = null;
     try {
-      removedShift = await removeShift(shiftId);
+      removedShift = await removeShift(shiftId, getTenantArgs());
       if (removedShift) {
         await recordAuditLog(get, {
           action: 'shift.manual.delete',
@@ -1998,7 +2028,7 @@ export const useSchedulerStore = create((set, get) => ({
     const removedById = new Map();
 
     try {
-      const removedShifts = await removeShiftsByDates(weekDays);
+      const removedShifts = await removeShiftsByDates(weekDays, getTenantArgs());
       removedShifts.forEach((shift) => {
         if (shift?.id) removedById.set(shift.id, shift);
       });
@@ -2056,7 +2086,7 @@ export const useSchedulerStore = create((set, get) => ({
     let removedPublishedWeekCount = 0;
 
     try {
-      const removedShifts = await removeShiftsByDates(monthDays);
+      const removedShifts = await removeShiftsByDates(monthDays, getTenantArgs());
       removedShifts.forEach((shift) => {
         if (shift?.id) removedById.set(shift.id, shift);
       });
@@ -2122,6 +2152,7 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const createdAnnouncement = await createAnnouncement({
+        tenantId: getPublicTenantId(),
         title: title.trim(),
         body: body.trim(),
         authorEmail: get().adminUser?.email || '',
@@ -2163,7 +2194,7 @@ export const useSchedulerStore = create((set, get) => ({
       return;
     }
     try {
-      const weekHistory = await fetchWeekHistoryList(60);
+      const weekHistory = await fetchWeekHistoryList(60, getTenantArgs());
       set({ weekHistory, _weekHistoryFetchedAt: Date.now() });
     } catch {
       set({ warningMessage: 'Αποτυχία φόρτωσης ιστορικού εβδομάδων.' });
@@ -2178,7 +2209,7 @@ export const useSchedulerStore = create((set, get) => ({
       return;
     }
     try {
-      const weekTemplates = await fetchWeekTemplates();
+      const weekTemplates = await fetchWeekTemplates(getTenantArgs());
       set({ weekTemplates, _weekTemplatesFetchedAt: Date.now() });
     } catch {
       set({ warningMessage: 'Αποτυχία φόρτωσης templates.' });
@@ -2219,7 +2250,7 @@ export const useSchedulerStore = create((set, get) => ({
     let weekShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
 
     try {
-      const firestoreWeekShifts = await fetchShiftsByDates(weekDays);
+      const firestoreWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
       weekShifts = (firestoreWeekShifts || []).filter((shift) => weekSet.has(shift.date));
     } catch {
       // Fallback to local state snapshot if Firestore read fails.
@@ -2264,6 +2295,7 @@ export const useSchedulerStore = create((set, get) => ({
     });
 
     await saveWeekHistorySnapshot({
+      tenantId: getPublicTenantId(),
       weekId: getWeekIdFromWeekStart(weekStart),
       weekStart: weekDays[0],
       weekEnd: weekDays[6],
@@ -2299,7 +2331,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     let snapshot = null;
     try {
-      snapshot = await fetchLatestWeekSnapshotByWeekId(selectedWeekId);
+      snapshot = await fetchLatestWeekSnapshotByWeekId(selectedWeekId, getTenantArgs());
     } catch (error) {
       set({ warningMessage: error?.message || 'Αποτυχία ανάκτησης ιστορικής εβδομάδας.' });
       return false;
@@ -2313,8 +2345,9 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true, weekStart: snapshot.weekStart });
     get().startPublishedScheduleSubscription(snapshot.weekStart);
     try {
-      const existingWeekShifts = await fetchShiftsByDates(weekDays);
+      const existingWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
       await replaceShiftsBatch({
+        tenantId: getPublicTenantId(),
         shiftsToRemove: existingWeekShifts,
         shiftsToCreate: snapshot.shifts,
       });
@@ -2375,6 +2408,7 @@ export const useSchedulerStore = create((set, get) => ({
 
     try {
       await saveWeekTemplate({
+        tenantId: getPublicTenantId(),
         name: templateName,
         weekStart: get().weekStart,
         shifts: weekShifts,
@@ -2425,8 +2459,9 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
-      const existingWeekShifts = await fetchShiftsByDates(weekDays);
+      const existingWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
       await replaceShiftsBatch({
+        tenantId: getPublicTenantId(),
         shiftsToRemove: existingWeekShifts,
         shiftsToCreate,
       });
@@ -2463,7 +2498,7 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const announcement = get().announcements.find((item) => item.id === announcementId) || null;
-      await removeAnnouncement(announcementId);
+      await removeAnnouncement(announcementId, getTenantArgs());
       await recordAuditLog(get, {
         action: 'announcement.delete',
         target: { collection: 'announcements', id: announcementId },
@@ -2524,6 +2559,7 @@ export const useSchedulerStore = create((set, get) => ({
 
       const shiftsToCreate = safeGeneratedShifts.map((shift) => ({ ...shift, generationRunId }));
       await replaceShiftsBatch({
+        tenantId: getPublicTenantId(),
         shiftsToRemove: autoWeekShifts,
         shiftsToCreate,
       });
@@ -2540,7 +2576,7 @@ export const useSchedulerStore = create((set, get) => ({
           warningCount: warnings.length,
         },
       });
-      const savedWeekShifts = await fetchShiftsByDates(weekDays);
+      const savedWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
       set((state) => ({
         shifts: sortShiftsByDateAndStart([
           ...state.shifts.filter((shift) => !weekSet.has(shift.date)),
@@ -2630,6 +2666,7 @@ export const useSchedulerStore = create((set, get) => ({
 
       const shiftsToCreate = generatedShifts.map((shift) => ({ ...shift, generationRunId }));
       await replaceShiftsBatch({
+        tenantId: getPublicTenantId(),
         shiftsToRemove: autoGenerated,
         shiftsToCreate,
       });
@@ -2646,7 +2683,7 @@ export const useSchedulerStore = create((set, get) => ({
           warningCount: warnings?.length || 0,
         },
       });
-      const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet]);
+      const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet], getTenantArgs());
       set((state) => ({
         shifts: sortShiftsByDateAndStart([
           ...state.shifts.filter((shift) => !monthDateSet.has(shift.date)),
@@ -2710,9 +2747,9 @@ export const useSchedulerStore = create((set, get) => ({
 
     set({ isSaving: true });
     try {
-      const removedShifts = await removeShiftsByDates([date]);
+      const removedShifts = await removeShiftsByDates([date], getTenantArgs());
       const templatesToRemove = get().shiftTemplates.filter((template) => template.isPlaced && template.date === date);
-      await Promise.all(templatesToRemove.map((template) => removeShiftTemplate(template.id)));
+      await Promise.all(templatesToRemove.map((template) => removeShiftTemplate(template.id, getTenantArgs())));
       await recordAuditLog(get, {
         action: 'schedule.clear_day',
         target: { collection: 'shifts', scope: date },

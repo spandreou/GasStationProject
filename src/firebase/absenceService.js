@@ -1,5 +1,4 @@
 import {
-  collection,
   doc,
   onSnapshot,
   orderBy,
@@ -10,21 +9,22 @@ import {
 import { db } from './config';
 import {
   createLocalUnsubscribe,
-  EMPLOYEE_ABSENCES_COLLECTION,
-  EMPLOYEE_ABSENCES_PUBLIC_COLLECTION,
   ensureFirestoreReady,
+  tenantCollection,
+  tenantDoc,
   timestampedPayload,
   toDataWithId,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export function subscribeEmployeeAbsences(onData, onError) {
+export function subscribeEmployeeAbsences({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const absencesQuery = query(collection(db, EMPLOYEE_ABSENCES_COLLECTION), orderBy('startDate', 'asc'));
+  const absencesQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.absences), orderBy('startDate', 'asc'));
   return onSnapshot(
     absencesQuery,
     (snapshot) => {
@@ -34,14 +34,14 @@ export function subscribeEmployeeAbsences(onData, onError) {
   );
 }
 
-export function subscribePublicEmployeeAbsences(onData) {
+export function subscribePublicEmployeeAbsences(_options, onData) {
   onData?.([]);
   return createLocalUnsubscribe();
 }
 
-export async function createEmployeeAbsence(payload) {
+export async function createEmployeeAbsence({ tenantId, ...payload }) {
   ensureFirestoreReady();
-  const privateRef = doc(collection(db, EMPLOYEE_ABSENCES_COLLECTION));
+  const privateRef = doc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.absences));
   const privatePayload = {
     ...payload,
     status: payload.status || 'ACTIVE',
@@ -57,28 +57,27 @@ export async function createEmployeeAbsence(payload) {
   return { id: privateRef.id, ...privatePayload };
 }
 
-export async function updateEmployeeAbsence(absenceId, patch) {
+export async function updateEmployeeAbsence(absenceId, patch, { tenantId } = {}) {
   ensureFirestoreReady();
   await withFirestoreWrite(() => {
     const batch = writeBatch(db);
     batch.update(
-      doc(db, EMPLOYEE_ABSENCES_COLLECTION, absenceId),
+      tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.absences, absenceId),
       timestampedPayload({ ...patch }, serverTimestamp, { includeCreatedAt: false }),
     );
     return batch.commit();
   });
 }
 
-export async function cancelEmployeeAbsence(absenceId) {
-  return updateEmployeeAbsence(absenceId, { status: 'CANCELLED' });
+export async function cancelEmployeeAbsence(absenceId, { tenantId } = {}) {
+  return updateEmployeeAbsence(absenceId, { status: 'CANCELLED' }, { tenantId });
 }
 
-export async function removeEmployeeAbsence(absenceId) {
+export async function removeEmployeeAbsence(absenceId, { tenantId } = {}) {
   ensureFirestoreReady();
   await withFirestoreWrite(() => {
     const batch = writeBatch(db);
-    batch.delete(doc(db, EMPLOYEE_ABSENCES_COLLECTION, absenceId));
-    batch.delete(doc(db, EMPLOYEE_ABSENCES_PUBLIC_COLLECTION, absenceId));
+    batch.delete(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.absences, absenceId));
     return batch.commit();
   });
 }

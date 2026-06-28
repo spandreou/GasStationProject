@@ -1,5 +1,9 @@
-import { writeBatch } from 'firebase/firestore';
+import { collection, doc, writeBatch } from 'firebase/firestore';
 import { db } from './config';
+import {
+  getTenantScopedCollectionPath,
+  getTenantScopedDocumentPath,
+} from '../utils/tenantDataPaths';
 
 export const EMPLOYEES_COLLECTION = 'employees';
 export const SHIFTS_COLLECTION = 'shifts';
@@ -32,6 +36,16 @@ export function ensureFirestoreReady() {
   if (!db) {
     throw new Error('Το Firebase Firestore δεν είναι ρυθμισμένο. Έλεγξε τα env vars.');
   }
+}
+
+export function tenantCollection(tenantId, collectionName) {
+  ensureFirestoreReady();
+  return collection(db, getTenantScopedCollectionPath(tenantId, collectionName));
+}
+
+export function tenantDoc(tenantId, collectionName, documentId) {
+  ensureFirestoreReady();
+  return doc(db, getTenantScopedDocumentPath(tenantId, collectionName, documentId));
 }
 
 export function isUsingLocalFallback() {

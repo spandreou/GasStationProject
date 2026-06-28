@@ -1,8 +1,6 @@
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   onSnapshot,
   orderBy,
   query,
@@ -10,20 +8,22 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import {
-  ANNOUNCEMENTS_COLLECTION,
   createLocalUnsubscribe,
   ensureFirestoreReady,
+  tenantCollection,
+  tenantDoc,
   toDataWithId,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
-export function subscribeAnnouncements(onData, onError) {
+export function subscribeAnnouncements({ tenantId }, onData, onError) {
   if (!db) {
     onError?.(new Error('Το Firestore δεν είναι διαθέσιμο.'));
     return createLocalUnsubscribe();
   }
 
-  const announcementsQuery = query(collection(db, ANNOUNCEMENTS_COLLECTION), orderBy('createdAt', 'desc'));
+  const announcementsQuery = query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.announcements), orderBy('createdAt', 'desc'));
   return onSnapshot(
     announcementsQuery,
     (snapshot) => {
@@ -33,11 +33,11 @@ export function subscribeAnnouncements(onData, onError) {
   );
 }
 
-export async function createAnnouncement(payload) {
+export async function createAnnouncement({ tenantId, ...payload }) {
   ensureFirestoreReady();
 
   const docRef = await withFirestoreWrite(() =>
-    addDoc(collection(db, ANNOUNCEMENTS_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.announcements), {
       ...payload,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -47,7 +47,7 @@ export async function createAnnouncement(payload) {
   return { id: docRef.id, ...payload };
 }
 
-export async function removeAnnouncement(announcementId) {
+export async function removeAnnouncement(announcementId, { tenantId } = {}) {
   ensureFirestoreReady();
-  await withFirestoreWrite(() => deleteDoc(doc(db, ANNOUNCEMENTS_COLLECTION, announcementId)));
+  await withFirestoreWrite(() => deleteDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.announcements, announcementId)));
 }

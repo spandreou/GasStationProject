@@ -50,13 +50,16 @@ const sanitizedShiftFunction = publicService.match(/function sanitizePublishedSh
 });
 
 assert(
-  publicService.includes("'tenants'") &&
-    publicService.includes('PUBLIC_SCHEDULES_COLLECTION') &&
-    publicService.includes('PUBLIC_MONTHS_COLLECTION') &&
-    publicService.includes('PUBLIC_EMPLOYEES_COLLECTION') &&
-    publicService.includes('PUBLIC_ANNOUNCEMENTS_COLLECTION'),
+  publicService.includes('TENANT_SCOPED_COLLECTIONS.publicSchedules') &&
+    publicService.includes('TENANT_SCOPED_COLLECTIONS.publicMonths') &&
+    publicService.includes('TENANT_SCOPED_COLLECTIONS.publicEmployees') &&
+    publicService.includes('TENANT_SCOPED_COLLECTIONS.publicAnnouncements') &&
+    publicService.includes('tenantCollection(tenantId') &&
+    publicService.includes('tenantDoc(tenantId'),
   'Public service must use tenant-scoped sanitized public collections.',
 );
+assert(!publicService.includes('PUBLISHED_SCHEDULES_COLLECTION'), 'Public runtime must not read legacy published_schedules.');
+assert(!publicService.includes('readLegacy'), 'Public runtime must not include legacy public schedule fallback.');
 
 [
   'afm',

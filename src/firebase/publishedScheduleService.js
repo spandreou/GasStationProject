@@ -1,8 +1,5 @@
 import {
-  collection,
   deleteDoc,
-  doc,
-  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -15,28 +12,12 @@ import {
   commitBatchChunks,
   createLocalUnsubscribe,
   ensureFirestoreReady,
-  PUBLISHED_SCHEDULES_COLLECTION,
-  PUBLIC_ANNOUNCEMENTS_COLLECTION,
-  PUBLIC_EMPLOYEES_COLLECTION,
-  PUBLIC_MONTHS_COLLECTION,
-  PUBLIC_SCHEDULES_COLLECTION,
+  tenantCollection,
+  tenantDoc,
   toDataWithId,
   withFirestoreWrite,
 } from './firestoreCore';
-
-const DEFAULT_TENANT_ID = 'bp-kallis';
-
-function normalizeTenantId(tenantId) {
-  return String(tenantId || DEFAULT_TENANT_ID).trim() || DEFAULT_TENANT_ID;
-}
-
-function tenantCollection(tenantId, collectionName) {
-  return collection(db, 'tenants', normalizeTenantId(tenantId), collectionName);
-}
-
-function tenantDoc(tenantId, collectionName, documentId) {
-  return doc(db, 'tenants', normalizeTenantId(tenantId), collectionName, documentId);
-}
+import { normalizeTenantId, TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
 function sortByDateAndTime(a, b) {
   return `${a.date}_${a.startTime}_${a.employeeName}`.localeCompare(
@@ -161,32 +142,18 @@ function sanitizePublicAnnouncement(announcement, tenantId) {
   };
 }
 
-async function readLegacyPublishedSchedule(weekStart) {
-  const legacySnapshot = await getDoc(doc(db, PUBLISHED_SCHEDULES_COLLECTION, weekStart));
-  return legacySnapshot.exists() ? { id: legacySnapshot.id, ...legacySnapshot.data() } : null;
-}
-
 export function subscribePublishedSchedule(input, onData, onError) {
-  const weekStart = typeof input === 'string' ? input : input?.weekStart;
-  const tenantId = typeof input === 'string' ? DEFAULT_TENANT_ID : input?.tenantId;
+  const weekStart = input?.weekStart;
+  const tenantId = input?.tenantId;
   if (!db || !weekStart) {
     onData?.(null);
     return createLocalUnsubscribe();
   }
 
   return onSnapshot(
-    tenantDoc(tenantId, PUBLIC_SCHEDULES_COLLECTION, weekStart),
-    async (snapshot) => {
-      if (snapshot.exists()) {
-        onData({ id: snapshot.id, ...snapshot.data() });
-        return;
-      }
-
-      try {
-        onData(await readLegacyPublishedSchedule(weekStart));
-      } catch (error) {
-        onError?.(error);
-      }
+    tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicSchedules, weekStart),
+    (snapshot) => {
+      onData(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null);
     },
     onError,
   );
@@ -199,7 +166,7 @@ export function subscribePublishedMonth({ tenantId, yearMonth }, onData, onError
   }
 
   return onSnapshot(
-    tenantDoc(tenantId, PUBLIC_MONTHS_COLLECTION, yearMonth),
+    tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicMonths, yearMonth),
     (snapshot) => {
       onData(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null);
     },
@@ -214,7 +181,7 @@ export function subscribePublicEmployees({ tenantId }, onData, onError) {
   }
 
   return onSnapshot(
-    query(tenantCollection(tenantId, PUBLIC_EMPLOYEES_COLLECTION), orderBy('fullName', 'asc')),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.publicEmployees), orderBy('fullName', 'asc')),
     (snapshot) => onData(toDataWithId(snapshot)),
     onError,
   );
@@ -227,7 +194,7 @@ export function subscribePublicAnnouncements({ tenantId }, onData, onError) {
   }
 
   return onSnapshot(
-    query(tenantCollection(tenantId, PUBLIC_ANNOUNCEMENTS_COLLECTION), orderBy('createdAt', 'desc')),
+    query(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.publicAnnouncements), orderBy('createdAt', 'desc')),
     (snapshot) => onData(toDataWithId(snapshot)),
     onError,
   );
@@ -239,7 +206,7 @@ export async function publishWeekSchedule({ tenantId, weekStart, weekDays, shift
 
   const payload = sanitizePublishedSchedule({ tenantId, weekStart, weekDays, shifts, employees });
   await withFirestoreWrite(() =>
-    setDoc(tenantDoc(tenantId, PUBLIC_SCHEDULES_COLLECTION, weekStart), {
+    setDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicSchedules, weekStart), {
       ...payload,
       publishedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -273,7 +240,7 @@ export async function publishMonthSchedule({
     employees,
   });
   await withFirestoreWrite(() =>
-    setDoc(tenantDoc(tenantId, PUBLIC_MONTHS_COLLECTION, yearMonth), {
+    setDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicMonths, yearMonth), {
       ...payload,
       publishedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -286,7 +253,7 @@ export async function publishMonthSchedule({
 export async function publishPublicEmployees({ tenantId, employees = [] }) {
   ensureFirestoreReady();
   const safeEmployees = (employees || []).filter((employee) => employee?.id);
-  const existingSnapshot = await getDocs(tenantCollection(tenantId, PUBLIC_EMPLOYEES_COLLECTION));
+  const existingSnapshot = await getDocs(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.publicEmployees));
   const nextIds = new Set(safeEmployees.map((employee) => employee.id));
 
   const operations = [
@@ -301,7 +268,7 @@ export async function publishPublicEmployees({ tenantId, employees = [] }) {
   ];
 
   await commitBatchChunks(operations, (batch, operation) => {
-    const ref = tenantDoc(tenantId, PUBLIC_EMPLOYEES_COLLECTION, operation.id);
+    const ref = tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicEmployees, operation.id);
     if (operation.type === 'delete') {
       batch.delete(ref);
       return;
@@ -322,7 +289,7 @@ export async function publishPublicAnnouncement({ tenantId, announcement }) {
 
   const payload = sanitizePublicAnnouncement(announcement, tenantId);
   await withFirestoreWrite(() =>
-    setDoc(tenantDoc(tenantId, PUBLIC_ANNOUNCEMENTS_COLLECTION, announcement.id), {
+    setDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicAnnouncements, announcement.id), {
       ...payload,
       createdAt: announcement.createdAt || serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -336,21 +303,20 @@ export async function deletePublicAnnouncement({ tenantId, announcementId }) {
   ensureFirestoreReady();
   if (!announcementId) return false;
   await withFirestoreWrite(() =>
-    deleteDoc(tenantDoc(tenantId, PUBLIC_ANNOUNCEMENTS_COLLECTION, announcementId)),
+    deleteDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicAnnouncements, announcementId)),
   );
   return true;
 }
 
 export async function deletePublishedSchedulesByWeekStarts(input = []) {
   ensureFirestoreReady();
-  const weekStarts = Array.isArray(input) ? input : input?.weekStarts;
-  const tenantId = Array.isArray(input) ? DEFAULT_TENANT_ID : input?.tenantId;
+  const weekStarts = input?.weekStarts;
+  const tenantId = input?.tenantId;
   const uniqueWeekStarts = [...new Set(weekStarts || [])].filter(Boolean);
   if (!uniqueWeekStarts.length) return 0;
 
   await commitBatchChunks(uniqueWeekStarts, (batch, weekStart) => {
-    batch.delete(tenantDoc(tenantId, PUBLIC_SCHEDULES_COLLECTION, weekStart));
-    batch.delete(doc(db, PUBLISHED_SCHEDULES_COLLECTION, weekStart));
+    batch.delete(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicSchedules, weekStart));
   });
 
   return uniqueWeekStarts.length;
@@ -360,7 +326,7 @@ export async function deletePublishedMonth({ tenantId, yearMonth }) {
   ensureFirestoreReady();
   if (!yearMonth) return false;
   await withFirestoreWrite(() =>
-    deleteDoc(tenantDoc(tenantId, PUBLIC_MONTHS_COLLECTION, yearMonth)),
+    deleteDoc(tenantDoc(tenantId, TENANT_SCOPED_COLLECTIONS.publicMonths, yearMonth)),
   );
   return true;
 }

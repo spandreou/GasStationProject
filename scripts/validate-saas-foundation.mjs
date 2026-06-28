@@ -200,7 +200,11 @@ const unknownContext = resolveTenantHostContext('example.com');
 assertEqual(unknownContext.mode, 'unknown', 'Unknown hostnames must not be treated as tenants.');
 
 assertEqual(getUserPath('uid-123'), 'users/uid-123', 'User path must follow users/{uid}.');
-assertEqual(getTenantPath('BP-Kallis'), 'tenants/bp-kallis', 'Tenant path must normalize tenant ids.');
+assertThrows(
+  () => getTenantPath('BP-Kallis'),
+  'Tenant paths must reject mixed-case tenant ids instead of normalizing production inputs.',
+);
+assertEqual(getTenantPath('bp-kallis'), 'tenants/bp-kallis', 'Tenant path must accept lowercase tenant ids.');
 assertEqual(
   getTenantMembershipPath('uid-123', 'bp-kallis'),
   'tenantMemberships/uid-123_bp-kallis',

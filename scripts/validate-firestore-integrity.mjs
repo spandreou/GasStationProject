@@ -53,7 +53,7 @@ assert(shiftService.includes('replaceShiftsBatch'), 'Shift service must expose a
 assert(!shiftService.includes('await Promise.all(\n    shifts.map'), 'createManyShifts must not use Promise.all addDoc multi-writes.');
 assert(!shiftService.includes('await Promise.all(\n    existing.map'), 'removeWeekShifts must not use Promise.all deleteDoc multi-writes.');
 
-assert(auditLogService.includes('AUDIT_LOGS_COLLECTION'), 'Audit log service must define audit log collection.');
+assert(auditLogService.includes('TENANT_SCOPED_COLLECTIONS.auditLogs'), 'Audit log service must use tenant scoped audit log collection.');
 assert(auditLogService.includes('writeAuditLog'), 'Audit log service must expose audit log writer.');
 assert(schedulerStore.includes('generationRunId'), 'Scheduler store must attach generationRunId to generated shifts.');
 assert(schedulerStore.includes('replaceShiftsBatch'), 'Scheduler store generation/template flows must use batch shift replacement.');

@@ -1,12 +1,14 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './config';
 import {
-  AUDIT_LOGS_COLLECTION,
   ensureFirestoreReady,
+  tenantCollection,
   withFirestoreWrite,
 } from './firestoreCore';
+import { TENANT_SCOPED_COLLECTIONS } from '../utils/tenantDataPaths';
 
 export async function writeAuditLog({
+  tenantId,
   action,
   actor = {},
   target = {},
@@ -23,7 +25,7 @@ export async function writeAuditLog({
   const safeMetadata = metadata && typeof metadata === 'object' ? metadata : {};
 
   const docRef = await withFirestoreWrite(() =>
-    addDoc(collection(db, AUDIT_LOGS_COLLECTION), {
+    addDoc(tenantCollection(tenantId, TENANT_SCOPED_COLLECTIONS.auditLogs), {
       action,
       actor: {
         uid: safeActor.uid || '',

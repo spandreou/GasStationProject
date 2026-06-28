@@ -1571,6 +1571,7 @@ export default function MainDashboard() {
                   totalsByType={analytics.totalsByType}
                   shiftsCountByEmployee={analytics.shiftsCountByEmployee}
                   workBreakdownByEmployee={analytics.workBreakdownByEmployee}
+                  showAbsenceBreakdown={isAdmin}
                 />
                 {isAdmin ? (
                   <ProgramHistoryPanel

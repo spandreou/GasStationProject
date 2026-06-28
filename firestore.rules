@@ -549,7 +549,7 @@ service cloud.firestore {
     }
 
     match /employeeAbsencesPublic/{absenceId} {
-      allow read: if true;
+      allow read: if isAdmin();
       allow create: if isAdmin() && validPublicAbsence();
       allow update: if isAdmin() && validPublicAbsencePatch();
       allow delete: if isAdmin();

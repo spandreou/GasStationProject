@@ -346,6 +346,8 @@ export default function AbsencesPanel({
       (draft.replacementMode !== 'MANUAL' || draft.manualReplacementEmployeeId),
   );
 
+  if (!isAdmin) return null;
+
   return (
     <div data-testid="absences-panel" className="space-y-3">
       <div>
@@ -368,22 +370,16 @@ export default function AbsencesPanel({
         </div>
       ) : null}
 
-      {isAdmin ? (
-        <button
-          type="button"
-          data-testid="add-absence-button"
-          onClick={openCreateModal}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-600 disabled:opacity-60"
-          disabled={isSaving}
-        >
-          <Plus size={14} />
-          Προσθήκη Άδειας / Απουσίας
-        </button>
-      ) : (
-        <div data-testid="absence-public-view" className="rounded-xl border border-cyan-300/25 bg-slate-950/20 px-3 py-2 text-xs text-slate-700 dark:text-cyan-50">
-          View-only προβολή. Μόνο ο διαχειριστής μπορεί να αλλάξει άδειες.
-        </div>
-      )}
+      <button
+        type="button"
+        data-testid="add-absence-button"
+        onClick={openCreateModal}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-600 disabled:opacity-60"
+        disabled={isSaving}
+      >
+        <Plus size={14} />
+        Προσθήκη Άδειας / Απουσίας
+      </button>
 
       <div className="grid gap-2 text-xs">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

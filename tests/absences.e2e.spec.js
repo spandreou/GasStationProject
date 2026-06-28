@@ -79,7 +79,7 @@ async function seedAbsenceStore(page) {
   await applySeed();
 }
 
-test('admin can add an absence and public view sees absences read-only', async ({ page }) => {
+test('admin can add an absence and public view does not expose absences', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedAbsenceStore(page);
@@ -131,14 +131,13 @@ test('admin can add an absence and public view sees absences read-only', async (
   });
 
   await page.waitForFunction(() => window.__gasStationSchedulerStore.getState().isAdmin === false);
-  await page.getByTestId('absences-sidebar-toggle').click();
-  await expect(page.getByTestId('absence-public-view')).toBeVisible();
+  await expect(page.getByTestId('absences-sidebar-section')).toHaveCount(0);
+  await expect(page.getByTestId('absences-sidebar-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('absence-public-view')).toHaveCount(0);
+  await expect(page.getByTestId('absences-panel')).toHaveCount(0);
   await expect(page.getByTestId('add-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('edit-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('cancel-absence-button')).toHaveCount(0);
   await expect(page.getByTestId('delete-absence-button')).toHaveCount(0);
-  await expect(page.getByTestId('absence-card')).not.toContainText('Αντικατάσταση');
-  await expect(page.getByTestId('absence-card')).not.toContainText('Σχόλιο');
-  await expect(page.getByTestId('absence-card')).not.toContainText('internal replacement note');
-  await expect(page.getByTestId('absence-card')).not.toContainText('MANUAL');
+  await expect(page.getByTestId('absence-card')).toHaveCount(0);
 });

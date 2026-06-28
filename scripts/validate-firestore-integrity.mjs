@@ -124,16 +124,16 @@ assert(
   'Private employeeAbsences must be admin-only read/write.',
 );
 assert(
-  matchBlock('employeeAbsencesPublic').includes('allow read: if true;') &&
+  matchBlock('employeeAbsencesPublic').includes('allow read: if isAdmin();') &&
     matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin() && validPublicAbsence();') &&
     matchBlock('employeeAbsencesPublic').includes('allow update: if isAdmin() && validPublicAbsencePatch();') &&
     matchBlock('employeeAbsencesPublic').includes('allow delete: if isAdmin();'),
-  'employeeAbsencesPublic must be public read-only and admin writable.',
+  'Legacy employeeAbsencesPublic must be admin-only and unavailable to anonymous/public users.',
 );
 assert(
   firestoreRules.includes("function publicAbsenceFields()") &&
     firestoreRules.includes("'id', 'employeeName', 'typeLabel', 'startDate', 'endDate', 'totalDays', 'status'"),
-  'Public absence docs must allow only sanitized fields.',
+  'Legacy public absence validator must remain field-limited while the collection is admin-only.',
 );
 assert(
   !matchBlock('employeeAbsencesPublic').includes('replacementMode') &&
@@ -141,18 +141,19 @@ assert(
     !matchBlock('employeeAbsencesPublic').includes('note') &&
     !matchBlock('employeeAbsencesPublic').includes('createdBy') &&
     !matchBlock('employeeAbsencesPublic').includes('updatedBy'),
-  'Public absence docs must not expose replacement settings, notes, or audit metadata.',
+  'Legacy absence mirror docs must not expose replacement settings, notes, or audit metadata.',
 );
-assert(absenceService.includes('EMPLOYEE_ABSENCES_PUBLIC_COLLECTION'), 'Absence service must maintain sanitized public absence docs.');
-assert(schedulerStore.includes('startAbsencesSubscription'), 'Scheduler store must switch between public and private absence subscriptions.');
-assert(schedulerStore.includes('subscribePublicEmployeeAbsences'), 'Public users must read sanitized public absences.');
+assert(!absenceService.includes('batch.set(\n      doc(db, EMPLOYEE_ABSENCES_PUBLIC_COLLECTION'), 'Absence service must not write public absence mirror docs.');
+assert(absenceService.includes('onData?.([]);'), 'Public absence subscription must resolve to an empty local snapshot.');
+assert(schedulerStore.includes('startAbsencesSubscription'), 'Scheduler store must keep admin absence subscription flow.');
+assert(schedulerStore.includes('subscribePublicEmployeeAbsences'), 'Public absence repository path must be a no-op empty snapshot.');
 assert(schedulerStore.includes('adminOnly: true'), 'Admin users must read private absence data for generator/admin flows.');
-assert(absencesPanel.includes('isAdmin && absence.note'), 'Public absence cards must not render private notes.');
+assert(absencesPanel.includes('if (!isAdmin) return null;'), 'Absences panel must not render for public/read-only users.');
 
 assert(readme.includes('generationRunId'), 'README must document generationRunId.');
 assert(readme.includes('Service Layer Architecture'), 'README must document the Firebase service layer architecture.');
 assert(security.includes('audit log'), 'SECURITY.md must document audit log behavior.');
 assert(security.includes('Only the station admin signs in'), 'SECURITY.md must document the admin-only sign-in model.');
-assert(security.includes('employeeAbsencesPublic'), 'SECURITY.md must document sanitized public absence docs.');
+assert(security.includes('Public users must not read absence mirrors'), 'SECURITY.md must document that absences are not public data.');
 
 console.log('Firestore integrity checks passed');

@@ -36,6 +36,7 @@ const publicService = read('src/firebase/publishedScheduleService.js');
 const employeeSidebar = read('src/components/scheduler/EmployeeSidebar.jsx');
 const announcementBoard = read('src/components/scheduler/AnnouncementBoard.jsx');
 const firestoreRules = read('firestore.rules');
+const sanitizedShiftFunction = publicService.match(/function sanitizePublishedShift[\s\S]+?\n}\n\nfunction sanitizePublishedSchedule/)?.[0] || '';
 
 [
   'Οριστικοποίηση Εβδομάδας',
@@ -70,6 +71,13 @@ assert(
 ].forEach((forbidden) => {
   const sanitizeFunctions = publicService.match(/function sanitize[\s\S]+?export function subscribePublishedSchedule/)?.[0] || '';
   assert(!new RegExp(`\\b${forbidden}\\b`, 'i').test(sanitizeFunctions), `Public sanitized payload must not include ${forbidden}.`);
+});
+['id:', 'employeeId:'].forEach((forbidden) => {
+  assert(!sanitizedShiftFunction.includes(forbidden), `Public schedule shifts must not include ${forbidden}.`);
+});
+assert(publicService.includes('function isPublicWorkShift'), 'Public schedule sanitizer must explicitly filter to work shifts.');
+['leave', 'sick', 'absence', 'αδεια', 'ασθεν', 'απουσ', 'ρεπο'].forEach((forbidden) => {
+  assert(publicService.includes(`'${forbidden}'`), `Public work-shift filter must deny ${forbidden}.`);
 });
 
 assert(employeeSidebar.includes('{isAdmin ? (') && employeeSidebar.includes('<Pencil size={15} />'), 'Employee edit controls must remain inside an admin-only branch.');

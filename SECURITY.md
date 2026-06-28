@@ -121,14 +121,14 @@ Private source of truth:
 - It contains full absence data used by admin screens and the scheduler generator, including employee ids, replacement mode, manual replacement employee id, notes, status, and audit metadata.
 - The generator uses `employeeAbsences`, never the sanitized public view.
 
-Sanitized public view:
+Public view:
 
-- `employeeAbsencesPublic` is public read-only and admin write-only.
-- It contains only `id`, `employeeName`, `typeLabel`, `startDate`, `endDate`, `totalDays`, and `status`.
-- It must not contain replacement settings, manual replacement ids, notes, internal comments, `createdBy`, `updatedBy`, or audit metadata.
-- Public/employee views may display only this sanitized collection and must not allow add, edit, cancel, or delete actions.
+- Public users must not read absence mirrors, absence labels, absence date ranges, sick leave, leave-related rest days, replacement reasons, notes, or absence status.
+- The legacy `employeeAbsencesPublic` collection is no longer anonymous-readable. It remains admin-only for legacy cleanup and must not be used by public UI.
+- Public/employee schedule views may show only work schedule fields: employee full name, date, shift label/type, start time, and end time.
+- Public schedule snapshots must not include employee ids, user ids, emails, phones, tenant memberships, audit metadata, internal notes, absence data, or private archive data.
 
-Remaining limitation: without a backend or Cloud Function, the admin client maintains the sanitized public absence document in the same Firestore batch as the private write. A server-side derivation layer would be stronger for future multi-tenant deployments.
+Remaining limitation: without a backend or Cloud Function, the trusted admin client still creates sanitized public schedule snapshots. Firestore rules restrict raw absence and admin data, and validation checks must keep public snapshots limited to work shifts only.
 
 ## Phase 4 Content Security Policy
 

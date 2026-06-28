@@ -48,7 +48,6 @@ const publicReadMatches = [...firestoreRules.matchAll(/^[ \t]*match\s+\/([A-Za-z
   .filter((collectionName) => matchIndentedBlock(collectionName).includes('allow read: if true;'));
 const allowedPublicReadCollections = new Set([
   'employees_public',
-  'employeeAbsencesPublic',
   'published_schedules',
   'publicEmployees',
   'publicSchedules',
@@ -92,7 +91,7 @@ assert(
   publicReadMatches.every((collectionName) => allowedPublicReadCollections.has(collectionName)),
   `Firestore rules expose unexpected public reads: ${publicReadMatches.filter((collectionName) => !allowedPublicReadCollections.has(collectionName)).join(', ')}`,
 );
-assert(matchBlock('employeeAbsencesPublic').includes('allow read: if true;'), 'Sanitized public absence docs must remain public readable.');
+assert(matchBlock('employeeAbsencesPublic').includes('allow read: if isAdmin();'), 'Legacy public absence mirror must not be anonymously readable.');
 assert(matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin()'), 'Sanitized public absence docs must be admin writable only.');
 assert(matchBlock('published_schedules').includes('allow read: if true;'), 'Sanitized published schedules must remain public readable.');
 assert(

@@ -89,29 +89,31 @@ export default function SchedulerSidebar({
         />
       </SidebarSection>
 
-      <SidebarSection
-        id="absences"
-        title="Άδειες"
-        icon={CalendarDays}
-        activeId={activeSection}
-        onToggle={handleToggle}
-        helperText="Άδειες, ασθένειες και άλλες απουσίες που επηρεάζουν το πρόγραμμα."
-      >
-        <AbsencesPanel
-          employees={employees}
-          absences={absences}
-          isLoading={isAbsencesLoading}
-          warningMessage={absencesWarningMessage}
-          isAdmin={isAdmin}
-          isSaving={isSaving}
-          selectedMonth={selectedMonth}
-          selectedYear={selectedYear}
-          onCreateAbsence={onCreateAbsence}
-          onUpdateAbsence={onUpdateAbsence}
-          onCancelAbsence={onCancelAbsence}
-          onDeleteAbsence={onDeleteAbsence}
-        />
-      </SidebarSection>
+      {isAdmin ? (
+        <SidebarSection
+          id="absences"
+          title="Άδειες"
+          icon={CalendarDays}
+          activeId={activeSection}
+          onToggle={handleToggle}
+          helperText="Άδειες, ασθένειες και άλλες απουσίες που επηρεάζουν το πρόγραμμα."
+        >
+          <AbsencesPanel
+            employees={employees}
+            absences={absences}
+            isLoading={isAbsencesLoading}
+            warningMessage={absencesWarningMessage}
+            isAdmin={isAdmin}
+            isSaving={isSaving}
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            onCreateAbsence={onCreateAbsence}
+            onUpdateAbsence={onUpdateAbsence}
+            onCancelAbsence={onCancelAbsence}
+            onDeleteAbsence={onDeleteAbsence}
+          />
+        </SidebarSection>
+      ) : null}
 
       {isAdmin ? (
         <SidebarSection
@@ -146,6 +148,7 @@ export default function SchedulerSidebar({
           totalsByType={analytics.totalsByType}
           shiftsCountByEmployee={analytics.shiftsCountByEmployee}
           workBreakdownByEmployee={analytics.workBreakdownByEmployee}
+          showAbsenceBreakdown={isAdmin}
         />
       </SidebarSection>
     </div>

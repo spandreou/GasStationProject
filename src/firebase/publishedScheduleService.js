@@ -49,21 +49,39 @@ function safeText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function createPublicShiftId(shift, employeeName) {
-  return [
-    safeText(shift?.date),
-    safeText(shift?.startTime),
-    safeText(shift?.endTime),
-    employeeName,
-    safeText(shift?.type || 'work'),
-  ].join('_');
+function normalizePublicToken(value) {
+  return safeText(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '');
+}
+
+function isPublicWorkShift(shift) {
+  const type = normalizePublicToken(shift?.type || 'work');
+  const shiftType = normalizePublicToken(shift?.shiftType);
+  const label = normalizePublicToken(`${shift?.label || ''} ${shift?.customLabel || ''}`);
+  const sensitiveTokens = [
+    'leave',
+    'sick',
+    'absence',
+    'absent',
+    'rest',
+    'day_off',
+    'off',
+    'αδεια',
+    'ασθεν',
+    'απουσ',
+    'ρεπο',
+  ];
+
+  if (type && type !== 'work') return false;
+  if (!safeText(shift?.date) || !safeText(shift?.startTime) || !safeText(shift?.endTime)) return false;
+  return !sensitiveTokens.some((token) => type.includes(token) || shiftType.includes(token) || label.includes(token));
 }
 
 function sanitizePublishedShift(shift, employeeById) {
   const employeeName = safeText(employeeById.get(shift?.employeeId)?.fullName || shift?.employeeName);
   return {
-    id: createPublicShiftId(shift, employeeName),
-    employeeId: '',
     employeeName,
     date: safeText(shift?.date),
     startTime: safeText(shift?.startTime),
@@ -80,7 +98,9 @@ function sanitizePublishedSchedule({ tenantId, weekStart, weekDays, shifts = [],
   const employeeById = new Map((employees || []).map((employee) => [employee.id, employee]));
   const publicShifts = (shifts || [])
     .filter((shift) => shift?.date && (!weekDaySet.size || weekDaySet.has(shift.date)))
+    .filter(isPublicWorkShift)
     .map((shift) => sanitizePublishedShift(shift, employeeById))
+    .filter((shift) => shift.employeeName && shift.date && shift.startTime && shift.endTime)
     .sort(sortByDateAndTime);
 
   return {
@@ -106,7 +126,9 @@ function sanitizePublishedMonth({
   const employeeById = new Map((employees || []).map((employee) => [employee.id, employee]));
   const publicShifts = (shifts || [])
     .filter((shift) => shift?.date && (!monthDaySet.size || monthDaySet.has(shift.date)))
+    .filter(isPublicWorkShift)
     .map((shift) => sanitizePublishedShift(shift, employeeById))
+    .filter((shift) => shift.employeeName && shift.date && shift.startTime && shift.endTime)
     .sort(sortByDateAndTime);
 
   return {

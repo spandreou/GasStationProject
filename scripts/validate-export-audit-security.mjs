@@ -16,6 +16,17 @@ function matchBlock(source, collectionName) {
   return source.slice(start, next === -1 ? undefined : next);
 }
 
+function matchIndentedBlockByMarker(source, marker) {
+  const start = source.indexOf(marker);
+  if (start === -1) return '';
+  const lineStart = source.lastIndexOf('\n', start) + 1;
+  const indent = source.slice(lineStart, start);
+  const nextPattern = new RegExp(`\\n${indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}match\\s+/`, 'g');
+  nextPattern.lastIndex = start + marker.length;
+  const next = nextPattern.exec(source);
+  return source.slice(start, next ? next.index : undefined);
+}
+
 const mainDashboard = read('src/components/scheduler/MainDashboard.jsx');
 const weekToolbar = read('src/components/scheduler/WeekToolbar.jsx');
 const firebaseConfig = read('src/firebase/config.js');
@@ -75,9 +86,12 @@ assert(firebaseConfig.includes("getStorage(app, `gs://${firebaseEnv.storageBucke
 assert(!firebaseConfig.includes("replace(/\\.firebasestorage\\.app$/i, '.appspot.com')"), 'Firebase config must not rewrite firebasestorage.app buckets to appspot.com.');
 
 const auditBlock = matchBlock(firestoreRules, 'audit_logs');
-assert(auditBlock.includes('allow read: if isAdmin();'), 'Audit logs must be readable only by admins.');
-assert(auditBlock.includes('allow create: if isAdmin() && validAuditLog();'), 'Audit logs must be creatable only by admins.');
-assert(auditBlock.includes('allow update, delete: if false;'), 'Audit logs must be immutable from clients.');
+assert(auditBlock.includes('allow read, write: if false;'), 'Legacy root audit_logs must deny all client access.');
+
+const tenantAuditBlock = matchIndentedBlockByMarker(firestoreRules, 'match /auditLogs/{auditLogId}');
+assert(tenantAuditBlock.includes('allow read: if isTenantAdmin(tenantId);'), 'Tenant audit logs must be readable only by matching tenant admins.');
+assert(tenantAuditBlock.includes('allow create: if isTenantAdmin(tenantId) && validAuditLog();'), 'Tenant audit logs must be creatable only by matching tenant admins.');
+assert(tenantAuditBlock.includes('allow update, delete: if false;'), 'Tenant audit logs must be immutable from clients.');
 
 const monthlyExportsBlock = matchBlock(firestoreRules, 'monthly_schedule_exports');
 assert(monthlyExportsBlock.includes('allow read: if isTenantAdmin(resource.data.tenantId);'), 'Monthly schedule export metadata must be tenant-admin-read only.');

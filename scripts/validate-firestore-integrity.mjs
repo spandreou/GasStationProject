@@ -33,6 +33,14 @@ function matchIndentedBlockByMarker(marker) {
   return firestoreRules.slice(start, next ? next.index : undefined);
 }
 
+function assertLegacyCollectionDenied(collectionName) {
+  const block = matchBlock(collectionName);
+  assert(block.includes('allow read, write: if false;'), `Legacy global ${collectionName} must deny all client access.`);
+  assert(!block.includes('allow read: if true;'), `Legacy global ${collectionName} must not be public readable.`);
+  assert(!block.includes('allow read: if isAdmin();'), `Legacy global ${collectionName} must not keep admin read access.`);
+  assert(!block.includes('allow create') && !block.includes('allow update') && !block.includes('allow delete'), `Legacy global ${collectionName} must not keep client write access.`);
+}
+
 const schedulerService = read('src/firebase/schedulerService.js');
 const firestoreCore = read('src/firebase/firestoreCore.js');
 const shiftService = read('src/firebase/shiftService.js');
@@ -69,10 +77,21 @@ assert(!/allow\s+(create|update|delete|write)[^;]*:\s*if\s+isSignedIn\s*\(\s*\)\
 assert(!/allow\s+read\s*,\s*write\s*:\s*if\s+true\s*;/.test(firestoreRulesWithoutComments), 'Rules must not allow public read/write.');
 assert(!/allow\s+(create|update|delete|write)[^;]*:\s*if\s+true\s*;/.test(firestoreRulesWithoutComments), 'Rules must not allow public writes.');
 
-assert(firestoreRules.includes('match /audit_logs/{auditLogId}'), 'Firestore rules must define audit_logs rules.');
-assert(matchBlock('audit_logs').includes('allow read: if isAdmin();'), 'Audit logs must be readable only by admins.');
-assert(matchBlock('audit_logs').includes('allow create: if isAdmin() && validAuditLog();'), 'Audit logs must be creatable only by admins.');
-assert(matchBlock('audit_logs').includes('allow update, delete: if false;'), 'Audit logs must be immutable from the client.');
+[
+  'employees',
+  'shifts',
+  'shiftTemplates',
+  'employeeAbsences',
+  'employeeAbsencesPublic',
+  'attendance_history',
+  'week_locks',
+  'week_history',
+  'week_templates',
+  'scheduler_settings',
+  'announcements',
+  'audit_logs',
+  'published_schedules',
+].forEach(assertLegacyCollectionDenied);
 assert(matchBlock('users').includes('allow read: if isAdmin() || isSelf(uid);'), 'SaaS users must be readable only by admin or owning uid.');
 assert(matchBlock('users').includes('allow create, update: if isAdmin() && validUserProfile(uid);'), 'SaaS users must be admin writable only.');
 assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.auth.uid'), 'Tenant memberships must support uid-based self lookup.');
@@ -127,27 +146,6 @@ assert(matchBlock('tenants').includes('allow update, delete: if false;'), 'Tenan
   assert(!matchIndentedBlockByMarker(marker).includes('allow read: if true;'), `Raw tenant scoped data must not be public readable: ${marker}`);
 });
 assert(firestoreRules.includes('generationRunId'), 'Firestore rules must allow generationRunId on generated shifts/audit logs.');
-assert(matchBlock('attendance_history').includes('allow read: if isAdmin();'), 'Attendance history must be readable only by admins.');
-assert(matchBlock('week_history').includes('allow read: if isAdmin();'), 'Week history must be readable only by admins.');
-assert(
-  matchBlock('employees').includes('allow read: if isAdmin();') &&
-    matchBlock('employees').includes('allow update: if isAdmin()'),
-  'Full employee documents and scheduling role fields must be admin-only.',
-);
-assert(
-  matchBlock('employeeAbsences').includes('allow read: if isAdmin();') &&
-    matchBlock('employeeAbsences').includes('allow create: if isAdmin() && validAbsence();') &&
-    matchBlock('employeeAbsences').includes('allow update: if isAdmin()') &&
-    matchBlock('employeeAbsences').includes('allow delete: if isAdmin();'),
-  'Private employeeAbsences must be admin-only read/write.',
-);
-assert(
-  matchBlock('employeeAbsencesPublic').includes('allow read: if isAdmin();') &&
-    matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin() && validPublicAbsence();') &&
-    matchBlock('employeeAbsencesPublic').includes('allow update: if isAdmin() && validPublicAbsencePatch();') &&
-    matchBlock('employeeAbsencesPublic').includes('allow delete: if isAdmin();'),
-  'Legacy employeeAbsencesPublic must be admin-only and unavailable to anonymous/public users.',
-);
 assert(
   firestoreRules.includes("function publicAbsenceFields()") &&
     firestoreRules.includes("'id', 'employeeName', 'typeLabel', 'startDate', 'endDate', 'totalDays', 'status'"),

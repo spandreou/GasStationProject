@@ -32,9 +32,21 @@ function toFirestoreFields(data) {
     else if (typeof value === 'boolean') fields[key] = { booleanValue: value };
     else if (typeof value === 'number') fields[key] = Number.isInteger(value) ? { integerValue: value } : { doubleValue: value };
     else if (value === null) fields[key] = { nullValue: null };
+    else if (Array.isArray(value)) fields[key] = { arrayValue: { values: value.map((item) => toFirestoreValue(item)) } };
+    else if (value && typeof value === 'object') fields[key] = { mapValue: toFirestoreFields(value) };
     else throw new Error(`Unsupported Firestore test value for ${key}`);
   }
   return { fields };
+}
+
+function toFirestoreValue(value) {
+  if (typeof value === 'string') return { stringValue: value };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') return Number.isInteger(value) ? { integerValue: value } : { doubleValue: value };
+  if (value === null) return { nullValue: null };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map((item) => toFirestoreValue(item)) } };
+  if (value && typeof value === 'object') return { mapValue: toFirestoreFields(value) };
+  throw new Error('Unsupported Firestore test value.');
 }
 
 async function requestJson(url, options = {}) {
@@ -46,6 +58,23 @@ async function requestJson(url, options = {}) {
     throw new Error(`Request failed ${response.status}: ${message}`);
   }
   return body;
+}
+
+async function firestoreRequest(path, { method = 'GET', idToken, data } = {}) {
+  const headers = {};
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+  if (data) headers['Content-Type'] = 'application/json';
+
+  return fetch(`${firestoreBase}/${path}`, {
+    method,
+    headers,
+    body: data ? JSON.stringify(toFirestoreFields(data)) : undefined,
+  });
+}
+
+async function expectFirestoreStatus(path, options, expectedStatus, message) {
+  const response = await firestoreRequest(path, options);
+  assert.equal(response.status, expectedStatus, message);
 }
 
 async function setAdminDoc(path, data) {
@@ -240,6 +269,125 @@ async function run() {
     headers: { Authorization: `Bearer ${owner.idToken}` },
   });
   assert.equal(sameTenantMembershipDelete.status, 403, 'client tenant admin must not delete tenantMemberships');
+
+  const legacyCollections = [
+    'employees',
+    'shifts',
+    'shiftTemplates',
+    'employeeAbsences',
+    'employeeAbsencesPublic',
+    'attendance_history',
+    'week_locks',
+    'week_history',
+    'week_templates',
+    'scheduler_settings',
+    'announcements',
+    'audit_logs',
+    'published_schedules',
+  ];
+  for (const collectionName of legacyCollections) {
+    await expectFirestoreStatus(
+      `${collectionName}/lockdown-test`,
+      { idToken: owner.idToken },
+      403,
+      `admin client must not read legacy global ${collectionName}`,
+    );
+    await expectFirestoreStatus(
+      `${collectionName}/lockdown-test`,
+      { method: 'PATCH', idToken: owner.idToken, data: { title: 'denied' } },
+      403,
+      `admin client must not write legacy global ${collectionName}`,
+    );
+    await expectFirestoreStatus(
+      `${collectionName}/lockdown-test`,
+      {},
+      403,
+      `anonymous client must not read legacy global ${collectionName}`,
+    );
+  }
+
+  const tenantWriteCases = [
+    ['employees/lockdown-employee', { fullName: 'Lockdown Employee' }],
+    ['shifts/lockdown-shift', { employeeId: 'lockdown-employee', date: '2026-01-05', startTime: '08:00', endTime: '16:00' }],
+    ['absences/lockdown-absence', { employeeId: 'lockdown-employee', type: 'LEAVE', startDate: '2026-01-06', endDate: '2026-01-06', replacementMode: 'AUTO' }],
+    ['settings/scheduler', { generatorRules: {} }],
+    ['announcements/lockdown-announcement', { title: 'Lockdown Announcement', body: 'Tenant-scoped rules test.' }],
+  ];
+  for (const [path, data] of tenantWriteCases) {
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      { method: 'PATCH', idToken: owner.idToken, data },
+      200,
+      `bp-kallis admin must write tenant-scoped ${path}`,
+    );
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      { idToken: owner.idToken },
+      200,
+      `bp-kallis admin must read tenant-scoped ${path}`,
+    );
+  }
+
+  await setAdminDoc(`tenants/${TENANT_ID}/publicSchedules/2026-01-05`, {
+    tenantId: TENANT_ID,
+    weekStart: '2026-01-05',
+    weekEnd: '2026-01-11',
+    shiftCount: 0,
+    shifts: [],
+  });
+  await setAdminDoc(`tenants/${TENANT_ID}/publicMonths/2026-01`, {
+    tenantId: TENANT_ID,
+    yearMonth: '2026-01',
+    monthStart: '2026-01-01',
+    monthEnd: '2026-01-31',
+    shiftCount: 0,
+    shifts: [],
+  });
+  await setAdminDoc(`tenants/${TENANT_ID}/publicEmployees/lockdown-employee`, {
+    tenantId: TENANT_ID,
+    fullName: 'Lockdown Employee',
+  });
+  await setAdminDoc(`tenants/${TENANT_ID}/publicAnnouncements/lockdown-announcement`, {
+    tenantId: TENANT_ID,
+    title: 'Public',
+    body: 'Public tenant announcement.',
+  });
+
+  for (const path of [
+    'publicSchedules/2026-01-05',
+    'publicMonths/2026-01',
+    'publicEmployees/lockdown-employee',
+    'publicAnnouncements/lockdown-announcement',
+  ]) {
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      {},
+      200,
+      `anonymous client must read sanitized tenant public ${path}`,
+    );
+  }
+  for (const path of ['employees/lockdown-employee', 'shifts/lockdown-shift', 'absences/lockdown-absence']) {
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      {},
+      403,
+      `anonymous client must not read raw tenant ${path}`,
+    );
+  }
+  for (const path of ['employees/lockdown-employee', 'shifts/lockdown-shift', 'absences/lockdown-absence']) {
+    await expectFirestoreStatus(
+      `tenants/eko-example/${path}`,
+      { idToken: owner.idToken },
+      403,
+      `bp-kallis admin must not read cross-tenant ${path}`,
+    );
+    await expectFirestoreStatus(
+      `tenants/eko-example/${path}`,
+      { method: 'PATCH', idToken: owner.idToken, data: { fullName: 'Denied' } },
+      403,
+      `bp-kallis admin must not write cross-tenant ${path}`,
+    );
+  }
 
   const { ticket, redirectUrl, expiresAt } = await createTicket({ idToken: owner.idToken });
   assert.ok(redirectUrl.startsWith(`${TENANT_ORIGIN}/app#authTicket=`), 'redirect must target tenant fragment');

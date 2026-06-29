@@ -494,10 +494,7 @@ service cloud.firestore {
     }
 
     match /employees/{employeeId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin() && validEmployee();
-      allow update: if isAdmin() && onlyChanged(employeeFields()) && validEmployee();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /employees_public/{employeeId} {
@@ -513,22 +510,15 @@ service cloud.firestore {
     }
 
     match /shifts/{shiftId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin() && validShift();
-      allow update: if isAdmin() && onlyChanged(shiftFields()) && validShift();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /shiftTemplates/{templateId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validTemplate();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /published_schedules/{resourceId} {
-      allow read: if true;
-      allow create, update: if isAdmin() && validPublishedSchedule(resourceId);
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /monthly_schedule_exports/{exportId} {
@@ -542,17 +532,11 @@ service cloud.firestore {
     }
 
     match /employeeAbsences/{absenceId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin() && validAbsence();
-      allow update: if isAdmin() && onlyChanged(absenceFields()) && validAbsence();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /employeeAbsencesPublic/{absenceId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin() && validPublicAbsence();
-      allow update: if isAdmin() && validPublicAbsencePatch();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /employee_absences_private/{absenceId} {
@@ -562,45 +546,31 @@ service cloud.firestore {
     }
 
     match /announcements/{announcementId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validAnnouncement();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /attendance_history/{historyId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validAttendanceHistory();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /week_locks/{weekId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validWeekLock();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /week_history/{historyId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validWeekHistory();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /week_templates/{templateId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validTemplate();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /scheduler_settings/{settingsId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validSchedulerSettings();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /audit_logs/{auditLogId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin() && validAuditLog();
-      allow update, delete: if false;
+      allow read, write: if false;
     }
 
     match /users/{uid} {

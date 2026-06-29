@@ -48,12 +48,19 @@ const publicReadMatches = [...firestoreRules.matchAll(/^[ \t]*match\s+\/([A-Za-z
   .filter((collectionName) => matchIndentedBlock(collectionName).includes('allow read: if true;'));
 const allowedPublicReadCollections = new Set([
   'employees_public',
-  'published_schedules',
   'publicEmployees',
   'publicSchedules',
   'publicMonths',
   'publicAnnouncements',
 ]);
+
+function assertLegacyCollectionDenied(collectionName) {
+  const block = matchBlock(collectionName);
+  assert(block.includes('allow read, write: if false;'), `Legacy global ${collectionName} must deny all client access.`);
+  assert(!block.includes('allow read: if true;'), `Legacy global ${collectionName} must not be public readable.`);
+  assert(!block.includes('allow read: if isAdmin();'), `Legacy global ${collectionName} must not keep admin read access.`);
+  assert(!block.includes('allow create') && !block.includes('allow update') && !block.includes('allow delete'), `Legacy global ${collectionName} must not keep client write access.`);
+}
 
 assert(!combinedClientAuth.includes('VITE_ADMIN_PASSWORD'), 'Client/admin docs must not reference VITE_ADMIN_PASSWORD.');
 assert(!combinedClientAuth.includes('admin123'), 'Client/admin docs must not expose demo admin password fallback.');
@@ -91,13 +98,21 @@ assert(
   publicReadMatches.every((collectionName) => allowedPublicReadCollections.has(collectionName)),
   `Firestore rules expose unexpected public reads: ${publicReadMatches.filter((collectionName) => !allowedPublicReadCollections.has(collectionName)).join(', ')}`,
 );
-assert(matchBlock('employeeAbsencesPublic').includes('allow read: if isAdmin();'), 'Legacy public absence mirror must not be anonymously readable.');
-assert(matchBlock('employeeAbsencesPublic').includes('allow create: if isAdmin()'), 'Sanitized public absence docs must be admin writable only.');
-assert(matchBlock('published_schedules').includes('allow read: if true;'), 'Sanitized published schedules must remain public readable.');
-assert(
-  matchBlock('published_schedules').includes('allow create, update: if isAdmin() && validPublishedSchedule(resourceId);'),
-  'Sanitized published schedules must be admin writable only.',
-);
+[
+  'employees',
+  'shifts',
+  'shiftTemplates',
+  'employeeAbsences',
+  'employeeAbsencesPublic',
+  'attendance_history',
+  'week_locks',
+  'week_history',
+  'week_templates',
+  'scheduler_settings',
+  'announcements',
+  'audit_logs',
+  'published_schedules',
+].forEach(assertLegacyCollectionDenied);
 assert(!firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must not authorize tenant admins by custom claim.');
 assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Firestore rules must validate tenant admin roles.');
 assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');

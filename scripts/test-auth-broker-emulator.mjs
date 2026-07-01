@@ -220,6 +220,9 @@ async function run() {
   const owner = await createAuthUser({ uid: 'test-owner-uid', email: 'owner@example.test' });
   assert.equal(owner.uid, 'test-owner-uid', 'Auth emulator should create the expected owner uid');
 
+  const ekoOwner = await createAuthUser({ uid: 'other-uid', email: 'eko-owner@example.test' });
+  assert.equal(ekoOwner.uid, 'other-uid', 'Auth emulator should create the expected EKO owner uid');
+
   const ownMembershipRead = await fetch(`${firestoreBase}/tenantMemberships/test-owner-uid_${TENANT_ID}`, {
     headers: { Authorization: `Bearer ${owner.idToken}` },
   });
@@ -390,6 +393,57 @@ async function run() {
       `bp-kallis admin must not write cross-tenant ${path}`,
     );
   }
+
+  // EKO admin must write and read its own tenant-scoped collections
+  const ekoTenantWriteCases = [
+    ['employees/lockdown-eko-employee', { fullName: 'Lockdown EKO Employee' }],
+    ['shifts/lockdown-eko-shift', { employeeId: 'lockdown-eko-employee', date: '2026-01-05', startTime: '08:00', endTime: '16:00' }],
+  ];
+  for (const [path, data] of ekoTenantWriteCases) {
+    await expectFirestoreStatus(
+      `tenants/eko-example/${path}`,
+      { method: 'PATCH', idToken: ekoOwner.idToken, data },
+      200,
+      `eko-example admin must write tenant-scoped ${path}`,
+    );
+    await expectFirestoreStatus(
+      `tenants/eko-example/${path}`,
+      { idToken: ekoOwner.idToken },
+      200,
+      `eko-example admin must read tenant-scoped ${path}`,
+    );
+  }
+
+  // EKO admin must NOT read or write bp-kallis tenant-scoped collections
+  for (const path of ['employees/lockdown-employee', 'shifts/lockdown-shift', 'absences/lockdown-absence']) {
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      { idToken: ekoOwner.idToken },
+      403,
+      `eko-example admin must not read cross-tenant ${path}`,
+    );
+    await expectFirestoreStatus(
+      `tenants/${TENANT_ID}/${path}`,
+      { method: 'PATCH', idToken: ekoOwner.idToken, data: { fullName: 'Denied' } },
+      403,
+      `eko-example admin must not write cross-tenant ${path}`,
+    );
+  }
+
+  // Anonymous user must read eko-example public collections
+  await setAdminDoc(`tenants/eko-example/publicSchedules/2026-01-05`, {
+    tenantId: 'eko-example',
+    weekStart: '2026-01-05',
+    weekEnd: '2026-01-11',
+    shiftCount: 0,
+    shifts: [],
+  });
+  await expectFirestoreStatus(
+    `tenants/eko-example/publicSchedules/2026-01-05`,
+    {},
+    200,
+    `anonymous client must read EKO public schedules`,
+  );
 
   const { ticket, redirectUrl, expiresAt } = await createTicket({ idToken: owner.idToken });
   assert.ok(redirectUrl.startsWith(`${TENANT_ORIGIN}/app#authTicket=`), 'redirect must target tenant fragment');

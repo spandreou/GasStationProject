@@ -15,7 +15,7 @@ const MAX_PASSWORD_LENGTH = 128;
 const isAuthBrokerEnabled = String(import.meta.env.VITE_ENABLE_AUTH_BROKER || '').trim().toLowerCase() === 'true';
 
 function getSafeLoginError() {
-  return 'Δεν ήταν δυνατή η σύνδεση. Έλεγξε τα στοιχεία και δοκίμασε ξανά.';
+  return 'Τα στοιχεία σύνδεσης δεν είναι σωστά ή ο λογαριασμός δεν είναι διαθέσιμος.';
 }
 
 export default function LoginPage() {

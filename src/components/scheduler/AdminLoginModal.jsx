@@ -60,7 +60,7 @@ export default function AdminLoginModal({
           'Αποτυχία δικτύου. Έλεγξε internet και ότι το domain είναι στα Authorized Domains του Firebase Auth.',
         );
       } else {
-        setSubmitError(error?.message || 'Αποτυχία σύνδεσης. Δες την κονσόλα για λεπτομέρειες.');
+        setSubmitError('Τα στοιχεία σύνδεσης δεν είναι σωστά ή ο λογαριασμός δεν είναι διαθέσιμος.');
       }
     } finally {
       setIsSubmitting(false);
@@ -71,11 +71,11 @@ export default function AdminLoginModal({
     setIsSendingReset(true);
     setSubmitError('');
     try {
-      const sent = await onRequestPasswordReset(credentials.email);
-      if (!sent) {
-        setSubmitError('Δεν έγινε αποστολή email επαναφοράς. Έλεγξε το email διαχειριστή.');
-      }
+      await onRequestPasswordReset(credentials.email);
+    } catch {
+      // Keep response generic
     } finally {
+      setSubmitError('Αν υπάρχει λογαριασμός με αυτό το email, θα σταλεί σύνδεσμος επαναφοράς.');
       setIsSendingReset(false);
     }
   }

@@ -374,7 +374,7 @@ export default function AbsencesPanel({
         type="button"
         data-testid="add-absence-button"
         onClick={openCreateModal}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-600 disabled:opacity-60"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-600 disabled:opacity-60"
         disabled={isSaving}
       >
         <Plus size={14} />
@@ -510,7 +510,7 @@ export default function AbsencesPanel({
                       type="button"
                       data-testid="edit-absence-button"
                       onClick={() => openEditModal(absence)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-cyan-300/35 px-2 py-1 font-semibold hover:bg-white/10"
+                      className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-cyan-300/35 px-3 py-2 font-semibold hover:bg-white/10"
                     >
                       <Pencil size={12} />
                       Edit
@@ -520,7 +520,7 @@ export default function AbsencesPanel({
                         type="button"
                         data-testid="cancel-absence-button"
                         onClick={() => onCancelAbsence?.(absence.id)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-amber-300/45 px-2 py-1 font-semibold hover:bg-amber-300/10"
+                        className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-amber-300/45 px-3 py-2 font-semibold hover:bg-amber-300/10"
                       >
                         <Ban size={12} />
                         Ακύρωση
@@ -532,7 +532,7 @@ export default function AbsencesPanel({
                       onClick={() => {
                         if (window.confirm('Να διαγραφεί οριστικά η άδεια;')) onDeleteAbsence?.(absence.id);
                       }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-300/45 px-2 py-1 font-semibold hover:bg-red-300/10"
+                      className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-red-300/45 px-3 py-2 font-semibold hover:bg-red-300/10"
                     >
                       <Trash2 size={12} />
                       Delete

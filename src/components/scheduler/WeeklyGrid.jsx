@@ -525,10 +525,10 @@ const DayBox = memo(function DayBox({
 
 function ScheduleModeSelector({ scheduleMode, onChange }) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+    <label className="flex w-full flex-col items-stretch gap-1.5 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 sm:inline-flex sm:w-auto sm:flex-row sm:items-center sm:gap-2 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
       Τύπος Προγράμματος
       <select
-        className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+        className="input-glass min-h-11 w-full rounded-md border border-slate-300 px-2 py-2 text-xs text-slate-900 sm:min-h-0 sm:w-auto sm:py-1 dark:border-cyan-300/40 dark:text-white"
         value={scheduleMode}
         data-testid="schedule-mode-select"
         onChange={(event) => onChange?.(event.target.value)}
@@ -585,11 +585,10 @@ export default function WeeklyGrid({
   const densityClasses = DENSITY_CLASSES[density] || DENSITY_CLASSES.comfortable;
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
   const gridSectionRef = useRef(null);
-  const scrollRef = useRef(null);
   const dayEditorFormRef = useRef(null);
   const dayEditorEmployeeSelectRef = useRef(null);
   const dayEditorDialogRef = useRef(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeDay, setActiveDay] = useState('');
   const [isCreateFormHighlighted, setIsCreateFormHighlighted] = useState(false);
 
   const grouped = useMemo(() => groupAndSortShiftsByDay(shifts), [shifts]);
@@ -682,42 +681,37 @@ export default function WeeklyGrid({
   }, [scheduleMode, weekDays]);
 
   useEffect(() => {
-    if (scheduleMode !== 'week') {
-      setActiveIndex(0);
-      return undefined;
-    }
-
     let frameId = 0;
 
     const updateActiveDay = () => {
       if (typeof window === 'undefined') return;
-      const container = scrollRef.current;
+      const container = gridSectionRef.current;
       if (!container) return;
 
       if (window.matchMedia('(min-width: 1024px)').matches) {
-        setActiveIndex(0);
+        setActiveDay('');
         return;
       }
 
-      const dayCards = Array.from(container.children || []);
+      const dayCards = Array.from(container.querySelectorAll('[data-day-anchor]'));
       if (!dayCards.length) return;
 
       const viewportFocusY = window.innerHeight * 0.42;
-      let closestIndex = 0;
+      let closestDay = dayCards[0].getAttribute('data-day-anchor') || '';
       let closestDistance = Number.POSITIVE_INFINITY;
 
-      dayCards.forEach((card, index) => {
+      dayCards.forEach((card) => {
         const rect = card.getBoundingClientRect();
         if (rect.bottom < 0 || rect.top > window.innerHeight) return;
         const cardFocusY = rect.top + rect.height * 0.38;
         const distance = Math.abs(cardFocusY - viewportFocusY);
         if (distance < closestDistance) {
           closestDistance = distance;
-          closestIndex = index;
+          closestDay = card.getAttribute('data-day-anchor') || closestDay;
         }
       });
 
-      setActiveIndex((current) => (current === closestIndex ? current : closestIndex));
+      setActiveDay((current) => (current === closestDay ? current : closestDay));
     };
 
     const scheduleUpdate = () => {
@@ -734,7 +728,7 @@ export default function WeeklyGrid({
       window.removeEventListener('scroll', scheduleUpdate);
       window.removeEventListener('resize', scheduleUpdate);
     };
-  }, [scheduleMode, weekDays]);
+  }, [scheduleMode, weekDays, monthDays]);
 
   const openDayEditor = useCallback((date, title, subtitle, shift = null) => {
     if (!canManage) return;
@@ -946,9 +940,9 @@ export default function WeeklyGrid({
       data-density={density}
       className="glass-panel relative w-full min-w-0 overflow-hidden rounded-2xl p-3 sm:p-4 lg:p-5"
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
+      <div className="mb-3 flex flex-col items-stretch gap-2 sm:mb-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">Πίνακας Βαρδιών</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <ScheduleModeSelector scheduleMode={scheduleMode} onChange={onChangeScheduleMode} />
           {isSaving ? (
             <div className="inline-flex items-center gap-1 rounded-full border border-brand-200/70 bg-brand-50/80 px-2 py-1 text-[11px] font-semibold text-brand-800 dark:border-cyan-300/45 dark:bg-cyan-500/15 dark:text-cyan-100">
@@ -962,12 +956,12 @@ export default function WeeklyGrid({
       {scheduleMode === 'week' ? (
         <>
           <div className="mb-4 grid gap-3 md:grid-cols-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-grid grid-cols-3 gap-1 rounded-lg border border-slate-300/70 bg-white/45 p-1 dark:border-cyan-300/35 dark:bg-slate-900/45">
+            <div className="grid w-full min-w-0 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <div className="hidden grid-cols-3 gap-1 rounded-lg border border-slate-300/70 bg-white/45 p-1 lg:inline-grid dark:border-cyan-300/35 dark:bg-slate-900/45">
                 <button
                   type="button"
                   onClick={onPrevWeek}
-                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
                 >
                   <ChevronLeft size={14} />
                   Προηγ.
@@ -975,7 +969,7 @@ export default function WeeklyGrid({
                 <button
                   type="button"
                   onClick={onCurrentWeek}
-                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
                 >
                   <RefreshCw size={14} />
                   Τρέχουσα
@@ -983,7 +977,7 @@ export default function WeeklyGrid({
                 <button
                   type="button"
                   onClick={onNextWeek}
-                  className="inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
+                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800/70"
                 >
                   Επόμ.
                   <ChevronRight size={14} />
@@ -1002,12 +996,12 @@ export default function WeeklyGrid({
                     commitWeekJump(event.currentTarget.value);
                   }
                 }}
-                className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                className="input-glass min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 sm:w-auto dark:border-cyan-300/45 dark:text-white"
               />
               {canManage ? (
                 <>
                   <select
-                    className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                    className="input-glass min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 sm:w-auto dark:border-cyan-300/45 dark:text-white"
                     value={selectedHistoryWeekId}
                     onChange={(event) => onSelectHistoryWeek?.(event.target.value)}
                   >
@@ -1022,7 +1016,7 @@ export default function WeeklyGrid({
                     type="button"
                     onClick={onLoadSelectedHistoryWeek}
                     disabled={!selectedHistoryWeekId}
-                    className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                    className="min-h-11 rounded-lg border border-slate-300 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
                   >
                     Φόρτωση Εβδομάδας
                   </button>
@@ -1031,9 +1025,9 @@ export default function WeeklyGrid({
             </div>
 
             {canManage ? (
-            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 md:flex md:flex-wrap md:items-center md:justify-end">
               <select
-                className="input-glass rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 dark:border-cyan-300/45 dark:text-white"
+                className="input-glass min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 md:w-auto dark:border-cyan-300/45 dark:text-white"
                 value={selectedTemplateId}
                 onChange={(event) => onSelectTemplate?.(event.target.value)}
               >
@@ -1052,7 +1046,7 @@ export default function WeeklyGrid({
                   await onSaveAsTemplate?.(name);
                 }}
                 disabled={!canManage}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                className="min-h-11 rounded-lg border border-slate-300 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
                 Αποθήκευση ως Πρότυπο
               </button>
@@ -1060,7 +1054,7 @@ export default function WeeklyGrid({
                 type="button"
                 onClick={onLoadSelectedTemplate}
                 disabled={!canManage || !selectedTemplateId}
-                className="rounded-lg border border-slate-300 bg-white/60 px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
+                className="min-h-11 rounded-lg border border-slate-300 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100"
               >
                 Φόρτωση Προτύπου
               </button>
@@ -1068,7 +1062,7 @@ export default function WeeklyGrid({
                 type="button"
                 onClick={onMagicWand}
                 disabled={!canManage}
-                className="rounded-lg bg-brand-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Αυτόματη Δημιουργία
               </button>
@@ -1078,7 +1072,6 @@ export default function WeeklyGrid({
 
           <div className={`w-full min-w-0 rounded-lg border border-white/45 bg-white/25 dark:border-cyan-300/20 dark:bg-slate-900/30 ${densityClasses.weekBlock}`}>
             <div
-              ref={scrollRef}
               className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {
@@ -1096,7 +1089,7 @@ export default function WeeklyGrid({
                       specialDayConfig={specialDaysByDate?.[day]}
                       canManage={canManage}
                       isWeekLocked={isWeekLocked}
-                      isActive={index === activeIndex}
+                      isActive={day === activeDay}
                       getEmployeeById={getEmployeeById}
                       getSundayViolationMessage={getSundayViolationMessage}
                       conflictShiftIds={conflictShiftIds}
@@ -1115,14 +1108,14 @@ export default function WeeklyGrid({
         </>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+          <div className="mb-4 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <label className="flex w-full items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 sm:w-auto dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
               Μήνας
               <select
                 value={selectedMonth}
                 data-testid="monthly-month-select"
                 onChange={(event) => onSelectMonth?.(Number(event.target.value))}
-                className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+                className="input-glass min-h-11 flex-1 rounded-md border border-slate-300 px-2 py-2 text-xs text-slate-900 sm:min-h-0 sm:flex-none sm:py-1 dark:border-cyan-300/40 dark:text-white"
               >
                 {MONTH_OPTIONS.map((monthLabel, index) => (
                   <option key={monthLabel} value={index}>
@@ -1132,13 +1125,13 @@ export default function WeeklyGrid({
               </select>
             </label>
 
-            <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
+            <label className="flex w-full items-center gap-2 rounded-lg border border-slate-300/70 bg-white/60 px-3 py-2 text-xs font-semibold text-slate-900 sm:w-auto dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100">
               Έτος
               <select
                 value={selectedYear}
                 data-testid="monthly-year-select"
                 onChange={(event) => onSelectYear?.(Number(event.target.value))}
-                className="input-glass rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-900 dark:border-cyan-300/40 dark:text-white"
+                className="input-glass min-h-11 flex-1 rounded-md border border-slate-300 px-2 py-2 text-xs text-slate-900 sm:min-h-0 sm:flex-none sm:py-1 dark:border-cyan-300/40 dark:text-white"
               >
                 {monthYears.map((year) => (
                   <option key={year} value={year}>
@@ -1153,7 +1146,7 @@ export default function WeeklyGrid({
                 type="button"
                 onClick={onGenerateMonthlySchedule}
                 data-testid="generate-monthly-schedule"
-                className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600"
+                className="min-h-11 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-600"
               >
                 Αυτόματη δημιουργία μηνιαίου προγράμματος
               </button>
@@ -1245,6 +1238,7 @@ export default function WeeklyGrid({
                           specialDayConfig={specialDaysByDate?.[date]}
                           canManage={canManage}
                           isWeekLocked={false}
+                          isActive={date === activeDay}
                           getEmployeeById={getEmployeeById}
                           getSundayViolationMessage={getSundayViolationMessage}
                           conflictShiftIds={conflictShiftIds}

@@ -24,18 +24,18 @@ export default function AnalyticsPanel({
 
   return (
     <section className="glass-panel h-full rounded-2xl p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2 sm:mb-4">
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex flex-col items-stretch gap-2 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <Clock3 size={18} className="text-brand-600 dark:text-cyan-300" />
-          <h2 className="text-base font-bold text-slate-900 sm:text-lg dark:text-white">
+          <h2 className="min-w-0 text-base font-bold leading-snug text-slate-900 sm:text-lg dark:text-white">
             {isMonthMode ? 'Ώρες Μήνα Ανά Υπάλληλο' : 'Ώρες Εβδομάδας Ανά Υπάλληλο'}
           </h2>
         </div>
-        <div className="inline-flex rounded-lg border border-slate-300/70 bg-white/50 p-1 dark:border-cyan-300/35 dark:bg-slate-900/45">
+        <div className="grid grid-cols-2 rounded-lg border border-slate-300/70 bg-white/50 p-1 dark:border-cyan-300/35 dark:bg-slate-900/45 sm:inline-grid">
           <button
             type="button"
             onClick={() => onModeChange?.('week')}
-            className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+            className={`min-h-10 rounded-md px-2 py-1 text-[11px] font-semibold transition sm:min-h-0 ${
               !isMonthMode
                 ? 'bg-brand-500 text-white'
                 : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
@@ -46,7 +46,7 @@ export default function AnalyticsPanel({
           <button
             type="button"
             onClick={() => onModeChange?.('month')}
-            className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+            className={`min-h-10 rounded-md px-2 py-1 text-[11px] font-semibold transition sm:min-h-0 ${
               isMonthMode
                 ? 'bg-brand-500 text-white'
                 : 'text-slate-700 hover:bg-white/70 dark:text-slate-200 dark:hover:bg-slate-800/70'
@@ -97,9 +97,9 @@ export default function AnalyticsPanel({
 
             return (
               <div key={employee.id} className="glass-soft rounded-lg px-3 py-2 text-xs sm:text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">{employee.fullName}</span>
-                  <span className="font-bold text-slate-900 dark:text-white">{totalsByEmployee[employee.id] || 0} ώρες</span>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 break-words font-medium text-slate-800 dark:text-slate-100">{employee.fullName}</span>
+                  <span className="shrink-0 font-bold text-slate-900 dark:text-white">{totalsByEmployee[employee.id] || 0} ώρες</span>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-300">
                   Βάρδιες: {shiftsCountByEmployee?.[employee.id] || 0} | Πρωινές: {breakdown.morning || 0} | Ενδιάμεσες:{' '}

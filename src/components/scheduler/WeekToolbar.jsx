@@ -204,7 +204,7 @@ function ExportDropdown({ onExportWeekPdf, onExportMonthPdf, onExportExcel, onEx
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/35 px-2.5 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
+        className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/35 px-2.5 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65"
       >
         {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
         {isExporting ? 'Εξαγωγή...' : 'Εξαγωγή'}
@@ -226,15 +226,15 @@ function ToolbarGroup({ title, children }) {
 }
 
 const neutralButtonClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65';
+  'inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-white/35 bg-white/40 px-3 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition active:scale-[0.99] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-300/35 dark:bg-slate-900/45 dark:text-slate-100 dark:hover:bg-slate-900/65';
 const primaryButtonClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 items-center justify-center gap-1 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50';
 const infoButtonClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-300/60 bg-emerald-50/85 px-3 py-2 text-xs font-semibold text-emerald-900 transition active:scale-[0.99] hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-300/35 dark:bg-emerald-500/15 dark:text-emerald-100 dark:hover:bg-emerald-500/25';
+  'inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-emerald-300/60 bg-emerald-50/85 px-3 py-2 text-xs font-semibold text-emerald-900 transition active:scale-[0.99] hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-300/35 dark:bg-emerald-500/15 dark:text-emerald-100 dark:hover:bg-emerald-500/25';
 const dangerButtonClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg border border-red-300/70 bg-red-500/90 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-red-300/70 bg-red-500/90 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50';
 const warningDangerClass =
-  'inline-flex items-center justify-center gap-1 rounded-lg border border-amber-300/70 bg-amber-500/90 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-amber-300/70 bg-amber-500/90 px-3 py-2 text-xs font-semibold text-white transition active:scale-[0.99] hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50';
 
 export default function WeekToolbar({
   weekDays,
@@ -293,7 +293,7 @@ export default function WeekToolbar({
             <p className="text-[11px] text-slate-700 sm:text-sm dark:text-slate-300">{weekRangeText}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <SyncIndicator syncStatus={syncStatus} />
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
@@ -319,7 +319,7 @@ export default function WeekToolbar({
                 type="button"
                 onClick={onOpenAdminLogin}
                 disabled={isAdminTransitioning}
-                className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-semibold text-amber-900 backdrop-blur-sm transition active:scale-[0.99] hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
+                className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs font-semibold text-amber-900 backdrop-blur-sm transition active:scale-[0.99] hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-300/60 dark:bg-amber-500/15 dark:text-amber-100 dark:hover:bg-amber-500/25"
               >
                 {isAdminTransitioning ? <Loader2 size={16} className="animate-spin" /> : <LockKeyhole size={16} />}
                 {isAdminTransitioning ? 'Ενεργοποίηση...' : 'Είσοδος Διαχειριστή'}
@@ -336,7 +336,7 @@ export default function WeekToolbar({
         {isAdmin ? (
           <div className="mt-3 grid gap-3 xl:grid-cols-3">
             <ToolbarGroup title="Editing">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <LoadingButton
                   icon={Save}
                   label="Αποθήκευση"
@@ -369,7 +369,7 @@ export default function WeekToolbar({
                 ))}
               </select>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <LoadingButton
                   icon={FileText}
                   label="Φόρτωση Template"

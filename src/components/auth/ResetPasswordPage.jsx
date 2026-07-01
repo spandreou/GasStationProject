@@ -25,7 +25,7 @@ export default function ResetPasswordPage() {
     async function verifyCode() {
       if (!oobCode) {
         setStatus('invalid');
-        setMessage('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει.');
+        setMessage('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει. Ζήτησε νέο email επαναφοράς.');
         return;
       }
 
@@ -38,7 +38,7 @@ export default function ResetPasswordPage() {
       } catch {
         if (!cancelled) {
           setStatus('invalid');
-          setMessage('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει.');
+          setMessage('Ο σύνδεσμος επαναφοράς δεν είναι έγκυρος ή έχει λήξει. Ζήτησε νέο email επαναφοράς.');
         }
       }
     }

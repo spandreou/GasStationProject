@@ -18,6 +18,8 @@ Additional Options:
   --verify                  Verify platform admin document exists
   --overwrite               Allow overwriting an existing platform admin
   --emulator                Target the local emulator only (required for writes in this phase)
+  --live                    Target the production/live database
+  --confirm-production-bootstrap Confirms you intend to write to production database
 `);
 }
 
@@ -28,6 +30,8 @@ function parseArgs(argsArray) {
     verify: false,
     overwrite: false,
     emulator: false,
+    live: false,
+    confirmProductionBootstrap: false,
     projectId: DEFAULT_PROJECT_ID,
     role: 'SUPER_ADMIN',
   };
@@ -54,6 +58,10 @@ function parseArgs(argsArray) {
       parsed.overwrite = true;
     } else if (arg === '--emulator') {
       parsed.emulator = true;
+    } else if (arg === '--live') {
+      parsed.live = true;
+    } else if (arg === '--confirm-production-bootstrap') {
+      parsed.confirmProductionBootstrap = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -102,19 +110,25 @@ async function run() {
     return;
   }
 
-  // Safety Gate: Block live production writes in Phase 2C.5B
+  // Safety Gate: Block live production writes unless explicitly confirmed
   if (!config.emulator) {
-    console.error('Error: Production platform admin bootstrap is disabled in Phase 2C.5B. Use --emulator or request explicit approval for live bootstrap.');
-    process.exitCode = 1;
-    return;
+    if (!config.live || !config.confirmProductionBootstrap || config.projectId !== 'gasstationproject-9dd89') {
+      console.error('Error: Production platform admin bootstrap is disabled in Phase 2C.5B/C unless --live, --confirm-production-bootstrap, and --project-id gasstationproject-9dd89 are provided.');
+      process.exitCode = 1;
+      return;
+    }
   }
 
-  // Setup Firestore emulator client dynamically
+  // Setup Firestore client dynamically
   const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
   const { initializeApp } = requireFromFunctions('firebase-admin/app');
   const { getFirestore } = requireFromFunctions('firebase-admin/firestore');
 
-  process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8088';
+  if (config.emulator) {
+    process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8088';
+  } else {
+    delete process.env.FIRESTORE_EMULATOR_HOST;
+  }
 
   const app = initializeApp({ projectId: config.projectId }, `bootstrap-${config.uid}`);
   const db = getFirestore(app);
@@ -134,17 +148,17 @@ async function run() {
       status: 'ACTIVE',
       createdAt: now,
       updatedAt: now,
-      createdBy: 'bootstrap-emulator',
+      createdBy: config.emulator ? 'bootstrap-emulator' : 'controlled-live-bootstrap',
     });
 
-    console.log(`Successfully bootstrapped platform admin "${config.uid}" in the emulator.`);
+    console.log(`Successfully bootstrapped platform admin "${config.uid}" in ${config.emulator ? 'emulator' : 'production'}.`);
     console.log(`- Created/Updated: ${targetPath}`);
   }
 
   if (config.verify) {
     const snap = await db.doc(targetPath).get();
     if (!snap.exists) {
-      throw new Error(`Verification failed. Document "${targetPath}" does not exist in the emulator.`);
+      throw new Error(`Verification failed. Document "${targetPath}" does not exist in the database.`);
     }
 
     const data = snap.data();

@@ -18,8 +18,14 @@ service cloud.firestore {
         isTenantAdminRole(get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.role);
     }
 
+    function isPlatformAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+
     function isAdmin() {
-      return isTenantAdmin('bp-kallis');
+      return isPlatformAdmin();
     }
 
     function isSelf(uid) {
@@ -567,6 +573,11 @@ service cloud.firestore {
 
     match /audit_logs/{auditLogId} {
       allow read, write: if false;
+    }
+
+    match /platformAdmins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
     }
 
     match /users/{uid} {

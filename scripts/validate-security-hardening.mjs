@@ -201,4 +201,9 @@ const cspHeader = allHeaders.find((header) => header.key === 'Content-Security-P
   assert(cspHeader.includes(directive), `Content-Security-Policy missing directive/origin: ${directive}`);
 });
 
+assert(firestoreRules.includes('isPlatformAdmin()'), 'Firestore rules must define isPlatformAdmin() helper.');
+assert(!firestoreRules.includes("isTenantAdmin('bp-kallis')"), 'Firestore rules must not couple isAdmin/global rules to bp-kallis.');
+assert(matchBlock('platformAdmins').includes('allow read: if request.auth != null && request.auth.uid == uid;'), 'platformAdmins must restrict reads to the owner UID.');
+assert(matchBlock('platformAdmins').includes('allow write: if false;'), 'platformAdmins must deny all client writes.');
+
 console.log('Security hardening checks passed');

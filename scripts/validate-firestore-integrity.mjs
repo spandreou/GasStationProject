@@ -79,6 +79,8 @@ assert(!/allow\s+(create|update|delete|write)[^;]*:\s*if\s+true\s*;/.test(firest
 
 [
   'employees',
+  'employees_public',
+  'employees_private',
   'shifts',
   'shiftTemplates',
   'employeeAbsences',

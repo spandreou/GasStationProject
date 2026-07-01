@@ -272,6 +272,8 @@ async function run() {
 
   const legacyCollections = [
     'employees',
+    'employees_public',
+    'employees_private',
     'shifts',
     'shiftTemplates',
     'employeeAbsences',

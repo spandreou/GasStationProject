@@ -47,7 +47,6 @@ const publicReadMatches = [...firestoreRules.matchAll(/^[ \t]*match\s+\/([A-Za-z
   .filter((collectionName) => !['databases', 'tenants'].includes(collectionName))
   .filter((collectionName) => matchIndentedBlock(collectionName).includes('allow read: if true;'));
 const allowedPublicReadCollections = new Set([
-  'employees_public',
   'publicEmployees',
   'publicSchedules',
   'publicMonths',
@@ -100,6 +99,8 @@ assert(
 );
 [
   'employees',
+  'employees_public',
+  'employees_private',
   'shifts',
   'shiftTemplates',
   'employeeAbsences',

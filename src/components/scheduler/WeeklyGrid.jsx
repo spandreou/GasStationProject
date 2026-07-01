@@ -92,6 +92,8 @@ const DENSITY_CLASSES = {
   },
 };
 
+const WEEK_GRID_LAYOUT_CLASS = 'grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-[repeat(7,minmax(8.5rem,1fr))]';
+
 function applyShiftTypeTimes(draft, nextShiftType) {
   const nextTimes = SHIFT_TYPE_TIME_MAP[nextShiftType];
   if (!nextTimes) {
@@ -1072,7 +1074,7 @@ export default function WeeklyGrid({
 
           <div className={`w-full min-w-0 rounded-lg border border-white/45 bg-white/25 dark:border-cyan-300/20 dark:bg-slate-900/30 ${densityClasses.weekBlock}`}>
             <div
-              className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}
+              className={`${WEEK_GRID_LAYOUT_CLASS} ${densityClasses.weekGrid}`}
             >
               {weekDays.map((day, index) => {
                 const dayShifts = grouped[day] || [];
@@ -1210,7 +1212,7 @@ export default function WeeklyGrid({
                     Εβδομάδα {formatDateGreek(weekRow.startDate)} - {formatDateGreek(weekRow.endDate)}
                   </h3>
                 </header>
-                <div className={`grid w-full min-w-0 grid-cols-1 pb-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(7,minmax(9.25rem,1fr))] ${densityClasses.weekGrid}`}>
+                <div className={`${WEEK_GRID_LAYOUT_CLASS} ${densityClasses.weekGrid}`}>
                   {weekRow.days.map(({ date, isInMonth }, index) => {
                     const dayShifts = grouped[date] || [];
 

@@ -1,7 +1,9 @@
-# Tenant Provisioning Runbook
+# ShiftOryx Tenant Provisioning Foundation Runbook
 
 ## 1. Purpose
-This runbook explains how to onboard a new tenant (e.g. `eko-example`) to the GasStation Shift Manager platform. The process uses the `scripts/provision-tenant.mjs` CLI tool to seed the database structure, combined with manual cloud network configuration.
+This runbook describes the existing controlled CLI/emulator foundation. It is not the final ShiftOryx signup flow. The approved product target uses a secure registration token and automated trusted provisioning in roadmap Phases 3-4.
+
+The manual per-tenant homelabshare DNS steps below are legacy pilot procedures, not the target architecture. Phase 6 uses one shared app and wildcard `*.shiftoryx.gr` routing.
 
 ---
 
@@ -102,6 +104,8 @@ node scripts/provision-tenant.mjs \
 * Slugs containing `gas` or matching reserved names are blocked.
 * User password credentials are **never** handled or stored by the CLI.
 * Tenant isolation is enforced through `tenantMemberships` checking.
+* New tenant membership must use role `OWNER` only. Do not create `ADMIN` or `MANAGER` memberships.
+* Future registration tokens are stored as hashes, consumed atomically once, expire/revoke safely and are never logged. This CLI does not implement that product flow.
 
 ---
 

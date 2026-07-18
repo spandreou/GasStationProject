@@ -1,4 +1,4 @@
-# Security Policy
+# ShiftOryx Security Policy
 
 ## Dependency Scanning Policy
 
@@ -56,11 +56,14 @@ If a scanner cannot enforce thresholds clearly, keep it in report-only mode and 
 
 ## Admin-Only Sign-In Model
 
-- Only the station admin signs in.
+- Current pilot compatibility: Only the station admin signs in; the approved product label for that authenticated tenant actor is OWNER.
+- Only a tenant OWNER signs in for new MVP tenants.
 - Employees do not have app accounts, Firebase Auth identities, role claims, or write access.
 - Employee-facing views, where present, must be public-safe and read-only.
 - UI hiding is not security. Firestore rules are the enforcement layer.
-- Admin/private collections require Firebase Auth plus an ACTIVE tenant membership for the matching tenant with role `OWNER`, `ADMIN`, or `MANAGER`.
+- Target admin/private access requires Firebase Auth plus an ACTIVE matching tenant membership with role `OWNER`.
+- Existing `ADMIN` and `MANAGER` memberships are temporary runtime compatibility only. Do not create new memberships with these roles; removal requires the approved Phase 2 inventory, migration, tests and rollback.
+- ShiftOryx Admin uses `platformAdmins/{uid}` and remains separate from tenant ownership. Platform status does not automatically bypass tenant isolation.
 - Public collections may be readable without sign-in only when every field is intentionally sanitized.
 - Production tenant membership bootstrapping must happen from a trusted local/admin environment with a Firebase service account, never from frontend code.
 - The `admin:bootstrap` helper only prepares the Firebase Auth user. It does not grant tenant access. Tenant access comes from `tenantMemberships/{uid}_{tenantId}`.
@@ -127,6 +130,13 @@ Public view:
 - The legacy `employeeAbsencesPublic` collection is no longer anonymous-readable. It remains admin-only for legacy cleanup and must not be used by public UI.
 - Public/employee schedule views may show only work schedule fields: employee full name, date, shift label/type, start time, and end time.
 - Public schedule snapshots must not include employee ids, user ids, emails, phones, tenant memberships, audit metadata, internal notes, absence data, or private archive data.
+
+Approved future Phase 10 boundary:
+
+- The public view may later show only sanitized labels `Άδεια`, `Ρεπό` or `Δεν εργάζεται` and an explicit owner-reviewed `publicNote`.
+- The generic `notes` field must never become public automatically.
+- Absence reasons, medical details, attachments and `privateNote` remain private.
+- This future boundary does not change current production behavior and requires dedicated schema, rules, preview and leakage tests.
 
 Remaining limitation: without a backend or Cloud Function, the trusted admin client still creates sanitized public schedule snapshots. Firestore rules restrict raw absence and admin data, and validation checks must keep public snapshots limited to work shifts only.
 

@@ -1,13 +1,13 @@
-# Platform Super-Admin Runbook
+# ShiftOryx Admin Runbook
 
 ## 1. Purpose
-This runbook documents the platform super-admin role (`platformAdmins/{uid}`) for the GasStation Shift Manager platform. It explains the architectural boundaries between platform-level management and tenant-level operations, provides CLI usage instructions, and details bootstrap workflows.
+This runbook documents the ShiftOryx Admin role stored in `platformAdmins/{uid}`. The technical value `SUPER_ADMIN` remains a compatibility identifier. It explains the boundary between platform management and tenant operations.
 
 ---
 
 ## 2. Tenant Admin vs. Platform Admin
 
-| Capability | Tenant Admin (e.g. OWNER / MANAGER) | Platform Super-Admin (SUPER_ADMIN) |
+| Capability | Tenant OWNER | ShiftOryx Admin (`SUPER_ADMIN` compatibility value) |
 | :--- | :--- | :--- |
 | **Scope** | Single Tenant (e.g., `bp-kallis` or `eko-example`) | Global Platform (Whole project instance) |
 | **Manage Roster** | Yes (inside own tenant) | No (unless explicitly added as tenant admin) |
@@ -17,6 +17,8 @@ This runbook documents the platform super-admin role (`platformAdmins/{uid}`) fo
 | **Emergency Support** | No (restricted to own tenant) | Yes (can assist with config recovery/emergency audits) |
 
 Tenant isolation is strictly maintained. A platform super-admin status does **not** bypass tenant boundaries for operational data (shifts, absences, employees) unless they hold a valid active membership record for that specific tenant.
+
+New MVP tenant memberships use `OWNER` only. `ADMIN` and `MANAGER` are legacy compatibility roles pending Phase 2 and must not be used for new onboarding.
 
 ---
 
@@ -76,7 +78,7 @@ node scripts/bootstrap-platform-admin.mjs --uid super-admin-uid --verify --emula
 
 ## 6. Live Rollout Sequence (Controlled)
 1. **Identify the Operator UID**: Retrieve the administrator's Firebase Auth UID.
-2. **Seed Platform Admin**: Create the `platformAdmins/{uid}` document via Firebase Console or approved Admin SDK CLI execution.
+2. **Seed Platform Admin**: Create the `platformAdmins/{uid}` document only through an approved trusted Admin SDK/bootstrap path. Avoid ad-hoc client or unreviewed console writes.
 3. **Deploy Security Rules**:
    `firebase deploy --only firestore:rules`
 4. **Verify Access**:

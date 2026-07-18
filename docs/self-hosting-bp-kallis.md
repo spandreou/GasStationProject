@@ -8,6 +8,18 @@ https://bp-kallis.homelabshare.gr/
 
 The app remains one shared React/Vite codebase. `bp-kallis` is the first tenant-aware pilot, not a separate fork.
 
+## ShiftOryx Domain Direction
+
+This runbook covers the current legacy pilot endpoint only:
+
+```text
+Current: https://bp-kallis.homelabshare.gr/
+Target:  https://bp-kallis.shiftoryx.gr/
+Root:    https://shiftoryx.gr/
+```
+
+The current endpoint stays active until roadmap Phase 6 verifies wildcard DNS/routing, Firebase authorized domains, auth handoff, monitoring and rollback. Do not change Cloudflare, Firebase, Docker or the live domain from this documentation update.
+
 ## Naming Map
 
 Use these names exactly:
@@ -186,7 +198,7 @@ https://bp-kallis.homelabshare.gr/reset-password
 https://gas.homelabshare.gr/reset-password
 ```
 
-## Tenant Direction
+## Current Tenant And Target Direction
 
 The first pilot uses:
 
@@ -205,6 +217,8 @@ tenants/{tenantId}/auditLogs
 ```
 
 Do not hardcode email-to-domain mappings. Resolve tenant access through Firebase `uid` and tenant memberships.
+
+The operational data is now tenant-scoped; legacy root scheduler collections are locked and must not be used as runtime fallbacks. New MVP tenant memberships use `OWNER` only. Existing `ADMIN`/`MANAGER` values remain compatibility data until Phase 2.
 
 ## Production Verification
 

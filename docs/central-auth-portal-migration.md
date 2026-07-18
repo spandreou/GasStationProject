@@ -1,11 +1,11 @@
-# Central Authentication Portal Migration
+# ShiftOryx Central Authentication Portal Migration
 
-This document tracks the safe migration from tenant-local login to the central
-GasStation SaaS authentication portal.
+This document records the existing homelabshare foundation and the approved
+ShiftOryx target. It does not authorize a domain or runtime rollout.
 
-## Target Domains
+## Current Foundation And Target Domains
 
-Central portal:
+Current/legacy central foundation:
 
 ```text
 gas.homelabshare.gr
@@ -16,6 +16,16 @@ Tenant dashboard example:
 ```text
 bp-kallis.homelabshare.gr
 ```
+
+Approved target:
+
+```text
+https://shiftoryx.gr
+https://{tenantSlug}.shiftoryx.gr
+https://bp-kallis.shiftoryx.gr
+```
+
+The target uses one wildcard/shared application. Existing homelabshare origins remain compatibility endpoints until roadmap Phase 6.
 
 The central portal owns landing, login, forgot-password, reset-password,
 tenant selection and future account management. Tenant domains should contain
@@ -46,11 +56,13 @@ Required membership:
 ```json
 {
   "status": "ACTIVE",
-  "role": "OWNER | ADMIN | MANAGER"
+  "role": "OWNER"
 }
 ```
 
 No email allowlist or Firebase custom claim grants tenant admin access.
+
+Current compatibility: deployed code/rules may still accept `ADMIN` and `MANAGER`. New provisioning must not create them; Phase 2 owns their inventory and migration.
 
 ## Important Production Blocker
 
@@ -84,10 +96,14 @@ implemented and verified:
 3. A tenant-local silent session establishment mechanism reviewed for token
    exposure and CSRF risks.
 
+The approved direction is the Firebase-native short-lived auth broker. Any legacy `.homelabshare.gr` cookie option must not be assumed to solve the future `.shiftoryx.gr` architecture.
+
 Do not pass Firebase ID tokens, refresh tokens, password reset `oobCode` values,
 or signed session material through query strings.
 
 ## Safe Rollout Sequence
+
+This sequence describes compatibility validation for the existing foundation. The ShiftOryx domain rollout belongs to Phase 6 and must update exact origins only after the Phase 1/2/5 gates pass.
 
 1. Keep `VITE_ENABLE_AUTH_BROKER=false`.
 2. Keep `VITE_ENABLE_TENANT_GATE=false`.

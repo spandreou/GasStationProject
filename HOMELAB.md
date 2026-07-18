@@ -1,10 +1,23 @@
-# Homelab Notes
+# ShiftOryx Homelab Pilot Notes
 
 ## Purpose
 
 This file explains how this project should look up homelab server context and credentials during development or deployment tasks.
 
 Do not store real secrets in this repository. Record only paths, variable names, service names, and safe commands.
+
+## Product And Domain Boundary
+
+This runbook describes the current BP Kallis pilot and intentionally retains legacy operational identifiers.
+
+```text
+Current live pilot: https://bp-kallis.homelabshare.gr/
+Future primary tenant domain: https://bp-kallis.shiftoryx.gr/
+Future root portal: https://shiftoryx.gr/
+Future tenant pattern: https://{tenantSlug}.shiftoryx.gr/
+```
+
+Do not rename repository paths, Firebase project ids, Docker resources, compose projects or live hostnames for branding reasons. The wildcard ShiftOryx domain belongs to roadmap Phase 6 and requires explicit approval, testing and rollback. Until then this file remains the source of truth for the current homelab pilot only.
 
 ## SSH Access
 

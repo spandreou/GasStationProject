@@ -1,13 +1,15 @@
-# SaaS Security QA Checklist
+# ShiftOryx SaaS Security QA Checklist
 
-Use this checklist before enabling tenant-gated access or deploying SaaS foundation changes.
+Use this checklist before enabling tenant-gated access or deploying SaaS foundation changes. It distinguishes current homelabshare compatibility from the future ShiftOryx domain rollout.
 
 ## Auth
 
 - `/login` loads without raw Firebase errors.
 - `/login` uses Firebase Auth and does not render protected scheduler data as the primary login experience.
 - After central portal login, `0/1/2+` memberships resolve to no-access, tenant redirect, or `/select-tenant`.
-- Admin login succeeds for a Firebase Auth user with the required admin claim.
+- Owner login succeeds only for a Firebase Auth user with an ACTIVE matching tenant membership.
+- No email allowlist or Firebase custom claim grants tenant access.
+- New memberships use `OWNER` only; legacy `ADMIN`/`MANAGER` acceptance is tested only as temporary Phase 2 compatibility.
 - Logout clears admin access and returns the UI to read-only mode.
 - Failed login shows a safe, human-readable message.
 - No passwords are logged.
@@ -30,8 +32,9 @@ Use this checklist before enabling tenant-gated access or deploying SaaS foundat
 
 ## Tenant Resolver
 
-- `gas.homelabshare.gr` resolves as central portal context.
+- Current compatibility: `gas.homelabshare.gr` resolves as central portal context.
 - `bp-kallis.homelabshare.gr` resolves as tenant context with slug `bp-kallis`.
+- Phase 6 target: `shiftoryx.gr` is root context and `{tenantSlug}.shiftoryx.gr` resolves the tenant through one wildcard/shared app.
 - `localhost` / `127.0.0.1` resolves as local development context.
 - Hostname detection is not treated as authorization.
 
@@ -40,6 +43,7 @@ Use this checklist before enabling tenant-gated access or deploying SaaS foundat
 - Access checks use Firebase Auth `uid`.
 - `tenantMemberships/{uid}_{tenantId}` is the membership id pattern.
 - No email-to-domain hardcoding exists.
+- Scheduler roles are never accepted as authorization roles.
 - `0` memberships shows:
 
 ```text
@@ -68,6 +72,13 @@ users/{uid}
 
 - With the gate enabled, tenant data is rendered only after active membership verification.
 - With no active membership, tenant data is not rendered.
+- Anonymous users retain the sanitized public view and never receive private tenant data.
+
+## Public Privacy
+
+- Current public snapshots contain only work schedule/display-safe fields and safe aggregates.
+- No absence reason, medical detail, contact field, UID, membership, audit data, archive metadata or private/generic note is public.
+- Phase 10 status labels require a dedicated `publicNote`, owner preview, schema/rules review and leakage tests before enablement.
 
 ## Public Domain / Docker
 
@@ -90,5 +101,8 @@ npm run qa:saas-foundation
 npm run build
 npm run qa:scheduler-engine
 npm run qa:scheduler
+npm run qa:tenant-authorization
+npm run qa:public-readonly
+npm run qa:auth-broker
 npm run security:hardening
 ```

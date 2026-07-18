@@ -1,9 +1,8 @@
-# Firebase Auth Broker Runbook
+# ShiftOryx Firebase Auth Broker Runbook
 
 ## Purpose
 
-The Firebase auth broker is the planned cross-subdomain handoff layer for
-GasStation SaaS.
+The Firebase auth broker is the planned cross-subdomain handoff layer for ShiftOryx. Current homelabshare origins are compatibility endpoints; the approved target is `shiftoryx.gr` and `{tenantSlug}.shiftoryx.gr`.
 
 Target flow:
 
@@ -14,6 +13,17 @@ gas.homelabshare.gr
 -> tenant URL with #authTicket
 -> exchangeAuthTicket Cloud Function
 -> signInWithCustomToken on tenant origin
+-> tenant dashboard
+```
+
+Approved target flow after roadmap Phase 6:
+
+```text
+shiftoryx.gr
+-> Firebase login
+-> createAuthTicket
+-> {tenantSlug}.shiftoryx.gr with fragment ticket
+-> exchangeAuthTicket
 -> tenant dashboard
 ```
 
@@ -152,6 +162,8 @@ https://bp-kallis.homelabshare.gr
 Future tenant origins should be added through controlled function configuration
 or trusted tenant config. CORS is not the security boundary; functions still
 validate ticket, tenant, membership, and origin.
+
+Do not add wildcard CORS for `*.shiftoryx.gr`. Phase 6 must implement exact trusted-origin derivation/validation from an active tenant and its canonical domain.
 
 ## Never Log Or Store
 

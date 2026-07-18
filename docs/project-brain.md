@@ -1,184 +1,116 @@
-# GasStation Project Brain
+# ShiftOryx Project Brain
 
-Αυτό το αρχείο είναι ο μόνιμος project brain για το GasStation Shift Manager. Χρησιμοποιείται ως κεντρική αναφορά για το πώς πρέπει να σκέφτεται και να δουλεύει ο βοηθός μέσα στο project.
+Αυτό είναι το μόνιμο local project brain του ShiftOryx. Τα παλιά ονόματα `GasStation Shift Manager`, `GasStationProject` και `GasStation-main` παραμένουν μόνο ως compatibility identifiers για repository, checkout, Firebase και deployment.
 
 ## Instruction Priority
 
-- Το `AGENTS.md` είναι το βασικό instruction entry point του project.
-- Το παρόν αρχείο λειτουργεί ως αναλυτικός project brain και πρέπει να διαβάζεται μαζί με το `AGENTS.md`.
-- Για scheduler αλλαγές, ισχύουν επίσης:
-  - `docs/scheduler-rules.md`
-  - `docs/scheduler-ui-export-rules.md`
-  - `docs/scheduler-qa-checklist.md`
-- Για security αλλαγές, ισχύει επίσης:
-  - `docs/SECURITY_GUIDELINES.md`
-- Για SaaS, tenant isolation ή central auth αλλαγές, διάβασε πρώτα τα σχετικά docs:
-  - `docs/central-auth-portal-migration.md`
-  - `docs/tenant-authorization-model.md`
-  - `docs/firebase-security-rules.md`
+1. Master source of truth: `ShiftOryx - Master Product, Technical Architecture & Codex Execution Roadmap` ([Google Doc](https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0)), revision aligned 17 July 2026.
+2. `AGENTS.md` και το παρόν αρχείο.
+3. `docs/CURRENT_STATE.md` για την επιβεβαιωμένη σημερινή κατάσταση.
+4. `docs/ROADMAP_ALIGNMENT_REPORT.md` για αποκλίσεις current/target.
+5. Τα ειδικά scheduler, security, Firebase και deployment runbooks μέσα στο scope τους.
 
-Αν υπάρχει σύγκρουση ανάμεσα σε γενικό κανόνα και πιο ειδικό scheduler/security κανόνα, ο πιο ειδικός κανόνας υπερισχύει.
+Όταν παλιό roadmap ή report διαφωνεί με το master document, ισχύει το master. Ένα runbook που περιγράφει σημερινό legacy identifier παραμένει σωστό ως operational fact και δεν μετονομάζεται χωρίς εγκεκριμένη migration phase.
 
-## Project Identity
+## Product Direction
 
-Το GasStation Shift Manager είναι εφαρμογή διαχείρισης βαρδιών για πρατήριο καυσίμων.
+Το ShiftOryx είναι multi-tenant SaaS για προγράμματα βαρδιών. Ξεκινά από πρατήρια καυσίμων αλλά ο domain model πρέπει να παραμένει επεκτάσιμος.
 
-Βασικές λειτουργίες:
+Current pilot:
 
-- Εβδομαδιαίο και μηνιαίο πρόγραμμα βαρδιών.
-- Αυτόματη δημιουργία προγράμματος.
-- Ρόλοι εργαζομένων και rotation.
-- Σταθερά ρεπό, άδειες, ασθένειες και manual overrides.
-- Drag and drop ανάθεση.
-- Templates, history και locked week behavior.
-- Firebase persistence.
-- PDF, Excel και Word exports.
+- `https://bp-kallis.homelabshare.gr/`
+- tenant `bp-kallis`
+- homelab Docker deployment από `main`
 
-## Stack
+Approved target:
 
-- React + Vite
-- Tailwind CSS
-- Zustand
-- Firebase Auth / Firestore
-- dnd-kit
-- jsPDF / @e965/xlsx / docx exports
+- root portal `https://shiftoryx.gr`
+- tenant pattern `https://{tenantSlug}.shiftoryx.gr`
+- future BP Kallis primary domain `https://bp-kallis.shiftoryx.gr/`
+- ένα wildcard/shared app, όχι DNS record, container ή codebase ανά tenant
 
-## Non-Negotiable Rules
+Το current pilot μένει ενεργό μέχρι να επαληθευτούν domain, wildcard routing, Firebase authorized domains, auth handoff και rollback.
 
-- Κράτα όλα τα ελληνικά UTF-8 safe.
-- Μην εισάγεις mojibake ή broken Greek text.
-- Μην αφαιρείς data fields από objects μόνο επειδή δεν εμφανίζονται στο UI.
-- Αν κάτι πρέπει να μη φαίνεται, κάν' το presentation-only.
-- Μην σπας persistence shape χωρίς migration-safe fallback.
-- Μην κάνεις μεγάλο rewrite όταν αρκεί μικρή στοχευμένη αλλαγή.
-- Μην δημιουργείς ψεύτικα σωστό πρόγραμμα. Αν κανόνας δεν μπορεί να ικανοποιηθεί, βγάλε καθαρό warning.
+## Actors And Authorization
 
-## Scheduler Source Of Truth
+- **ShiftOryx Admin**: platform owner. Το technical compatibility role `SUPER_ADMIN` μπορεί να παραμείνει σε `platformAdmins/{uid}`. Δεν δίνει αυτόματα tenant operational access.
+- **OWNER**: ο μοναδικός authenticated tenant role για νέα MVP memberships.
+- **ADMIN/MANAGER**: legacy runtime compatibility μόνο. Δεν δημιουργούνται σε νέο provisioning. Inventory και migration ανήκουν στη Phase 2.
+- **Employee/public viewer**: δεν έχει account, password, Firebase UID ή membership στο MVP. Διαβάζει μόνο sanitized public data.
 
-Οι ρόλοι προγραμματισμού προέρχονται πρώτα από τα employee scheduling rules:
+Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι business classifications. Δεν είναι auth roles και δεν δίνουν δικαιώματα.
 
-- `employee.scheduleRole`
-- `employee.roleType`
+## Scheduler Guarantees
 
-Οι ενεργοί scheduler roles είναι:
+- Fixed day off και absence/unavailability είναι constraints.
+- Core rotation, Sunday fairness και coverage rules παραμένουν deterministic.
+- Manual overrides προστατεύονται και ο OWNER μπορεί πάντα να διορθώσει πρόγραμμα.
+- Παραβίαση κανόνα εμφανίζεται ως warning. Δεν δημιουργείται ψεύτικα σωστό πρόγραμμα.
+- Διατηρούνται weekly/monthly generation, manual edit, drag and drop, templates, history, persistence και exports.
 
-- `core1`
-- `core2`
-- `intermediate`
-- `custom`
+References:
 
-Οι monthly role selectors ή legacy role configs δεν πρέπει να κάνουν override explicit employee roles, εκτός αν υπάρχει ξεκάθαρο manual override mode.
+- `docs/scheduler-rules.md`
+- `docs/scheduler-ui-export-rules.md`
+- `docs/scheduler-qa-checklist.md`
 
-## Scheduler Business Guarantees
+## Public And Private Boundary
 
-- Core 1 και Core 2 δεν πρέπει να είναι στην ίδια βάρδια όταν δουλεύουν την ίδια ημέρα.
-- Core εργαζόμενος δεν πρέπει να μπαίνει σε intermediate shift.
-- Intermediate shift πρέπει να ανατίθεται μόνο σε Intermediate / Coverage εργαζόμενο.
-- Fixed day off είναι hard constraint.
-- Με 3 διαθέσιμους εργαζόμενους πρέπει να υπάρχει:
-  - 1 morning
-  - 1 intermediate
-  - 1 evening
-- Με 4 διαθέσιμους σε full coverage day πρέπει να υπάρχει:
-  - 2 morning
-  - 2 evening
-  - 0 intermediate
-- Κυριακή:
-  - ακριβώς 1 εργαζόμενος
-  - `08:00-20:00`
-  - fair rotation σε όλους τους eligible εργαζόμενους
-  - αποφυγή συνεχόμενων Κυριακών όταν είναι εφικτό
-  - συνέχεια rotation από μήνα σε μήνα
+Σήμερα το public runtime εμφανίζει sanitized work schedules, display-safe employees, announcements και ασφαλή aggregates. Δεν εμφανίζει absences/status entries ή private notes.
 
-## UI Rules
+Η Phase 10 επιτρέπει μελλοντικά μόνο sanitized labels `Άδεια`, `Ρεπό`, `Δεν εργάζεται` και explicit `publicNote`, με owner preview. Το generic `notes` δεν δημοσιεύεται. `privateNote`, medical/reason details, attachments, contact data, UID, memberships, audit data και raw records μένουν private.
 
-- Το weekly/monthly schedule πρέπει να παραμένει compact αλλά readable.
-- Μην εμφανίζεις ξανά στις compact cards:
-  - `Εργασία`
-  - `Πρωινός`
-  - `Απογευματινός`
-  - `Ενδιάμεσος`
-  - auto-generated notes
-  - duration labels
-- Shift cards:
-  - όνομα εργαζόμενου στην πρώτη γραμμή
-  - ωράριο ή κατάσταση στη δεύτερη γραμμή
-  - μικρά edit/delete/manual controls
-  - εμφανή conflicts/warnings
-- Monthly view πρέπει να εμφανίζεται ως stacked weekly blocks, όχι 3-column month grid.
+## Technical Direction
 
-## Security Rules
+- React 19 και Vite 8, χωρίς Next.js rewrite.
+- TypeScript σε κάθε νέο ή τροποποιούμενο critical module.
+- Zustand με σταδιακά domain slices.
+- Tailwind CSS 3.x στη migration περίοδο.
+- Firebase Auth, Firestore, Storage, Cloud Functions 2nd gen και Emulator Suite.
+- Cloudflare edge, Docker Compose και Nginx shared frontend.
+- Functions target Node 22 LTS και pinned lockfile.
 
-Ακολούθησε πάντα το `docs/SECURITY_GUIDELINES.md`.
+Δεν προστίθενται dependencies χωρίς ανάγκη, alternatives, maintenance και install-risk review. Δεν γίνεται manual lockfile edit ή force audit upgrade.
 
-Σημαντικά για αυτό το project:
+## Approved Phase Order
 
-- Μην βάζεις secrets σε source code.
-- Μην εκθέτεις Firebase credentials πέρα από τα ήδη public-safe client config patterns.
-- Μην βασίζεσαι μόνο στο frontend για authorization.
-- Firestore rules πρέπει να προστατεύουν admin-only actions.
-- Μην κάνεις logs με passwords, tokens, προσωπικά δεδομένα ή ευαίσθητα στοιχεία.
-- Validate user input πριν χρησιμοποιηθεί σε persistence, exports ή admin workflows.
-- Για exports, μην διαρρέεις επιπλέον πεδία πέρα από αυτά που χρειάζονται.
+0. Documentation alignment.
+1. Current-state audit.
+2. OWNER-only role normalization.
+3. Registration token backend.
+4. Automated tenant provisioning.
+5. Root portal και store selector.
+6. Wildcard ShiftOryx domains.
+7. Trial/subscription entitlements.
+8. Multi-store lifecycle.
+9. ShiftOryx admin panel.
+10. Public statuses και notes.
+11. Subdomain aliases.
+12. Customization requests.
+13. Production EU VPS.
+14. HomeOps read-only integration.
+15. Billing provider.
 
-## Persistence And Data Safety
+Μία phase κάθε φορά. Πριν από αλλαγές: branch/status, current-state inspection και backup. Καμία production αλλαγή χωρίς explicit approval. Κάθε phase κλείνει με tests, security/dependency review, risks και rollback, και σταματά πριν την επόμενη phase.
 
-- Μην διαγράφεις fields όπως:
-  - `label`
-  - `notes`
-  - `shiftType`
-  - `duration`
-  - `isManualOverride`
-  - special-day fields
-  - role fields
-- Manual overrides πρέπει να προστατεύονται από automatic generation εκτός αν ο κανόνας λέει ρητά ότι δεν διατηρούνται.
-- Firebase persistence, templates, history και locked week behavior είναι κρίσιμα και δεν πρέπει να σπάνε.
+## Product Proposals, Not Current Enforcement
 
-## QA Expectations
+- Trial 7 ημερών: 1 store, έως 10 employees, horizon 1 εβδομάδα, basic features και ένα PDF.
+- Monthly EUR 14.90, quarterly EUR 39.90, semiannual EUR 74.90 για πρώτο store, με διαφορετικό planning horizon.
+- Additional stores με χαμηλότερο per-store pricing και custom quote από 4+ stores.
+- Subscription states: `TRIAL`, `ACTIVE`, `GRACE_PERIOD`, `EXPIRED`, `SUSPENDED`, `DELETED`.
 
-Για scheduler αλλαγές τρέξε:
+Οι τιμές χρειάζονται λογιστικό/φορολογικό έλεγχο. Entitlements θα επιβάλλονται server-side. Δεν θεωρούνται deployed μέχρι τις αντίστοιχες phases.
 
-```bash
-npm run qa:scheduler
-npm run build
-```
+## Safety
 
-Όταν αλλάζει το scheduler engine ή generator logic, τρέξε επίσης:
+- Κανένα secret, token, private key, credential, reset code ή private payload σε repo/logs/frontend env.
+- Hostname επιλέγει tenant context· δεν εξουσιοδοτεί.
+- UI hiding δεν είναι security. Firestore Rules και trusted server operations είναι τα enforcement boundaries.
+- Legacy fields δεν αφαιρούνται επειδή κρύβονται στο UI.
+- Δεν αλλάζουν Firebase project ids, collections, Docker names, repository paths ή live domains για branding λόγους.
+- Δεν γίνεται commit, push, deploy, rules/DNS/tunnel change χωρίς explicit request.
 
-```bash
-npm run qa:scheduler-engine
-```
+## Required Reporting
 
-Όταν αλλάζει UI flow ή role persistence, προτίμησε και:
-
-```bash
-npm run test:e2e:scheduler
-```
-
-Αν το e2e απαιτεί dev server, ξεκίνα προσωρινά Vite και κλείσ' το μετά.
-
-Για SaaS, auth, Firebase rules ή export-security αλλαγές, πρόσθεσε τα κατάλληλα checks:
-
-```bash
-npm run qa:tenant-authorization
-npm run qa:public-readonly
-npm run qa:repositories
-npm run qa:export-security
-npm run qa:saas-foundation
-npm run security:scan
-```
-
-## Git Hygiene
-
-- Μην κάνεις commit/stash/push χωρίς ρητό αίτημα.
-- Πριν από commit, έλεγξε `git status --short`.
-- Μην διαγράφεις untracked αρχεία του χρήστη χωρίς ρητή άδεια.
-- Μην κάνεις reset/revert σε αλλαγές που δεν έκανες εσύ.
-
-## Development Style
-
-- Διάβασε πρώτα το σχετικό code path.
-- Πρόσθεσε tests για bugs πριν ή μαζί με το fix.
-- Κράτα αλλαγές μικρές και εστιασμένες.
-- Μην πειράζεις unrelated dashboard/analytics/export/Firebase code όταν το αίτημα αφορά scheduler UI ή generator.
-- Προτίμησε deterministic logic. Όχι random output για πρόγραμμα.
+Κάθε phase report περιλαμβάνει goal, branch/base, files changed, behavior, migrations, exact tests, dependency/security review, deploy status, risks, rollback και recommended next phase.

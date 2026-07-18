@@ -1,289 +1,251 @@
-# Gas Station Project
+# ShiftOryx
 
-Demo-ready dashboard για διαχείριση βαρδιών πρατηρίου με weekly/monthly scheduling, πίνακα ανακοινώσεων και σύνοψη ωρών ανά υπάλληλο.
+Το ShiftOryx είναι multi-tenant SaaS για δημιουργία, διαχείριση και δημοσίευση προγραμμάτων βαρδιών. Ο πρώτος κλάδος είναι τα πρατήρια καυσίμων, αλλά η αρχιτεκτονική επιτρέπει μελλοντική χρήση από άλλες επιχειρήσεις με βάρδιες.
 
-## Τρέχουσα Κατάσταση
+Προηγούμενα/compatibility ονόματα: `GasStation Shift Manager`, `GasStationProject`, `GasStation-main`.
 
-Η εφαρμογή είναι σε **demo / experimental mode** για παρουσίαση:
+## Source Of Truth
 
-- Admin-only πρόσβαση
-- Firebase config μέσω env vars
-- Production authorization μέσω `tenantMemberships/{uid}_{tenantId}`
-- Καμία email allowlist δεν δίνει admin πρόσβαση
-- Χωρίς fallback admin credentials μέσα στον κώδικα
-- Πρώτος production-like pilot tenant: `bp-kallis.homelabshare.gr`
-- Μελλοντικός SaaS portal στόχος: `gas.homelabshare.gr`
+Η εγκεκριμένη product direction βρίσκεται στο Google Doc:
 
-## Repository / Deployment Map
+`ShiftOryx - Master Product, Technical Architecture & Codex Execution Roadmap`
 
-- Σωστό local working folder: `C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main`.
-- Μην χρησιμοποιείς το παλιό `GasStationProject-main`; ήταν λάθος/άδειο local folder.
-- GitHub remote: `https://github.com/spandreou/GasStationProject.git`.
-- Live BP Kallis URL: `https://bp-kallis.homelabshare.gr/`.
-- Active homelab server path: `/home/spandreou/projects/GasStationProject`.
-- Current verified homelab deployment branch: `main`.
-- `main` is the verified production source of truth for the BP Kallis homelab pilot.
-- Compose project/container: `gasstationproject` / `gasstation-bp-kallis`.
-- Host port: `8085` -> container port `8080`.
+`https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0`
 
-Πριν από homelab deploy ή troubleshooting, διάβασε πρώτα `HOMELAB.md` και `docs/self-hosting-bp-kallis.md`.
+Το master roadmap υπερισχύει παλιότερων roadmap/reports όταν υπάρχει διαφωνία. Η τρέχουσα πραγματική κατάσταση παρακολουθείται στο `docs/CURRENT_STATE.md` και οι αποκλίσεις στο `docs/ROADMAP_ALIGNMENT_REPORT.md`.
 
-## Tech Stack
+## Current Pilot And Target Product
 
-- React + Vite
+Current verified pilot:
+
+```text
+https://bp-kallis.homelabshare.gr/
+```
+
+Approved target domains, σε μελλοντική phase:
+
+```text
+https://shiftoryx.gr
+https://shiftoryx.gr/login
+https://shiftoryx.gr/register
+https://shiftoryx.gr/admin
+https://shiftoryx.gr/stores
+https://{tenantSlug}.shiftoryx.gr
+```
+
+Το `bp-kallis.homelabshare.gr` παραμένει ενεργό μέχρι να επαληθευτεί πλήρως το `bp-kallis.shiftoryx.gr`. Δεν έχει εγκριθεί μέσα στη documentation phase αλλαγή DNS, tunnel, Firebase authorized domains ή production deployment.
+
+## Τι Λειτουργεί Σήμερα
+
+- Weekly και monthly scheduler.
+- Pure TypeScript scheduler engine.
+- Automatic generation και manual editing.
+- Drag and drop, templates και week history.
+- Fixed days off, absences, Sunday rotation και manual overrides.
+- Public anonymous read-only schedule και announcements.
+- Public ώρες ανά εργαζόμενο χωρίς private absence breakdown.
+- Admin/owner employee, absence, settings και announcement management.
+- PDF, Excel, Word και WhatsApp exports.
+- Private monthly PDF archive στο Firebase Storage.
+- Tenant-scoped Firestore operational data.
+- UID-based tenant membership authorization.
+- Central portal/auth broker/platform-admin foundations πίσω από ασφαλή boundaries/flags.
+
+Λεπτομερής snapshot: `docs/project-status-report.md` και `docs/CURRENT_STATE.md`.
+
+## Service Layer Architecture
+
+Η πρόσβαση σε Firebase/Firestore περνά από τα domain services στο `src/firebase/` και τα repository wrappers στο `src/repositories/`. Components και Zustand orchestration δεν πρέπει να δημιουργούν νέα direct Firestore paths όταν υπάρχει service/repository boundary.
+
+Τα generated shifts και τα σχετικά audit events χρησιμοποιούν `generationRunId`, ώστε ένα generation run να συσχετίζεται με τις εγγραφές που δημιούργησε. Τα audit logs είναι tenant-scoped και client-immutable μετά το create, με τον γνωστό περιορισμό ότι πλήρως εγγυημένο audit απαιτεί trusted server-side write path.
+
+## Actors And Access Model
+
+### ShiftOryx Admin
+
+Ο ιδιοκτήτης της πλατφόρμας. Το τεχνικό compatibility role μπορεί να παραμείνει `SUPER_ADMIN` και ελέγχεται από `platformAdmins/{uid}` με `ACTIVE` status. Δεν αποκτά αυτόματα πρόσβαση στα operational δεδομένα κάθε tenant.
+
+### Owner
+
+Ο `OWNER` είναι ο μόνος authenticated tenant role για νέα MVP memberships. Ο owner διαχειρίζεται το κατάστημα, τους εργαζομένους, το πρόγραμμα, τις απουσίες, τα exports και το public schedule.
+
+Current compatibility: το deployed code/rules μπορεί ακόμη να αναγνωρίζει `ADMIN` και `MANAGER` για παλιές memberships. Δεν δημιουργούμε νέες memberships με αυτούς τους ρόλους. Η ομαλοποίηση ανήκει στο roadmap Phase 2.
+
+### Employees / Public Viewers
+
+Δεν έχουν account, password, Firebase UID ή tenant membership στο MVP. Μπαίνουν στο tenant URL χωρίς login και βλέπουν sanitized public δεδομένα.
+
+Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και legacy aliases) είναι business classifications και όχι auth roles.
+
+## Public Privacy Contract
+
+Το current public view δείχνει μόνο sanitized schedule/display fields. Δεν δείχνει contact data, AFM, UID, memberships, audit data, private archive metadata, private notes ή reasons of absence.
+
+Το master roadmap προβλέπει για Phase 10 future sanitized statuses:
+
+- `Άδεια`
+- `Ρεπό`
+- `Δεν εργάζεται`
+- explicit `publicNote`
+
+Αυτό δεν είναι ακόμη runtime behavior. Το generic `notes` field δεν δημοσιεύεται αυτόματα. Η Phase 10 απαιτεί `publicNote`/`privateNote` separation, owner preview και leakage tests.
+
+## Scheduler Guarantees
+
+- Core employees δεν μπαίνουν στην ίδια βάρδια όταν δουλεύουν την ίδια ημέρα.
+- Core employee δεν ανατίθεται ως intermediate.
+- Intermediate/coverage slots χρησιμοποιούν κατάλληλο scheduler role.
+- Fixed day off είναι hard constraint.
+- Με 3 διαθέσιμους: morning, intermediate, evening.
+- Με 4 διαθέσιμους σε full-coverage day: 2 morning, 2 evening.
+- Κυριακή: μία βάρδια `08:00-20:00` με fairness και αποφυγή συνεχόμενων Κυριακών όπου είναι εφικτό.
+- Manual overrides προστατεύονται.
+- Ίδια inputs δίνουν deterministic output.
+- Αδύνατη κάλυψη παράγει warning, όχι ψεύτικα σωστό πρόγραμμα.
+
+References:
+
+- `docs/scheduler-rules.md`
+- `docs/scheduler-ui-export-rules.md`
+- `docs/scheduler-qa-checklist.md`
+
+## Repository And Deployment Map
+
+```text
+Local Codex workspace:
+C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main
+
+Do not use:
+GasStationProject-main
+
+GitHub remote:
+https://github.com/spandreou/GasStationProject.git
+
+Homelab checkout:
+/home/spandreou/projects/GasStationProject
+
+Production branch:
+main
+
+Compose/container:
+gasstationproject / gasstation-bp-kallis
+
+Port:
+8085 -> 8080
+```
+
+Τα repository, Firebase project, Docker και server identifiers παραμένουν legacy compatibility names μέχρι να υπάρξει ξεχωριστό, εγκεκριμένο migration. Μην τα αλλάζεις για branding λόγους.
+
+## Stack
+
+- React 19 + Vite 8
+- TypeScript scheduler engine
 - Zustand
-- Firebase Firestore + Firebase Auth
-- Tailwind CSS
+- Tailwind CSS 3.x
+- Firebase Auth, Firestore, Storage και Cloud Functions
 - dnd-kit
+- jsPDF, `@e965/xlsx`, `docx`
+- Playwright
+- Docker Compose + Nginx
 
-## Milestone: Scheduler Stabilization & Engine Integration
+Approved direction: TypeScript για κάθε νέο ή τροποποιούμενο critical module, χωρίς Next.js rewrite και χωρίς forced Tailwind major upgrade.
 
-Ολοκληρώθηκε το βασικό stabilization milestone για το scheduling module.
-
-Τι καλύπτει:
-
-- Compact weekly/monthly scheduler UI με stacked monthly weeks.
-- Resizable scheduler layout και πιο καθαρή ανάγνωση shift cards.
-- Source-of-truth fix για employee scheduling roles.
-- Νέος pure TypeScript scheduler engine στο `src/scheduler-engine/`.
-- Runtime σύνδεση του νέου engine στο weekly/monthly auto generation μέσω adapter.
-- Role logic με `CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B` και προαιρετικά `EXTRA_A`, `EXTRA_B`.
-- Fixed days off, absences/gaps, Sunday rotation και validation rules.
-- Regression tests για monthly role conflicts και generator correctness.
-
-Βασικοί κανόνες που πλέον ελέγχονται:
-
-- Core employees δεν μπαίνουν ποτέ στην ίδια βάρδια.
-- Core employees δεν μπαίνουν ως intermediate.
-- Intermediate/FLEX slot καλύπτεται από FLEX/coverage ρόλο.
-- Με 3 διαθέσιμους εργαζόμενους βγαίνει 1 πρωί, 1 ενδιάμεσος, 1 απόγευμα.
-- Με 4 διαθέσιμους σε full coverage ημέρα βγαίνει 2 πρωί και 2 απόγευμα.
-- Fixed day off τηρείται ως hard constraint.
-- Κυριακή έχει ακριβώς 1 βάρδια 08:00-20:00.
-
-Validation commands:
-
-```bash
-npm run qa:scheduler-engine
-npm run qa:scheduler
-npm run build
-npm run test:e2e:scheduler
-npm run qa:saas-foundation
-```
-
-Local Playwright e2e specs default to `http://127.0.0.1:5174/` to avoid colliding with unrelated Vite apps on `5173`. Start local Vite with `npm run dev -- --host 127.0.0.1 --port 5174 --strictPort` or override with `E2E_BASE_URL` when needed.
-
-Security checks:
-
-```bash
-npm run security:hardening
-npm run security:audit
-npm run security:cve
-npm run security:scan
-```
-
-CI also runs npm audit, OWASP CVE Lite, Trivy, and report-only Semgrep through `.github/workflows/security-scan.yml`.
-
-Σημείωση: το UI των παλιών role labels (`Core 1`, `Core 2`, `Intermediate / Coverage`) συνεχίζει να υποστηρίζεται και μεταφράζεται από adapter στον νέο engine.
-
-## Quick Start
+## Local Development
 
 ```bash
 npm install
 cp .env.example .env
-npm run dev
+npm run dev -- --host 127.0.0.1 --port 5174 --strictPort
 ```
 
-## Demo Environment Variables
+Τα πραγματικά Firebase/server values μένουν μόνο σε local/server environment files. Μην κάνεις commit `.env`.
 
-Συμπλήρωσε τα Firebase env vars στο `.env` (ή στο Vercel Project Settings):
-
-```env
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-VITE_FIREBASE_MEASUREMENT_ID=
-
-VITE_APP_MODE=demo
-```
-
-## Admin Auth Model
-
-- Υποστηρίζεται μόνο **admin login**.
-- Firebase Auth πιστοποιεί μόνο την ταυτότητα του χρήστη.
-- Admin δικαιώματα αποδίδονται μόνο από ACTIVE tenant membership με role `OWNER`, `ADMIN`, ή `MANAGER`.
-- Δεν υπάρχει client-side admin password env var ή fallback credential.
-- Δεν υπάρχει employee login flow στο τρέχον scope.
-
-## Production Admin Setup
-
-Για production deployment:
-
-1. Δημιούργησε τον admin χρήστη στο Firebase Auth.
-2. Δημιούργησε document `tenantMemberships/{uid}_bp-kallis` με `status: "ACTIVE"` και role `OWNER`, `ADMIN`, ή `MANAGER`.
-
-3. Κάνε sign out / sign in ώστε το Firebase Auth state να ανανεωθεί.
-4. Κράτα το `VITE_APP_MODE=production`.
-5. Μην ορίζεις admin passwords σε Vite env vars. Τα Vite env vars είναι client-visible.
-
-### Safe Tenant Membership Seed Script
-
-Υπάρχει helper script για να δημιουργήσεις tenant και membership χωρίς να μπει κωδικός στο frontend bundle ή στο Git:
-
-```powershell
-npm run tenant:seed-bp-kallis -- --uid "<firebase-uid>" --role ADMIN --use-gcloud
-```
-
-Εναλλακτικά, μπορείς να δώσεις το service account JSON από `FIREBASE_SERVICE_ACCOUNT_JSON`.
-
-Αν έχεις ήδη ενεργό Google Cloud login με τα σωστά Firebase Auth δικαιώματα, μπορείς να χρησιμοποιήσεις:
-
-```powershell
-npm run tenant:seed-bp-kallis -- --uid "<firebase-uid>" --role ADMIN --dry-run
-```
-
-Με το `--send-reset` στέλνεται Firebase password reset email στον admin, ώστε ο κωδικός να οριστεί από τον ίδιο τον διαχειριστή και να μη μπει σε logs/chat/repo.
-
-Το script:
-
-- γράφει `tenants/bp-kallis`,
-- γράφει `tenantMemberships/{uid}_bp-kallis`,
-- γράφει safe `users/{uid}` metadata,
-- δεν εκτυπώνει private key ή access token.
-
-Μετά το bootstrap, κάνε sign out / sign in στην εφαρμογή για να ανανεωθεί το Firebase ID token.
-
-Προτεινόμενο test admin email:
-
-```txt
-homelabshare@gmail.com
-```
-
-Ο κωδικός είναι αυτός που ορίζεται στον Firebase Auth χρήστη ή αυτός που θα αλλάξει μέσω Firebase password reset. Δεν πρέπει να αποθηκεύεται στο repo ή να μοιράζεται σε logs/chat.
-
-## Self-Hosted BP Kallis Pilot
-
-Το πρώτο self-hosted deployment target είναι:
+Repository-safe defaults:
 
 ```text
-bp-kallis.homelabshare.gr
+VITE_ENABLE_AUTH_BROKER=false
+VITE_ENABLE_TENANT_GATE=false
+VITE_ENABLE_MONTHLY_PDF_ARCHIVE=false
 ```
 
-Προστέθηκαν deployment artifacts:
-
-- `Dockerfile`
-- `docker-compose.yml`
-- `nginx.conf`
-- `.env.example`
-
-Βασική εκκίνηση σε server:
+## Validation
 
 ```bash
-cp .env.example .env
-docker compose up -d --build
+npm run build
+npm run qa:scheduler
+npm run qa:scheduler-engine
+npm run qa:repositories
+npm run qa:public-readonly
+npm run qa:tenant-authorization
+npm run qa:auth-broker
+npm run qa:export-security
+npm run security:scan
 ```
 
-Το Vite build παίρνει τα `VITE_*` values ως build-time env/args. Μην κάνεις commit πραγματικό `.env`.
+Emulator και Playwright tests εκτελούνται ανάλογα με το scope. Το local E2E base URL είναι `http://127.0.0.1:5174/` ώστε να αποφεύγεται collision με άλλες Vite εφαρμογές.
 
-Αναλυτικά:
+## Approved Roadmap Order
 
+0. Documentation alignment.
+1. Current-state audit.
+2. OWNER-only role and authorization normalization.
+3. Registration token backend.
+4. Automated tenant provisioning.
+5. Root portal and store selector.
+6. Wildcard ShiftOryx domains.
+7. Trial/subscription entitlements.
+8. Multi-store lifecycle.
+9. ShiftOryx admin panel.
+10. Public statuses and notes.
+11. Subdomain rename and aliases.
+12. Customization request workflow.
+13. VPS production migration.
+14. HomeOps read-only integration.
+15. Billing provider.
+
+Μία phase κάθε φορά. Καμία production αλλαγή χωρίς explicit approval και rollback plan.
+
+## Trial And Pricing Direction
+
+Product proposal, όχι deployed enforcement:
+
+- Trial: 7 ημέρες, 1 store, έως 10 employees, planning horizon 1 εβδομάδα.
+- Monthly: EUR 14.90 για πρώτο store, horizon 2 μήνες.
+- Quarterly: EUR 39.90 για πρώτο store, horizon 6 μήνες.
+- Semiannual: EUR 74.90 για πρώτο store, horizon 12 μήνες.
+- Additional stores: προτεινόμενο μειωμένο per-store pricing.
+
+Το pricing χρειάζεται λογιστικό/φορολογικό έλεγχο πριν δημοσιευτεί. Subscription limits πρέπει μελλοντικά να επιβάλλονται server-side και όχι μόνο στο UI.
+
+## Hosting Direction
+
+Το homelab παραμένει pilot/development environment. Πριν από paid public beta απαιτείται εγκεκριμένο ευρωπαϊκό VPS, hardened Ubuntu, Docker deployment, backups/restore drill, monitoring, staging smoke, controlled cutover και rollback προς το homelab.
+
+Δεν αγοράζεται ή αλλάζει VPS/DNS μέσα σε documentation work.
+
+## Key Documentation
+
+- `AGENTS.md`
+- `docs/project-brain.md`
+- `docs/CURRENT_STATE.md`
+- `docs/ROADMAP_ALIGNMENT_REPORT.md`
+- `FIREBASE_SCHEMA.md`
+- `HOMELAB.md`
 - `docs/self-hosting-bp-kallis.md`
 - `docs/saas-tenant-foundation.md`
-- `docs/saas-security-qa-checklist.md`
-- `docs/monthly-pdf-archive-runbook.md`
+- `docs/tenant-authorization-model.md`
 - `docs/central-auth-portal-migration.md`
 - `docs/auth-broker-runbook.md`
+- `docs/tenant-provisioning-runbook.md`
+- `docs/platform-admin-runbook.md`
+- `docs/monthly-pdf-archive-runbook.md`
+- `SECURITY.md`
 
-## SaaS Tenant Foundation
+## Safety
 
-Η κατεύθυνση είναι μία κοινή εφαρμογή, όχι διαφορετικό codebase ανά πρατήριο.
-
-Αρχική στρατηγική:
-
-- `bp-kallis.homelabshare.gr` -> tenant subdomain
-- `gas.homelabshare.gr` -> future central portal
-- Firebase Auth για identity
-- Firestore `tenants` και `tenantMemberships` ως foundation
-- UID-based memberships, όχι hardcoded email-to-domain mappings
-
-Foundation files:
-
-- `src/utils/tenantHostContext.js`
-- `src/utils/tenantDataPaths.js`
-- `src/repositories/firebase/firebaseTenantsRepository.js`
-- `src/repositories/firebase/firebaseTenantMembershipsRepository.js`
-- `src/repositories/firebase/firebaseTenantSubscriptionRepository.js`
-- `src/repositories/firebase/firebaseTenantTokenRequestsRepository.js`
-
-Prepared auth routes:
-
-- `/` on `gas.homelabshare.gr`
-- `/login`
-- `/forgot-password`
-- `/reset-password`
-- `/select-tenant`
-
-Το `/login` χρησιμοποιεί Firebase Auth και προετοιμάζει το central portal flow:
-
-- 0 memberships -> safe no-access message
-- 1 membership -> redirect στο tenant domain
-- 2+ memberships -> `/select-tenant`
-- `returnTo` tenant URLs are verified against uid-based tenant membership before redirect.
-
-Τα reset routes χρησιμοποιούν Firebase action codes και δεν κάνουν log κωδικούς ή reset tokens.
-
-Σημαντικό: Firebase client auth persistence είναι origin-scoped. Πριν γίνει production enforcement του central-only login για tenant domains, χρειάζεται backend/session-cookie bridge ή Firebase auth broker. Δες `docs/central-auth-portal-migration.md` και `docs/auth-broker-runbook.md`.
-
-## Demo-only Σημεία
-
-- Demo employee/sample ονομασίες
-- Presentation-safe κείμενα/labels
-
-## Phase 1 Production Security Hardening
-
-- Καταργήθηκαν client-side admin password checks.
-- Καταργήθηκαν fallback demo credentials.
-- Τα Firestore reads απαιτούν authenticated user.
-- Τα Firestore writes απαιτούν ACTIVE tenant admin membership.
-- Προστέθηκαν βασικά Firestore field validations για κρίσιμες συλλογές.
-- Προστέθηκαν Vercel security headers.
-- Το CSP μένει για επόμενο focused pass επειδή χρειάζεται browser verification με Firebase Auth/Firestore/Analytics.
-
-## Phase 2 Firestore Data Integrity & Audit Logs
-
-- Τα μαζικά Firestore writes για generate/clear/load schedule flows χρησιμοποιούν batch/chunked writes αντί για ανεξάρτητα `Promise.all` writes.
-- Κάθε αυτόματη δημιουργία εβδομάδας ή μήνα δημιουργεί `generationRunId` και το αποθηκεύει στα generated shifts.
-- Το `generationRunId` συνδέει τις βάρδιες με το αντίστοιχο generation event, ώστε να μπορεί να γίνει μελλοντικό audit ή rollback ανά run.
-- Προστέθηκε immutable Firestore collection `audit_logs` για βασικές admin ενέργειες:
-  - schedule generation
-  - clear day/week/month
-  - manual shift create/update/move/delete
-  - employee create/update/delete
-  - generator/settings changes
-  - week finalization και snapshot/template actions
-  - announcements
-- Τα audit logs γράφονται μόνο από authenticated admins και δεν επιτρέπεται client-side update/delete μέσω Firestore rules.
-
-Περιορισμός: επειδή δεν υπάρχει backend/Cloud Function σε αυτή τη φάση, το audit log γράφεται από trusted admin client code και προστατεύεται από Firestore rules. Για πλήρως server-enforced audit trail χρειάζεται μελλοντικό backend ή Firestore trigger.
-
-## Service Layer Architecture
-
-Η πρόσβαση σε Firebase/Firestore περνάει από dedicated service layer στο `src/firebase/`.
-
-Services:
-
-- `config.js`: Firebase app/Auth/Firestore initialization και env validation.
-- `authService.js`: Firebase sign-in/sign-out/reset. Tenant admin authorization γίνεται με UID + tenant membership.
-- `firestoreCore.js`: shared Firestore helpers, collection names, batch/chunk helpers και common error handling.
-- `employeeService.js`: employee subscribe/create/update/delete.
-- `shiftService.js`: shifts, shift templates, batch replacements, date/employee deletes και Sunday lookup.
-- `settingsService.js`: scheduler settings subscribe/upsert.
-- `announcementService.js`: announcement subscribe/create/delete.
-- `weekService.js`: attendance history, week locks, week history και week templates.
-- `auditLogService.js`: immutable audit log writes.
-- `schedulerService.js`: deprecated compatibility barrel για παλιά imports. Νέος κώδικας να χρησιμοποιεί τα domain services.
-
-Κανόνας συντήρησης: components και Zustand store δεν πρέπει να μιλάνε απευθείας σε Firestore όταν υπάρχει service. Το store λειτουργεί ως state/orchestration layer, ενώ persistence και Firebase communication ανήκουν στα services.
+- No secrets, tokens, passwords, private keys or service-account content in source, docs or logs.
+- No client-only trust for privileged operations.
+- No new dependencies without need/alternatives/maintenance/install-risk review.
+- No manual lockfile edits or force audit upgrades.
+- No GitHub Actions permission changes without explicit approval.
+- No production deploy, Firebase rules change, DNS/tunnel change or runtime feature implementation during documentation alignment.

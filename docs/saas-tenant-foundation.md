@@ -1,275 +1,115 @@
-# SaaS Tenant Foundation
+# ShiftOryx SaaS Tenant Foundation
 
-This project is moving toward a shared SaaS architecture:
+This document separates the current tenant-aware pilot from the approved ShiftOryx SaaS target. It does not authorize runtime, Firebase, DNS or deployment changes.
 
-```text
-One shared app
-Tenant detected by hostname
-Access controlled by uid-based tenant memberships
-Tenant data isolated by tenantId
-```
+## Current And Target Domains
 
-## Domains
+| Purpose | Current/legacy | Approved target |
+| --- | --- | --- |
+| BP Kallis pilot | `bp-kallis.homelabshare.gr` | `bp-kallis.shiftoryx.gr` |
+| Central portal foundation | `gas.homelabshare.gr` | `shiftoryx.gr` |
+| Tenant pattern | `{tenant}.homelabshare.gr` | `{tenantSlug}.shiftoryx.gr` |
 
-Central portal:
+The current pilot remains active until wildcard routing, Firebase authorized domains, auth handoff, monitoring and rollback are verified. The target uses one shared frontend and one wildcard domain; do not create one deployment/container/codebase per tenant.
 
-```text
-gas.homelabshare.gr
-```
+## Tenant Resolution And Authorization
 
-Pilot tenant:
+Hostname resolution produces tenant context only. It never grants access.
 
-```text
-bp-kallis.homelabshare.gr
-```
+Private access requires:
 
-Future tenant examples:
+1. authenticated Firebase user,
+2. matching `tenantMemberships/{uid}_{tenantId}` document,
+3. `ACTIVE` status,
+4. valid role.
 
-```text
-bp-manopoulos.homelabshare.gr
-eko-example.homelabshare.gr
-```
+Target MVP creates only `OWNER`. Existing `ADMIN` and `MANAGER` values are compatibility roles until Phase 2 inventory and migration. Unknown roles deny access. Email allowlists and custom claims do not grant tenant access.
 
-## Host Resolution
+Platform administration is separate through `platformAdmins/{uid}`. A ShiftOryx Admin does not automatically receive tenant operational access.
 
-`src/utils/tenantHostContext.js` resolves:
+Employees/public viewers have no account or membership in the MVP. They use anonymous sanitized tenant data.
 
-- `gas.homelabshare.gr` -> central mode
-- `{tenant}.homelabshare.gr` -> tenant mode
-- `localhost` / `127.0.0.1` -> local mode with development fallback tenant slug
+## Current Tenant Data
 
-Hostname resolution is not authorization. It only determines context.
-
-## Membership Model
-
-Recommended Firestore collections:
+Private operational data is tenant-scoped:
 
 ```text
-users/{uid}
-tenants/{tenantId}
-tenantMemberships/{uid}_{tenantId}
-```
-
-Memberships must be resolved by Firebase Auth `uid`, not by hardcoded email.
-
-Tenant membership shape:
-
-```ts
-type TenantMembership = {
-  id: string;
-  uid: string;
-  tenantId: string;
-  email: string;
-  role: "OWNER" | "ADMIN" | "MANAGER";
-  status: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "EXPIRED" | "REVOKED";
-  createdAt: Date;
-  updatedAt: Date;
-};
-```
-
-## Repository Foundation
-
-The current Firebase implementations are:
-
-- `tenantsRepository`
-- `tenantMembershipsRepository`
-- `tenantSubscriptionRepository`
-- `tenantTokenRequestsRepository`
-- `tenantAccessService`
-- `tenantDataPaths`
-
-They are exported from `src/repositories/index.js` so future code can switch to an API/PostgreSQL implementation without coupling UI components directly to Firestore.
-
-`src/services/tenantAccessService.js` owns the current membership resolution helpers:
-
-- load active memberships by Firebase Auth `uid`
-- resolve a central portal destination
-- validate `returnTo` tenant URLs before redirecting
-- prepare tenant-host membership verification
-- build tenant URLs from `tenant.domain` or `{tenant.slug}.homelabshare.gr`
-
-Tenant membership checks use the raw Firebase Auth user uid. Admin-only scheduler permissions require an ACTIVE tenant membership for the hostname tenant with role `OWNER`, `ADMIN`, or `MANAGER`; email allowlists and Firebase custom claims do not grant tenant admin access.
-
-`src/utils/tenantDataPaths.js` defines the target tenant-scoped data paths:
-
-```text
-users/{uid}
-tenants/{tenantId}
-tenantMemberships/{uid}_{tenantId}
 tenants/{tenantId}/employees
 tenants/{tenantId}/shifts
+tenants/{tenantId}/shiftTemplates
+tenants/{tenantId}/absences
 tenants/{tenantId}/settings
-tenants/{tenantId}/subscription
-tenants/{tenantId}/tokenRequests
+tenants/{tenantId}/announcements
+tenants/{tenantId}/weekHistory
+tenants/{tenantId}/weekLocks
+tenants/{tenantId}/weekTemplates
 tenants/{tenantId}/auditLogs
 ```
 
-This is a foundation contract only. The BP Kallis pilot data is not migrated in this phase.
+Legacy root scheduler collections are locked and must not be runtime fallbacks.
 
-Subscription and token-request repositories are prepared as tenant-scoped adapters:
-
-- `tenantSubscriptionRepository.getTenantSubscription(tenantId)`
-- `tenantTokenRequestsRepository.createTenantTokenRequest(tenantId, request)`
-- `tenantTokenRequestsRepository.listTenantTokenRequests(tenantId)`
-
-They are not wired into paid billing or production activation flows yet. Token requests store request metadata, not secret token values.
-
-## Central Portal Flow
-
-Target flow after login at `gas.homelabshare.gr`:
+Current public collections:
 
 ```text
-read currentUser.uid
-load active tenant memberships
-0 memberships -> show no-access message
-1 membership -> redirect to tenant domain
-2+ memberships -> show /select-tenant
+tenants/{tenantId}/publicSchedules/{weekStart}
+tenants/{tenantId}/publicMonths/{YYYY-MM}
+tenants/{tenantId}/publicEmployees/{employeeId}
+tenants/{tenantId}/publicAnnouncements/{announcementId}
 ```
 
-When a user was redirected from a tenant domain, the central login may receive a
-`returnTo` parameter. The app must validate that URL as a tenant/local URL and
-verify active membership for the target tenant before redirecting.
+The current public runtime exposes work schedule and display-safe data only. It does not use a root `published_schedules` fallback.
 
-Safe no-access message:
+Phase 10 may add sanitized status labels and `publicNote` after explicit field separation, owner preview, rules review and leakage tests. Absence reasons, medical data, generic/private notes, attachments, contact fields, UIDs, memberships, audit data and archive metadata stay private.
 
-```text
-Δεν υπάρχει ενεργό πρατήριο συνδεδεμένο με αυτόν τον λογαριασμό.
-```
+## Multi-Store Target
 
-`/select-tenant` uses the tenant access service and must not hardcode email-to-domain mappings.
+An OWNER may hold multiple ACTIVE OWNER memberships. The root portal should show a store selector with business name, domain, plan, trial/subscription state, employee count and last activity. Entering a tenant requires a short-lived auth broker/server-side bridge; hostname alone is not authorization.
 
-## Access Rules
+## Registration Token Target
 
-Target access flow for a tenant subdomain:
+Future registration uses one-time tokens formatted `XXX-XXX-XXX` for display. Requirements:
 
-```text
-resolve hostname -> tenant slug
-load tenant
-read current Firebase user uid
-verify active membership for uid + tenantId
-allow or deny app access
-```
+- cryptographically secure generation and no ambiguous characters,
+- store token hash only,
+- show full token once,
+- statuses `ACTIVE`, `USED`, `EXPIRED`, `REVOKED`,
+- atomic single-use consumption, expiry and revocation,
+- rate limiting and generic errors,
+- no raw token logging.
 
-Safe deny message:
+Successful registration will create the user, business/tenant, unique slug reservation, OWNER membership and safe defaults in trusted server-side operations.
 
-```text
-Δεν έχετε πρόσβαση σε αυτό το πρατήριο.
-```
+## Trial And Entitlements Target
 
-Do not reveal whether other tenants exist.
+Proposed trial: 7 days, one store, up to 10 employees, one-week planning horizon, basic features and one PDF. Proposed paid horizons are two, six and twelve months for monthly, quarterly and semiannual plans.
 
-## Firestore Rules Foundation
+All limits require server-side checks for tenant status, subscription state, ownership, planning horizon and feature entitlement. Pricing requires accounting/tax approval before publication. A proposed seven-day grace period is read-only; data-retention/deletion needs an explicit policy and audited job.
 
-The SaaS collections are protected in `firestore.rules`:
+## Slugs And Aliases
 
-- `users/{uid}` can be read by the owning uid or admin.
-- `tenantMemberships/{uid}_{tenantId}` can be read by the owning uid only when `status == "ACTIVE"`; writes are admin-only.
-- `tenants/{tenantId}` can be read by admins or active tenant members.
-- `tenants/{tenantId}/employees`, `shifts`, `settings`, `subscription`, and `tokenRequests` can be read by admins or active tenant members.
-- Tenant-scoped writes remain admin-only in this phase.
-- `tenants/{tenantId}/auditLogs` can be created by admins and cannot be updated or deleted by clients.
+Target slugs are lowercase `a-z`, `0-9` and hyphen, 3-40 characters, checked against reserved names and claimed atomically. Unknown hosts render a safe page. Rename is a future audited operation with a temporary alias/redirect window and loop-safe `returnTo` validation.
 
-These rules prepare tenant isolation without enabling public or email-based access.
+## Customization Requests
 
-## Tenant Public Read-Only Snapshots
+Future OWNER requests use a structured authenticated form. Any attachments require size/MIME checks, private Storage and safe processing. No custom JS/HTML, external scripts or unsafe embeds.
 
-BP Kallis public/read-only visitors must not read raw admin collections such as `employees`, `shifts`, `announcements`, `week_history`, `audit_logs`, or `monthly_schedule_exports`.
+## Hosting Direction
 
-Public schedule data is mirrored into sanitized tenant subcollections:
+The homelab is the pilot/development environment. Paid public beta requires a controlled EU VPS migration after current-state audit, `shiftoryx.gr` setup, backup restore testing, staging smoke, monitoring and rollback. Suggested minimum: 4 vCPU, 8 GB RAM, 80-160 GB NVMe, Ubuntu 24.04, snapshots and hardened Docker deployment.
 
-- `tenants/{tenantId}/publicSchedules/{weekStart}`
-- `tenants/{tenantId}/publicMonths/{YYYY-MM}`
-- `tenants/{tenantId}/publicEmployees/{employeeId}`
-- `tenants/{tenantId}/publicAnnouncements/{announcementId}`
+Current product recommendation: evaluate OVH VPS-2 first and Contabo as a budget alternative. Price, VAT, EU datacenter availability and provider terms are time-sensitive and must be verified immediately before any purchase.
 
-Admin save/generate/edit actions refresh these documents automatically. The legacy root `published_schedules` collection remains only as a non-destructive fallback for older data; new writes should use the tenant-scoped public paths.
+Do not buy or migrate infrastructure during documentation alignment.
 
-Allowed public fields are intentionally narrow: schedule dates/times and display names, employee display name/role/color/active status, and announcement title/body/date. Do not add phone, email, AFM, private notes, audit metadata, Storage paths, public URLs, signed URLs, monthly PDF archive metadata, or internal admin fields to public snapshots.
+## HomeOps Boundary
 
-The old finalized/published-week UI flow is no longer the source of truth. Owners can edit schedules after old `week_locks` data exists, and public snapshots are refreshed by normal save/generate/clear actions.
+Future Phase 14 integration is read-only and aggregate-only: uptime, HTTP/service health, host/container health, backup/version status, Cloudflare/Firebase health and tenant counts. It must never expose credentials, tokens, auth tickets, private employee data, absence reasons, private notes or raw tenant records.
 
-## Tenant Gate
+## Safe Phase Boundaries
 
-`src/components/auth/TenantGate.jsx` wraps tenant views and is controlled by:
+- Phase 0: documentation only.
+- Phase 1: evidence-backed current-state audit.
+- Phase 2: role normalization.
+- Later phases implement tokens, provisioning, portal, wildcard domains, entitlements, multi-store, admin lifecycle, public statuses, aliases, customization, VPS, HomeOps and billing in that order.
 
-```text
-VITE_ENABLE_TENANT_GATE=false
-VITE_ENABLE_AUTH_BROKER=false
-```
-
-The flag is intentionally default-off for the BP Kallis pilot until tenant seed data exists in Firestore:
-
-```text
-tenants/{tenantId}
-tenantMemberships/{uid}_{tenantId}
-```
-
-When enabled, the gate:
-
-- resolves the tenant hostname,
-- reads the authenticated Firebase user uid,
-- checks active membership for `uid + tenantId`,
-- redirects unauthenticated tenant users to `gas.homelabshare.gr/login` with a
-  preserved `returnTo`,
-- shows the safe denied message before tenant data is rendered.
-
-Do not use hostname detection as authorization. The hostname only selects context; membership decides access.
-
-## Central Auth Production Blocker
-
-Firebase client auth persistence is origin-scoped. A login session created on
-`gas.homelabshare.gr` is not automatically available on
-`bp-kallis.homelabshare.gr`.
-
-Do not enable tenant-domain central-login enforcement in production until there
-is a backend/session-cookie bridge or another reviewed auth broker. Do not pass
-Firebase ID tokens, refresh tokens, reset codes, or signed session material in
-query strings.
-
-Detailed rollout and rollback notes live in:
-
-```text
-docs/central-auth-portal-migration.md
-docs/auth-broker-runbook.md
-```
-
-The Firebase auth broker is prepared behind `VITE_ENABLE_AUTH_BROKER=false`.
-Do not deploy or enable it until the Cloud Functions endpoints, denied
-`authTickets` rules, ticket replay protection and tenant callback flow have been
-validated.
-
-## BP Kallis Seed Command
-
-Before enabling `VITE_ENABLE_TENANT_GATE=true`, seed Firestore with the BP Kallis tenant and at least one active membership:
-
-```bash
-npm run tenant:seed-bp-kallis -- --uid <firebase-auth-uid> --dry-run
-npm run tenant:seed-bp-kallis -- --uid <firebase-auth-uid> --use-gcloud
-```
-
-The script writes:
-
-```text
-tenants/bp-kallis
-tenantMemberships/{uid}_bp-kallis
-users/{uid}
-```
-
-It does not authorize by email. Email is optional metadata only when passed explicitly. Do not commit service account files or `.env`.
-
-## Future PostgreSQL Direction
-
-Do not migrate yet. Keep models PostgreSQL-ready:
-
-- `tenants`
-- `users`
-- `tenant_memberships`
-- `subscriptions`
-- `activation_tokens`
-- `token_requests`
-- `employees`
-- `shifts`
-- `settings`
-- `audit_logs`
-
-Avoid Firestore-specific business logic in UI components.
+Each phase stops for approval. No production change occurs without explicit authorization, exact validation and rollback.

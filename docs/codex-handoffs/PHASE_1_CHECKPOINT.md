@@ -1,0 +1,13 @@
+# ShiftOryx Phase 1 Checkpoint
+
+- Current branch: `shiftoryx-phase-1-current-state-audit`
+- Base commit: `ba07ffa83cac5ba08209a6b1c35e79be987e0690` (`HEAD == origin/main` at audit start)
+- Last completed audit pass: Pass P plus safe validation and final Phase 1 documentation
+- Files inspected: all required canonical/runbook documentation; repository surfaces from Passes A-P; local build/test outputs; dependency graph/advisories; final documentation for consistency. The untracked `firestore-debug.log` was not read.
+- Commands executed: complete Pass A-P read-only command set; safe validation matrix; dependency audits; redacted tracked-secret scans; documentation classification/count checks; final Git scope commands
+- Confirmed findings: all Pass A-P findings are recorded in `docs/PHASE_1_CURRENT_STATE_AUDIT.md`; `docs/CURRENT_STATE.md` now contains the concise canonical implementation snapshot. Evidence table counts are 7 `IMPLEMENTED`, 14 `PARTIAL`, 10 `MISSING`, 1 `LEGACY`, 6 `RISKY`, 1 `UNKNOWN_REQUIRES_AUDIT` (39 total). Final verdict is `PHASE_1_READY_FOR_REVIEW`.
+- Provisional findings: master-roadmap Phase 0 "Next Action" is stale; `ROADMAP_DELTA_PENDING_SYNC`; unknown live infrastructure/data/configuration remains explicitly unaudited
+- Areas remaining: publish the approved Phase 1 documentation for review; do not begin Phase 2A or Phase 2B in this task
+- Validation completed: PASS — `npm run build`; `npm run qa:scheduler-engine`; `npm run qa:scheduler`; `npm run qa:repositories`; `npm run qa:public-readonly`; `npm run qa:tenant-authorization`; `npm run qa:saas-foundation`; `npm run qa:auth-broker`; `npm run qa:export-security`; `npm run security:hardening`; `npm run security:integrity`; `npm run lint --prefix functions`. Playwright: 6 PASS / 1 FAIL (absence fixture timed out waiting for hard-coded 2026-06 dates). FAIL — `npm run security:audit` due one critical and one moderate root advisory. Functions direct `npm audit --json`: FAIL at audit-level default with 9 moderate/1 low. SKIPPED_WITH_REASON — Firebase emulator suites and CVE-lite (`npx --yes` would install tools), Docker/live/deployment checks (outside read-only/no-production scope). Built bundle marker search found no `websocket-driver`/Faye markers.
+- Files modified: `docs/CURRENT_STATE.md`, `docs/PHASE_1_CURRENT_STATE_AUDIT.md`, `docs/codex-handoffs/PHASE_1_CHECKPOINT.md`
+- Next safe action: draft PR review. Any later Phase 2 must start with `Phase 2A — read-only inventory, migration design and emulator validation`; production OWNER changes require a separately approved `Phase 2B — controlled OWNER migration`.

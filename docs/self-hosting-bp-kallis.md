@@ -25,20 +25,21 @@ The current endpoint stays active until roadmap Phase 6 verifies wildcard DNS/ro
 Use these names exactly:
 
 ```txt
-Correct local Windows workspace:
-C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main
+Correct local Windows workspaces (use the one present on the current computer):
+Desktop PC: C:\Users\Spyros\OneDrive\Υπολογιστής\projects\shiftoryx
+Laptop: C:\Users\thugs\Desktop\projects\shiftoryx
 
 Wrong/old local folder:
 GasStationProject-main
 
 GitHub remote:
-https://github.com/spandreou/GasStationProject.git
+https://github.com/spandreou/shiftoryx.git
 
 Active server checkout:
 /home/spandreou/projects/GasStationProject
 ```
 
-The GitHub repository and server checkout still use `GasStationProject`. The local Codex workspace is `GasStation-main`. Do not spend time in `GasStationProject-main`.
+The GitHub repository is `spandreou/shiftoryx`, while the server checkout remains `/home/spandreou/projects/GasStationProject` as a deployment compatibility path. The local Codex workspace folder is `shiftoryx`. Do not spend time in `GasStationProject-main`.
 
 ## Current Server State
 

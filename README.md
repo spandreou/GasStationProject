@@ -112,14 +112,15 @@ References:
 ## Repository And Deployment Map
 
 ```text
-Local Codex workspace:
-C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main
+Local Codex workspaces (use the one present on the current computer):
+Desktop PC: C:\Users\Spyros\OneDrive\Υπολογιστής\projects\shiftoryx
+Laptop: C:\Users\thugs\Desktop\projects\shiftoryx
 
 Do not use:
 GasStationProject-main
 
 GitHub remote:
-https://github.com/spandreou/GasStationProject.git
+https://github.com/spandreou/shiftoryx.git
 
 Homelab checkout:
 /home/spandreou/projects/GasStationProject

@@ -2,7 +2,7 @@
 
 Ημερομηνία αναφοράς: 17 Ιουλίου 2026
 
-Repository: `spandreou/GasStationProject`
+Repository: `spandreou/shiftoryx`
 
 Production branch: `main`
 
@@ -527,7 +527,8 @@ Browser
 Deployment στοιχεία:
 
 ```text
-Local repo: C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main
+Local repo (Desktop PC): C:\Users\Spyros\OneDrive\Υπολογιστής\projects\shiftoryx
+Local repo (Laptop): C:\Users\thugs\Desktop\projects\shiftoryx
 Server checkout: /home/spandreou/projects/GasStationProject
 Branch: main
 Compose project: gasstationproject

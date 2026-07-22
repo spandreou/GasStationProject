@@ -2,7 +2,7 @@
 
 ## Product And Instruction Priority
 
-Το product ονομάζεται `ShiftOryx`. Τα παλιά ονόματα `GasStation Shift Manager`, `GasStationProject` και `GasStation-main` παραμένουν μόνο όπου χρειάζονται ως repository, checkout, Firebase ή deployment identifiers.
+Το product ονομάζεται `ShiftOryx`. Τα παλιά ονόματα `GasStation Shift Manager`, `GasStationProject` και `GasStation-main` παραμένουν μόνο όπου χρειάζονται ως checkout, Firebase, deployment ή historical compatibility identifiers.
 
 Master product direction:
 
@@ -30,9 +30,9 @@ Instruction order:
 
 ## Repository And Current Deployment
 
-- Correct local Windows workspace: `C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main`.
+- Valid local Windows workspaces are listed under `Local Workspace Paths`; both the Desktop PC and Laptop entries are correct.
 - Do not use `GasStationProject-main`; it was the wrong/empty local folder.
-- GitHub remote: `https://github.com/spandreou/GasStationProject.git`.
+- GitHub remote: `https://github.com/spandreou/shiftoryx.git`.
 - Active homelab checkout: `/home/spandreou/projects/GasStationProject`.
 - Production source branch: `main`.
 - Current pilot URL: `https://bp-kallis.homelabshare.gr/`.
@@ -139,3 +139,12 @@ Minimum checks depend on scope:
 - Preserve user changes and unrelated untracked files.
 - Never use destructive reset/checkout operations without explicit approval.
 - Keep each phase small enough to review and roll back.
+
+## Local Workspace Paths
+
+This project may be opened from either Windows checkout:
+
+- Desktop PC: `C:\Users\Spyros\OneDrive\Υπολογιστής\projects\shiftoryx`
+- Laptop: `C:\Users\thugs\Desktop\projects\shiftoryx`
+
+Both paths are valid and refer to equivalent local checkouts on different computers. Determine the active checkout from the current working directory and `git rev-parse --show-toplevel`. Use whichever path exists on the current computer. Do not treat the other path as an error, rewrite one path into the other, or copy/synchronize files between computers unless the user explicitly asks.

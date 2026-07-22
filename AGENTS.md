@@ -8,7 +8,7 @@ Master product direction:
 
 - Google Doc: `ShiftOryx - Master Product, Technical Architecture & Codex Execution Roadmap`
 - URL: `https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0`
-- Revision aligned locally: 17 July 2026
+- Canonical roadmap synchronization date: 22 July 2026. This local synchronization does not assert a new Google Doc revision identifier.
 - Canonical local copy: `docs/SHIFTORYX_MASTER_ROADMAP.md`. Read it before planning or implementation.
 
 Instruction order:
@@ -24,6 +24,8 @@ Instruction order:
 - Πριν από αλλαγές: `git status`, branch/base, current-state inspection και backup για αρχεία/configuration που θα τροποποιηθούν.
 - Καμία production αλλαγή χωρίς explicit approval.
 - Μην ξεκινάς επόμενη phase πριν εγκριθεί η προηγούμενη από άνθρωπο.
+- Η Phase 2A περιορίζεται σε read-only inventory, migration design και emulator rehearsal και δεν επιτρέπει production membership writes.
+- Η Phase 2B είναι ξεχωριστή controlled OWNER migration και απαιτεί νέα, explicit ανθρώπινη έγκριση.
 - Κάθε phase κλείνει με goal, branch/base, files changed, behavior, migrations, exact tests, dependency/security review, deployment status, risks, rollback και recommended next phase.
 - Legacy identifiers παραμένουν όταν απαιτούνται για compatibility. Μην κάνεις cosmetic rename σε Firebase project ids, repository paths, Docker names, collections ή live domains.
 - Κανένα secret, token, private key, credential, full reset URL ή private payload σε repo, logs, reports ή frontend env.
@@ -54,7 +56,7 @@ Keep `bp-kallis.homelabshare.gr` active until the ShiftOryx domain, wildcard rou
 
 - `ShiftOryx Admin`: platform owner. The compatibility data role may remain `SUPER_ADMIN`, stored in `platformAdmins/{uid}` with `ACTIVE` status. Platform admin does not automatically gain tenant operational access.
 - `OWNER`: the only authenticated tenant role for new MVP memberships.
-- `ADMIN` and `MANAGER`: current legacy compatibility roles only. Do not create new memberships with these roles. Their inventory/migration belongs to roadmap Phase 2.
+- `ADMIN` and `MANAGER`: current legacy compatibility roles only. Do not create new memberships with these roles. Read-only inventory/design belongs to Phase 2A; any controlled production migration belongs to separately approved Phase 2B.
 - `EMPLOYEE` / public viewer: no account, password, Firebase UID or tenant membership in the MVP. Uses anonymous sanitized tenant view.
 - Scheduler roles such as `CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A` and `EXTRA_B` are business classifications, never authentication roles.
 
@@ -73,6 +75,18 @@ Current protected pilot capabilities:
 - Firebase persistence and tenant isolation.
 
 Roadmap capabilities such as registration tokens, automated tenant provisioning, wildcard ShiftOryx domains, multi-store lifecycle, trials/subscriptions, admin lifecycle panel, public status notes, slug aliases, customization requests, VPS migration, HomeOps integration and billing are target phases. Do not describe them as implemented unless `docs/CURRENT_STATE.md` and code/tests prove it.
+
+## Business Category Templates And Safe Branding Contract
+
+- ShiftOryx remains one shared, config-driven multi-tenant application. Never create a tenant-specific codebase, source fork, frontend deployment, container or DNS record.
+- Initial categories are `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL` and `OTHER`; `OTHER` uses an approved safe generic fallback.
+- Future tenant/store configuration uses `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode` with category-driven, versioned assignments from a centrally managed template catalog.
+- Templates and overrides may use only validated tokens and approved presets for backgrounds, logos, colors, typography, images/illustrations, radius, density, layout variants, enabled sections and public-page presentation.
+- Never permit arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes or unsafe embeds.
+- Phase 4 owns default category/template provisioning, Phase 8 per-store assignment and lifecycle, Phase 9 catalog/version/preview/migration controls, and Phase 12 the authenticated quote workflow.
+- No special customization implementation starts before the owner accepts the admin quote; `quoteAmount` and `adminNotes` remain admin-only.
+
+These are roadmap contracts, not claims that template, branding or customization runtime exists today.
 
 ## Public And Private Data
 

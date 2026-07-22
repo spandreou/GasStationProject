@@ -4,7 +4,7 @@
 
 ## Instruction Priority
 
-1. Master source of truth: `ShiftOryx - Master Product, Technical Architecture & Codex Execution Roadmap` ([Google Doc](https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0)), revision aligned 17 July 2026.
+1. Master source of truth: `ShiftOryx - Master Product, Technical Architecture & Codex Execution Roadmap` ([Google Doc](https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0)), roadmap synchronized locally 22 July 2026 without asserting a new Google Doc revision identifier.
 2. `AGENTS.md` και το παρόν αρχείο.
 3. `docs/CURRENT_STATE.md` για την επιβεβαιωμένη σημερινή κατάσταση.
 4. `docs/ROADMAP_ALIGNMENT_REPORT.md` για αποκλίσεις current/target.
@@ -31,11 +31,23 @@ Approved target:
 
 Το current pilot μένει ενεργό μέχρι να επαληθευτούν domain, wildcard routing, Firebase authorized domains, auth handoff και rollback.
 
+## Business Templates And Safe Branding
+
+- Initial business categories are `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL` and `OTHER`; `OTHER` receives an approved safe generic fallback.
+- Future tenant/store configuration uses `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode` from a shared, centrally managed and versioned template registry.
+- Only validated presentation tokens and approved presets are allowed: backgrounds, logos, colors, typography, approved imagery, radius/density, approved layout variants, enabled sections and public-page presentation.
+- Arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes and unsafe embeds are prohibited.
+- The product remains one shared config-driven app. There is no per-tenant source/code fork, frontend deployment, container or DNS record.
+- Phase 4 owns provisioning defaults, Phase 8 per-store category/template lifecycle, Phase 9 registry versions/preview/assignment/migrations and Phase 12 the authenticated customization workflow.
+- Customization is an internal quote flow with server-owned states: `SUBMITTED` → `REVIEWING` → `QUOTED` → owner `ACCEPTED` → `IN_PROGRESS` → `COMPLETED`, with `REJECTED` valid. No implementation starts before acceptance; `quoteAmount` and `adminNotes` are admin-only.
+
+This is approved roadmap direction, not current runtime behavior.
+
 ## Actors And Authorization
 
 - **ShiftOryx Admin**: platform owner. Το technical compatibility role `SUPER_ADMIN` μπορεί να παραμείνει σε `platformAdmins/{uid}`. Δεν δίνει αυτόματα tenant operational access.
 - **OWNER**: ο μοναδικός authenticated tenant role για νέα MVP memberships.
-- **ADMIN/MANAGER**: legacy runtime compatibility μόνο. Δεν δημιουργούνται σε νέο provisioning. Inventory και migration ανήκουν στη Phase 2.
+- **ADMIN/MANAGER**: legacy runtime compatibility μόνο. Δεν δημιουργούνται σε νέο provisioning. Read-only inventory/design ανήκει στη Phase 2A και οποιαδήποτε controlled production migration στη separately approved Phase 2B.
 - **Employee/public viewer**: δεν έχει account, password, Firebase UID ή membership στο MVP. Διαβάζει μόνο sanitized public data.
 
 Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι business classifications. Δεν είναι auth roles και δεν δίνουν δικαιώματα.
@@ -76,7 +88,8 @@ References:
 
 0. Documentation alignment.
 1. Current-state audit.
-2. OWNER-only role normalization.
+2A. Read-only role inventory, migration design and emulator rehearsal.
+2B. Separately approved controlled OWNER migration.
 3. Registration token backend.
 4. Automated tenant provisioning.
 5. Root portal και store selector.
@@ -92,6 +105,8 @@ References:
 15. Billing provider.
 
 Μία phase κάθε φορά. Πριν από αλλαγές: branch/status, current-state inspection και backup. Καμία production αλλαγή χωρίς explicit approval. Κάθε phase κλείνει με tests, security/dependency review, risks και rollback, και σταματά πριν την επόμενη phase.
+
+Phase 0 and Phase 1 are complete. After the 22 July 2026 documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task. Phase 2A requires separate human approval and remains read-only; Phase 2B requires another explicit approval.
 
 ## Product Proposals, Not Current Enforcement
 

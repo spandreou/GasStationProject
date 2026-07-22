@@ -2,6 +2,8 @@
 
 Revision date: 17 July 2026
 
+Repository roadmap synchronization date: 22 July 2026
+
 Status: **MASTER SOURCE OF TRUTH — APPROVED PRODUCT DIRECTION**
 
 Google Doc source: `https://docs.google.com/document/d/187_L7GROL-WqmA01sP-8MfeQa8CxJBCYNQXGI2oxibM/edit?tab=t.0`
@@ -287,22 +289,82 @@ Flow:
 
 Με wildcard DNS δεν διαγράφεται DNS record. Οι σωστοί όροι UI είναι Suspend workspace, Deactivate workspace, Soft delete tenant, Restore workspace.
 
+## Business Category Templates And Safe Branding
+
+ShiftOryx remains one shared, config-driven multi-tenant application. Category presentation is selected from configuration; it never creates a separate tenant codebase, customer source fork, frontend deployment, container, DNS record or tunnel route.
+
+Initial supported `businessCategory` values:
+
+- `FUEL_STATION`
+- `CAFE`
+- `RESTAURANT`
+- `HAIR_SALON`
+- `RETAIL`
+- `OTHER`
+
+Fuel stations may use the current BP Kallis-oriented preset, while cafes, restaurants, hair salons and retail stores use approved category-appropriate presets. `OTHER` always resolves to an approved safe generic fallback; it does not unlock unrestricted customization.
+
+Future tenant/store assignment fields:
+
+```text
+businessCategory
+templateId
+templateVersion
+brandingOverrides
+customizationMode
+```
+
+A centrally managed, versioned template catalog will define category compatibility, approved presentation schema, lifecycle status, preview metadata and controlled migration information. A template or validated `brandingOverrides` object may control only:
+
+- background preset,
+- logo,
+- color tokens,
+- typography preset,
+- approved images or illustrations,
+- radius and density preset,
+- approved layout variants,
+- enabled sections,
+- public-page presentation.
+
+Arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes and unsafe embeds are prohibited. Configuration is validated against an approved schema and is data only; it cannot execute code.
+
+Phase ownership is explicit: Phase 4 assigns a default category/template during provisioning, Phase 8 manages category/template per store, Phase 9 owns the central catalog, versions, admin assignment, preview and migration controls, and Phase 12 owns authenticated quote-based special customization. These are roadmap capabilities and are not implemented runtime behavior today.
+
 ## 10. Customization Request Model
 
-Ο owner δεν αλλάζει αυθαίρετα source code ή custom components. Υπάρχει authenticated request form για αλλαγές branding/UI/menu. Το αίτημα εμφανίζεται στο ShiftOryx admin panel και αποστέλλεται notification email. Ο admin το κοστολογεί και μετά από συμφωνία γίνεται controlled implementation.
+Ο owner δεν αλλάζει αυθαίρετα source code ή custom components. Χρησιμοποιεί authenticated request form για ειδικές αλλαγές branding/UI/menu. Το public owner form δεν χρειάζεται να διαφημίζει fixed surcharge ή δημόσιο customization price list. Το αίτημα εμφανίζεται στο ShiftOryx admin panel και μπορεί να ενεργοποιεί notification email, ενώ η κοστολόγηση παραμένει εσωτερική και quote-based.
 
 Request fields:
 
-- tenant,
+- tenantId,
+- storeId όπου εφαρμόζεται,
 - category,
 - description,
-- desired result,
-- attachments μόνο με safe upload validation,
-- requested deadline,
-- status: `SUBMITTED`, `REVIEWING`, `QUOTED`, `ACCEPTED`, `IN_PROGRESS`, `COMPLETED`, `REJECTED`,
-- quote amount και notes admin-only.
+- desiredResult,
+- requestedDeadline,
+- status,
+- quoteAmount,
+- ownerAcceptedAt,
+- adminNotes,
+- createdAt,
+- updatedAt.
 
-Δεν επιτρέπονται custom JavaScript, HTML, external scripts ή unsafe embeds.
+Server-owned lifecycle:
+
+```text
+SUBMITTED
+→ REVIEWING
+→ QUOTED
+→ ACCEPTED
+→ IN_PROGRESS
+→ COMPLETED
+```
+
+`REJECTED` is also valid. Clients cannot set privileged transitions, `quoteAmount` or `adminNotes`. No custom implementation starts until the owner explicitly accepts the quote and the server records that acceptance. Controlled implementation then remains within the shared application and approved template/branding boundary.
+
+Attachments are deferred until a separately reviewed private upload design defines authorization, Storage paths, MIME/type and size validation, safe filenames, malware-aware handling where appropriate, retention and denial of public access.
+
+Δεν επιτρέπονται arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes ή unsafe embeds.
 
 ## 11. Recommended Tech Stack
 
@@ -427,6 +489,7 @@ Platform collections:
 - `slugReservations/{slug}`
 - `slugAliases/{oldSlug}`
 - `platformAuditLogs/{eventId}`
+- `templateCatalog/{templateId}` (future conceptual catalog; exact shape owned by Phase 9)
 - `customizationRequests/{requestId}`
 
 Tenant private data:
@@ -449,6 +512,41 @@ Tenant public data:
 - `publicEmployees`
 - `publicAnnouncements`
 - `publicStatusEntries` ή sanitized status fields.
+
+Future template catalog metadata, conceptually:
+
+- stable `templateId`,
+- immutable/versioned `templateVersion`,
+- supported business categories,
+- lifecycle/status metadata,
+- validated approved presentation schema,
+- preview-safe metadata,
+- assignment and migration controls,
+- created/updated audit timestamps.
+
+Future tenant/store category and branding assignment:
+
+- `businessCategory`,
+- `templateId`,
+- `templateVersion`,
+- `brandingOverrides`,
+- `customizationMode`.
+
+Future customization request lifecycle fields:
+
+- `tenantId`,
+- optional `storeId`,
+- `category`,
+- `description`,
+- `desiredResult`,
+- `requestedDeadline`,
+- server-owned `status`,
+- admin-only `quoteAmount` and `adminNotes`,
+- `ownerAcceptedAt`,
+- `createdAt`,
+- `updatedAt`.
+
+These are conceptual target fields. Exact collection shapes and Security Rules are finalized and tested only in their owning phases; this roadmap does not claim the catalog or workflow exists today.
 
 Membership MVP:
 
@@ -522,25 +620,33 @@ Deliverable: `docs/CURRENT_STATE.md` με implemented/partial/missing/legacy/ris
 
 Stop: no business logic changes.
 
-### Phase 2 — Role And Authorization Normalization
+### Phase 2A — Read-Only Role Inventory And Migration Design
 
-Goal: OWNER-only tenant auth χωρίς break του pilot.
+Goal: design OWNER-only normalization without changing production membership data or breaking the pilot.
 
 Tasks:
 
-- inventory ADMIN/MANAGER memberships,
-- compatibility reader για legacy roles μόνο προσωρινά,
-- new writes create OWNER only,
-- owner authorization helper,
-- platform admin remains separate,
-- emulator tests for cross-tenant denial.
+- back up and inventory `ADMIN`/`MANAGER` memberships and legacy authorization surfaces without printing personal records,
+- define eligibility, compatibility behavior and a reversible migration map,
+- design the owner authorization helper while keeping platform admin separate,
+- rehearse proposed membership, Rules and compatibility changes in Firebase emulators,
+- test cross-tenant denial, public employee access and BP Kallis regression in the rehearsal environment.
 
-Exit criteria:
+Stop: Phase 2A is read-only for production and authorizes no production membership, Rules or data write. Human review is required before Phase 2B.
 
-- owner access works,
-- employee public access works,
-- unauthorized users denied,
-- BP Kallis regression passes.
+### Phase 2B — Separately Approved Controlled OWNER Migration
+
+Prerequisite: new explicit human approval based on the accepted Phase 2A inventory, rehearsal evidence, backup and rollback map.
+
+Tasks:
+
+- migrate only eligible legacy memberships to `OWNER`,
+- apply the separately approved compatibility/enforcement changes,
+- keep platform-admin authorization separate from tenant access,
+- validate owner access, anonymous sanitized employee access, cross-tenant denial and BP Kallis behavior,
+- stop for human review before Phase 3.
+
+No Phase 2B production migration is authorized by documentation synchronization.
 
 ### Phase 3 — Registration Token Backend
 
@@ -568,6 +674,7 @@ Atomic workflow:
 - reserve slug,
 - create tenant,
 - create OWNER membership,
+- assign the approved default `businessCategory`, `templateId`, `templateVersion`, validated empty/default `brandingOverrides` and `customizationMode` from provisioning configuration,
 - create defaults,
 - create trial subscription,
 - consume token,
@@ -629,6 +736,8 @@ Server time is source of truth. Client clock cannot extend access.
 - store selector,
 - per-store subscriptions/entitlements,
 - additional-store pricing metadata,
+- per-store `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode` assignment and lifecycle,
+- safe `OTHER` fallback when no approved category-specific template applies,
 - owner cannot access a store without membership,
 - safe store suspension.
 
@@ -642,6 +751,9 @@ Modules:
 - tokens,
 - trials/subscriptions,
 - customization requests,
+- centrally managed versioned template catalog,
+- category compatibility, safe preview and admin assignment controls,
+- controlled template-version migration with audit and rollback metadata,
 - usage/traffic,
 - audit logs,
 - workspace lifecycle.
@@ -666,12 +778,14 @@ Every write is server-side, admin-authorized, confirmed and audited.
 
 ### Phase 12 — Customization Request Workflow
 
-- owner form,
-- admin inbox,
-- safe attachments if required,
-- email notification,
-- quote/status lifecycle,
-- no automatic code execution.
+- authenticated owner form without a required public fixed price list,
+- admin inbox and optional notification email,
+- server-owned `SUBMITTED`/`REVIEWING`/`QUOTED`/`ACCEPTED`/`IN_PROGRESS`/`COMPLETED` transitions plus `REJECTED`,
+- admin-only `quoteAmount` and `adminNotes`,
+- explicit owner quote acceptance before any controlled implementation,
+- safe private attachments only after a separately reviewed upload design,
+- implementation limited to the shared app and approved template/branding controls,
+- no automatic code execution or prohibited theme mechanism.
 
 ### Phase 13 — VPS Production Migration
 
@@ -794,4 +908,10 @@ The MVP is ready only when:
 
 ## 20. Next Action
 
-The next Codex action is Phase 0 only: align repository documentation with this master roadmap. Codex must not start runtime implementation, DNS changes, Firebase rules deployment, dependency upgrades or production deployment until the documentation phase is reviewed and approved.
+Phase 0 and Phase 1 are complete.
+
+After this documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task.
+
+Phase 2A follows only after separate human approval and remains read-only for production. Phase 2B production migration remains separately approved.
+
+This next-action sequence does not claim that templates, branding, customization, dependency remediation or either Phase 2 stage is already implemented. It does not authorize runtime implementation, DNS changes, Firebase rules deployment or production deployment.

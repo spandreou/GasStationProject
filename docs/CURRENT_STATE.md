@@ -76,7 +76,7 @@ The detailed audit contains 39 classified areas:
 - Wildcard ShiftOryx domain/Cloudflare/Firebase Authorized Domains configuration.
 - Sanitized health/version endpoints, HomeOps/Uptime/alert integration, backup automation and tested per-tenant restore.
 
-The business-category/template direction is approved by the Phase 1 brief but is not yet in the canonical roadmap. Record: `ROADMAP_DELTA_PENDING_SYNC`.
+The canonical roadmap was synchronized on 22 July 2026 with the future category/template fields `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode`, plus Phase 4/8/9/12 ownership. The documented safety boundary rejects arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes and unsafe embeds, while preserving one shared application. These category-template and customization capabilities remain unimplemented runtime targets. Record: `ROADMAP_DELTA_SYNCED_2026-07-22`.
 
 ## Target Collection Snapshot
 
@@ -132,7 +132,7 @@ Other results:
 
 ## Next Approved Scope
 
-After human approval of Phase 1, the recommended Phase 2 remains OWNER-only role normalization and must be split into separately approved stages:
+Phase 0 and Phase 1 are complete. After this documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task. Phase 2A follows only after separate human approval, and the Phase 2B production migration remains separately approved.
 
 ### Phase 2A — read-only inventory, migration design and emulator validation
 

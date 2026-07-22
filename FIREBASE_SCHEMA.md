@@ -21,6 +21,18 @@ Safe account/profile metadata. Do not store passwords, tokens or private keys.
 
 Tenant identity and lifecycle metadata, including slug/domain and status.
 
+Future tenant/store template assignment fields (conceptual only; not present as a verified runtime contract today):
+
+```text
+businessCategory
+templateId
+templateVersion
+brandingOverrides
+customizationMode
+```
+
+Initial `businessCategory` values are `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL` and `OTHER`. A store without a more specific approved match uses the safe generic `OTHER` template. Multi-store records will carry the same validated assignment fields at the store boundary selected in Phase 8.
+
 ### `tenantMemberships/{uid}_{tenantId}`
 
 Target MVP fields:
@@ -34,7 +46,7 @@ createdAt
 updatedAt
 ```
 
-Current compatibility note: existing code/rules may still recognize `ADMIN` and `MANAGER` until roadmap Phase 2 inventories and migrates legacy memberships. New provisioning must not create them.
+Current compatibility note: existing code/rules may still recognize `ADMIN` and `MANAGER`. Phase 2A is limited to read-only inventory, migration design and emulator rehearsal; a Phase 2B controlled OWNER migration requires separate explicit approval. New provisioning must not create legacy roles.
 
 ### `platformAdmins/{uid}`
 
@@ -47,6 +59,12 @@ Short-lived cross-subdomain auth broker records. Client read/write is denied. Ti
 ### `monthly_schedule_exports/{tenantId}_{YYYY-MM}`
 
 Private monthly PDF archive metadata, scoped by `tenantId`. It must not contain public/signed URLs, blobs or file contents.
+
+### Future `templateCatalog/{templateId}`
+
+This is a conceptual, centrally managed Phase 9 catalog and must not be read as a claim that the collection exists today. Its eventual approved schema will describe category compatibility, immutable/versioned template metadata, preview-safe presentation configuration, lifecycle status and migration controls.
+
+Catalog templates and `brandingOverrides` must validate against an approved schema. Allowed values are presentation data such as background/logo presets, color and typography tokens, approved images/illustrations, radius/density presets, approved layout variants, enabled sections and public-page presentation. They must never contain executable code, arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes or unsafe embeds. One shared application consumes the configuration; no tenant-specific source fork or deployment is created.
 
 ## Tenant Private Data
 
@@ -128,10 +146,32 @@ registrationTokens/{tokenHash}
 slugReservations/{slug}
 slugAliases/{oldSlug}
 platformAuditLogs/{eventId}
+templateCatalog/{templateId} (conceptual name; finalized in Phase 9)
 customizationRequests/{requestId}
 ```
 
 Requirements include server-side writes, transactions for one-time/unique operations, safe metadata listing, rate limiting, audit and deny-by-default client rules.
+
+### Future `customizationRequests/{requestId}`
+
+Conceptual Phase 12 fields:
+
+```text
+tenantId
+storeId (where applicable)
+category
+description
+desiredResult
+requestedDeadline
+status
+quoteAmount
+ownerAcceptedAt
+adminNotes
+createdAt
+updatedAt
+```
+
+The authenticated request lifecycle is server-owned: `SUBMITTED` → `REVIEWING` → `QUOTED` → `ACCEPTED` → `IN_PROGRESS` → `COMPLETED`, with `REJECTED` also valid. No implementation starts before owner acceptance. Clients cannot set `quoteAmount`, `adminNotes` or privileged status transitions. The public owner form does not need a fixed customization price or surcharge; quoting remains internal. Attachments may be added only after a separately reviewed private Storage design with authorization, MIME/type and size validation, safe filenames, malware-aware handling where appropriate and no public bucket access. The exact collection shape is finalized in Phase 12, not by this document.
 
 ## Firebase Storage
 

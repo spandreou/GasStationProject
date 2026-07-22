@@ -54,14 +54,15 @@ Do not use MunicipalPolice env files for GasStation tasks. This project currentl
 Use these names to avoid wasting time on the wrong checkout:
 
 ```txt
-Correct local Codex workspace:
-C:\Users\Spyros\OneDrive\Υπολογιστής\projects\GasStation-main
+Correct local Codex workspaces (use the one present on the current computer):
+Desktop PC: C:\Users\Spyros\OneDrive\Υπολογιστής\projects\shiftoryx
+Laptop: C:\Users\thugs\Desktop\projects\shiftoryx
 
 Do not use:
 GasStationProject-main
 
 GitHub remote:
-https://github.com/spandreou/GasStationProject.git
+https://github.com/spandreou/shiftoryx.git
 
 Active homelab checkout:
 /home/spandreou/projects/GasStationProject

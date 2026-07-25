@@ -1,0 +1,45 @@
+# ShiftOryx Dependency Remediation Checkpoint
+
+- Status: `DEPENDENCY_REMEDIATION_READY_FOR_REVIEW`
+- Date: 25 July 2026
+- Current branch: `shiftoryx-dependency-security-remediation`
+- Base SHA: `506146c455a105051a5adba619cc94e310b07c92`
+- Backup: `C:\Users\thugs\.codex\tmp\shiftoryx-dependency-remediation-20260725-231950`
+- Target finding: root `firebase@11.10.0 → @firebase/database@1.0.20 → faye-websocket@0.11.4 → websocket-driver@0.7.4`
+- Selected remediation: package-manager-only lock resolution to `websocket-driver@0.7.5`; no direct dependency, Firebase update, override or runtime change
+- Repository mutation commands:
+  - `npm install --package-lock-only --ignore-scripts --no-audit --no-fund websocket-driver@0.7.5`
+  - `npm uninstall --package-lock-only --ignore-scripts --no-audit --no-fund websocket-driver`
+- Final package diff: only `package-lock.json`, 3 insertions and 3 deletions in the `websocket-driver` entry
+- Documentation files added:
+  - `docs/DEPENDENCY_REMEDIATION_REPORT.md`
+  - `docs/codex-handoffs/DEPENDENCY_REMEDIATION_CHECKPOINT.md`
+- Root audit before: `info=0 low=1 moderate=1 high=1 critical=1 total=4`
+- Root audit after: `info=0 low=1 moderate=1 high=1 critical=0 total=3`
+- Functions audit before/after: `info=0 low=1 moderate=9 high=1 critical=0 total=11`
+- Target advisories removed: GHSA-xv26-6w52-cph6 and GHSA-mp7j-qc5w-4988
+- Installed chain after: `firebase@11.10.0 → @firebase/database@1.0.20 → faye-websocket@0.11.4 → websocket-driver@0.7.5`
+- Clean install: `npm ci` passed
+- Validation passed:
+  - `npm run build`
+  - `npm run qa:scheduler-engine`
+  - `npm run qa:scheduler` under existing bundled Node `v24.14.0`
+  - `npm run qa:repositories`
+  - `npm run qa:public-readonly`
+  - `npm run qa:tenant-authorization`
+  - `npm run qa:saas-foundation`
+  - `npm run qa:auth-broker`
+  - `npm run qa:export-security`
+  - `npm run security:hardening`
+  - `npm run security:integrity`
+  - `npm run lint --prefix functions`
+- Validation note: the first `qa:scheduler` run under default Node `v20.20.2` failed before Firebase execution with `ERR_UNKNOWN_FILE_EXTENSION` for `src/scheduler-engine/index.ts`; no source was changed, and the same command passed under already available Node `v24.14.0`
+- Repository `npm run security:audit`: exit 1 only because the root tree still has one low, one moderate and one high advisory; critical count is zero
+- Remaining root advisories: DOMPurify GHSA-c2j3-45gr-mqc4, PostCSS GHSA-r28c-9q8g-f849, protobufjs GHSA-j3f2-48v5-ccww
+- Functions findings remain out of scope; no Functions package file changed
+- Runtime source, tests, Firebase, Cloudflare/DNS, Docker/Nginx, GitHub Actions and production were not changed
+- `firestore-debug.log` remains untracked and was not inspected or included
+- Nothing has been staged, committed, pushed or opened as a PR
+- Phase 2A and Phase 2B were not started
+- Next safe action: human review of the three-file diff and this evidence; do not stage or publish until explicitly requested
+- Rollback: restore `package-lock.json` from the backup and run `npm ci`; remove the two new documents only if a full task rollback is explicitly chosen

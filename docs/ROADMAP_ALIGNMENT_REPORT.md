@@ -36,6 +36,21 @@ Phase 0 documentation alignment only. No source code, dependencies, lockfiles, F
 - Auth broker, central portal, provisioning and platform admin foundations are not described as complete commercial flows.
 - Trial, pricing, multi-store, entitlements, tokens, aliases, customization, VPS, HomeOps and billing are proposals/targets only.
 
+## Post-Phase-1 Synchronization — 22 July 2026
+
+This additive section records the post-Phase-1 roadmap delta; the Phase 0 report above remains historical evidence at its original date and base.
+
+- The canonical repository roadmap now includes category-driven templates for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL` and a safe generic `OTHER` fallback.
+- Future tenant/store assignments use `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode` against a centrally managed, versioned template catalog.
+- Branding is restricted to validated tokens and approved presets. Arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes and unsafe embeds are prohibited.
+- ShiftOryx remains one shared, config-driven application. The model does not create a tenant-specific source fork, codebase, frontend deployment, container or DNS record.
+- Special customization uses an authenticated, server-controlled quote flow: `SUBMITTED` → `REVIEWING` → `QUOTED` → owner `ACCEPTED` → `IN_PROGRESS` → `COMPLETED`, with `REJECTED` valid. No implementation starts before acceptance; `quoteAmount` and `adminNotes` are admin-only, and a fixed public price list is not required.
+- Phase 4 owns provisioning defaults, Phase 8 per-store assignments/lifecycle, Phase 9 catalog versions/preview/assignment/migration controls and Phase 12 the customization request and accepted-quote workflow.
+- Phase 2 is now explicit: Phase 2A is read-only inventory, migration design and emulator rehearsal; Phase 2B is a separately approved controlled OWNER production migration.
+- The stale Phase 0 next-action instruction is resolved. Phase 0 and Phase 1 are complete; dependency remediation/security-gate work is separate, and neither Phase 2 stage is authorized by this documentation sync.
+
+These statements synchronize target documentation only. No template runtime, branding runtime, customization backend, dependency remediation or role migration was implemented.
+
 ## Deferred Runtime Work
 
 The following were intentionally not changed:
@@ -78,4 +93,4 @@ Rollback is documentation-only: compare or restore only the intended Markdown fi
 
 ## Recommended Next Step
 
-Review and approve Phase 0 documentation. Then run Phase 1 as a read-only evidence-backed audit. Do not start Phase 2 or any production rollout before Phase 1 is accepted.
+Review and merge this documentation synchronization. The next engineering task is a separately scoped dependency-remediation and security-gate task. Phase 2A may begin only after separate human approval and remains read-only; Phase 2B production migration requires another separate approval. This recommendation does not claim that templates, branding, customization, dependency remediation or Phase 2 are implemented.

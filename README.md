@@ -35,6 +35,12 @@ https://{tenantSlug}.shiftoryx.gr
 
 Το `bp-kallis.homelabshare.gr` παραμένει ενεργό μέχρι να επαληθευτεί πλήρως το `bp-kallis.shiftoryx.gr`. Δεν έχει εγκριθεί μέσα στη documentation phase αλλαγή DNS, tunnel, Firebase authorized domains ή production deployment.
 
+## Future Business Templates And Safe Branding
+
+The roadmap keeps one shared, config-driven multi-tenant application and adds future category-specific visual presets for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL` and a safe generic `OTHER` fallback. Tenant/store assignments will use `businessCategory`, `templateId`, `templateVersion`, `brandingOverrides` and `customizationMode` from a versioned central catalog.
+
+Branding is limited to validated tokens and approved presets such as background, logo, colors, typography, approved imagery, radius/density, layout variants, enabled sections and public-page presentation. It never permits arbitrary or unrestricted CSS, custom JavaScript, custom HTML, external scripts, executable themes or unsafe embeds, and it never creates a per-tenant source fork, deployment, container or DNS record. Phase 4 owns provisioning defaults, Phase 8 store assignments, Phase 9 catalog/version controls and Phase 12 the authenticated quote-based customization flow; Phase 2A remains read-only and Phase 2B separately approved. These are roadmap capabilities, not current runtime behavior.
+
 ## Τι Λειτουργεί Σήμερα
 
 - Weekly και monthly scheduler.
@@ -69,7 +75,7 @@ https://{tenantSlug}.shiftoryx.gr
 
 Ο `OWNER` είναι ο μόνος authenticated tenant role για νέα MVP memberships. Ο owner διαχειρίζεται το κατάστημα, τους εργαζομένους, το πρόγραμμα, τις απουσίες, τα exports και το public schedule.
 
-Current compatibility: το deployed code/rules μπορεί ακόμη να αναγνωρίζει `ADMIN` και `MANAGER` για παλιές memberships. Δεν δημιουργούμε νέες memberships με αυτούς τους ρόλους. Η ομαλοποίηση ανήκει στο roadmap Phase 2.
+Current compatibility: το deployed code/rules μπορεί ακόμη να αναγνωρίζει `ADMIN` και `MANAGER` για παλιές memberships. Δεν δημιουργούμε νέες memberships με αυτούς τους ρόλους. Read-only inventory/design ανήκει στη Phase 2A και οποιαδήποτε controlled production migration στη separately approved Phase 2B.
 
 ### Employees / Public Viewers
 
@@ -189,7 +195,8 @@ Emulator και Playwright tests εκτελούνται ανάλογα με το
 
 0. Documentation alignment.
 1. Current-state audit.
-2. OWNER-only role and authorization normalization.
+2A. Read-only role inventory, migration design and emulator rehearsal.
+2B. Separately approved controlled OWNER migration.
 3. Registration token backend.
 4. Automated tenant provisioning.
 5. Root portal and store selector.

@@ -1,5 +1,6 @@
 import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function AdminLoginModal({
   open,
@@ -26,7 +27,7 @@ export default function AdminLoginModal({
     }));
   }, [defaultEmail, open]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   function handleClose() {
     setCredentials((prev) => ({ ...prev, password: '' }));
@@ -80,7 +81,7 @@ export default function AdminLoginModal({
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-4 sm:items-center">
       <div className="glass-panel w-full max-h-[85vh] max-w-sm overflow-y-auto rounded-t-2xl p-4 sm:rounded-2xl">
         <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-300/70 sm:hidden dark:bg-slate-700/70" />
@@ -173,6 +174,7 @@ export default function AdminLoginModal({
           {isSendingReset ? 'Αποστολή email...' : 'Ξέχασα τον κωδικό'}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

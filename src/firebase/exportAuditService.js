@@ -63,6 +63,7 @@ export async function writeExportAuditLog({
     const sanitizedArchiveAction = safeArchiveAction(archiveAction);
 
     await writeAuditLog({
+      tenantId: safeTenantId,
       action: 'EXPORT',
       actor: {
         uid: safeText(uid),

@@ -8,6 +8,28 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function loadExportAuditServiceWithAuditStub(source) {
+  const auditStubSource = `
+    export const auditCalls = [];
+    export async function writeAuditLog(payload) {
+      auditCalls.push(payload);
+      return { id: 'audit-test-entry' };
+    }
+  `;
+  const auditStubUrl = `data:text/javascript;base64,${Buffer.from(auditStubSource).toString('base64')}`;
+  const instrumentedSource = source.replace(
+    "from './auditLogService';",
+    `from '${auditStubUrl}';`,
+  );
+
+  assert(instrumentedSource !== source, 'Export audit behavior test must replace only the Firestore audit boundary.');
+
+  return {
+    auditStub: await import(auditStubUrl),
+    exportAudit: await import(`data:text/javascript;base64,${Buffer.from(instrumentedSource).toString('base64')}`),
+  };
+}
+
 function matchBlock(source, collectionName) {
   const marker = `match /${collectionName}/`;
   const start = source.indexOf(marker);
@@ -40,6 +62,21 @@ const firestoreRules = read('firestore.rules');
 const storageRules = read('storage.rules');
 const firebaseJson = JSON.parse(read('firebase.json'));
 const envExample = read('.env.example');
+
+const exportAuditBehavior = await loadExportAuditServiceWithAuditStub(exportAuditService);
+await exportAuditBehavior.exportAudit.writeExportAuditLog({
+  tenantId: 'bp-kallis',
+  exportType: 'PDF',
+  exportScope: 'MONTH',
+  month: '2026-07',
+  fileName: 'program_month_2026-07.pdf',
+  archiveAction: 'DOWNLOAD',
+});
+assert(exportAuditBehavior.auditStub.auditCalls.length === 1, 'Export audit must write exactly one audit entry.');
+assert(
+  exportAuditBehavior.auditStub.auditCalls[0]?.tenantId === 'bp-kallis',
+  'Export audit must forward the sanitized tenantId as the top-level tenant-scoped audit key.',
+);
 
 assert(repositories.includes('exportAuditRepository'), 'Repository exports must include exportAuditRepository.');
 assert(repositories.includes('monthlyScheduleArchiveRepository'), 'Repository exports must include monthlyScheduleArchiveRepository.');

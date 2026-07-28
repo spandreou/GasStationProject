@@ -5,10 +5,13 @@ import {
 } from '../src/utils/autoSchedulerService.js';
 import { buildGroupedScheduleRows, PDF_SCHEDULE_COLUMNS } from '../src/utils/exportService.js';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const SHIFT_TYPES = {
   WORK: 'work',
 };
+
+const repositoryRoot = process.cwd();
 
 const weekDays = [
   '2026-04-06',
@@ -536,8 +539,8 @@ assert(
 const workRestColumn = PDF_SCHEDULE_COLUMNS.find((column) => column.key === 'workRest');
 assert(workRestColumn?.title === 'Εργασία/Ανάπαυση', 'PDF work/rest column should be Εργασία/Ανάπαυση');
 
-const schedulerStoreSource = readFileSync(new URL('../src/hooks/useSchedulerStore.js', import.meta.url), 'utf8');
-const legacySchedulerSource = readFileSync(new URL('../src/utils/autoSchedulerService.js', import.meta.url), 'utf8');
+const schedulerStoreSource = readFileSync(resolve(repositoryRoot, 'src/hooks/useSchedulerStore.js'), 'utf8');
+const legacySchedulerSource = readFileSync(resolve(repositoryRoot, 'src/utils/autoSchedulerService.js'), 'utf8');
 assert(
   legacySchedulerSource.includes('schedulerEngineAdapter'),
   'Legacy autoSchedulerService must delegate generation to schedulerEngineAdapter',

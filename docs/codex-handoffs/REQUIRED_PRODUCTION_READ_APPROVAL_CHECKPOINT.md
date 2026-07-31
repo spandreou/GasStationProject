@@ -18,13 +18,20 @@
   AUTO_MIGRATION_ALLOWED=false
   ```
 - Tooling Added:
-  - `scripts/inventory-tenant-memberships.mjs` (`inventoryFirestoreProductionReadOnly`, `--source production`)
-  - `scripts/validate-production-read-checkpoint.mjs`
+  - `scripts/lib/tenant-membership-inventory-core.mjs` (Shared pure classification library)
+  - `scripts/inventory-tenant-memberships-production-readonly.mjs` (Isolated production read-only tool)
+  - `scripts/test-production-read-inventory-guards.mjs` (33-case guard test suite)
+  - `scripts/validate-production-read-checkpoint.mjs` (Policy contract & rejection validator)
   - `npm run qa:production-read-checkpoint`
+  - `npm run test:production-read-inventory:guards`
+  - `npm run inventory:tenant-memberships:production-readonly`
 - Verification Status:
   - Repository policy validator: PASS
+  - Guard test suite (33 cases): PASS
+  - Offline & Emulator inventory tests: PASS
   - Full Node 20 QA matrix: PASS
 - Boundary Checklist:
+  - Production reader execution locked: YES (`EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION`)
   - Production read executed: NO
   - Production write executed: NO
   - Phase 2B started: NO

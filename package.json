@@ -16,6 +16,8 @@
     "qa:auth-broker": "node scripts/validate-auth-broker.mjs",
     "qa:production-read-checkpoint": "node scripts/validate-production-read-checkpoint.mjs",
     "inventory:tenant-memberships": "node scripts/inventory-tenant-memberships.mjs --read-only",
+    "inventory:tenant-memberships:production-readonly": "node scripts/inventory-tenant-memberships-production-readonly.mjs --read-only",
+    "test:production-read-inventory:guards": "node scripts/test-production-read-inventory-guards.mjs",
     "test:owner-role-inventory:offline": "node scripts/test-owner-role-inventory-emulator.mjs --offline",
     "test:owner-role-inventory:emulator": "node scripts/test-owner-role-inventory-emulator.mjs --launch",
     "test:auth-broker:emulator": "npx --yes firebase-tools emulators:exec --project demo-gasstation-auth-broker --only auth,firestore,functions \"node scripts/test-auth-broker-emulator.mjs\"",

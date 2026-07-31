@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import {
   classifyMembershipInventory,
   inventoryFirestoreReadOnly,
-  inventoryFirestoreProductionReadOnly,
-  assertProductionReadOnlyTarget,
-  assertManifestOutputPath,
-  APPROVED_PRODUCTION_PROJECT_IDS,
 } from './inventory-tenant-memberships.mjs';
+import { runAllGuardTests } from './test-production-read-inventory-guards.mjs';
 
 export const ROLE_POLICY_CONTRACT = Object.freeze({
   EXPECTED_LEGACY_ROLE: 'ADMIN',
@@ -125,72 +121,12 @@ export async function testProductionReadRejection() {
   );
 }
 
-export async function testGuardedProductionReadOnlyTarget() {
-  assert.ok(APPROVED_PRODUCTION_PROJECT_IDS.has('gasstationproject'));
-  assert.ok(APPROVED_PRODUCTION_PROJECT_IDS.has('gasstationproject-prod'));
-
-  // Rejects when project is missing
-  assert.throws(
-    () => assertProductionReadOnlyTarget({ projectId: '' }),
-    (err) => err.message.includes('Target project ID is required'),
-  );
-
-  // Rejects when project is not allowlisted
-  assert.throws(
-    () => assertProductionReadOnlyTarget({ projectId: 'unapproved-project-xyz' }),
-    (err) => err.message.includes('not on the approved production project allowlist'),
-  );
-
-  // Rejects when environment authorization flag is missing
-  const prevEnv = process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY;
-  delete process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY;
-  try {
-    assert.throws(
-      () => assertProductionReadOnlyTarget({ projectId: 'gasstationproject' }),
-      (err) => err.message.includes('requires explicit environment authorization'),
-    );
-  } finally {
-    if (prevEnv !== undefined) process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY = prevEnv;
-  }
-
-  // Rejects when FIRESTORE_EMULATOR_HOST is set
-  process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY = 'true';
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-  try {
-    assert.throws(
-      () => assertProductionReadOnlyTarget({ projectId: 'gasstationproject' }),
-      (err) => err.message.includes('rejects executions with FIRESTORE_EMULATOR_HOST set'),
-    );
-  } finally {
-    delete process.env.FIRESTORE_EMULATOR_HOST;
-    delete process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY;
-  }
-
-  // Manifest output path assertion rejects inside repo
-  assert.throws(
-    () => assertManifestOutputPath('./docs/manifest.json'),
-    (err) => err.message.includes('must be strictly outside the repository worktree'),
-  );
-
-  // Manifest output path accepts outside repo
-  const outsidePath = path.resolve('../external-manifest.json');
-  assert.equal(assertManifestOutputPath(outsidePath), outsidePath);
-
-  // inventoryFirestoreProductionReadOnly rejects injected db
-  await assert.rejects(
-    async () => {
-      await inventoryFirestoreProductionReadOnly({ db: {} });
-    },
-    (err) => err.message.includes('does not accept injected Firestore clients'),
-  );
-}
-
 async function run() {
   validateRolePolicyContract();
   testSafetyInterpretation();
   testApprovalManifestRequirement();
   await testProductionReadRejection();
-  await testGuardedProductionReadOnlyTarget();
+  await runAllGuardTests();
   console.log('Production Read Approval Checkpoint validation passed cleanly.');
 }
 

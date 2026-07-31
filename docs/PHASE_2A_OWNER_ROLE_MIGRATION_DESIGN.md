@@ -138,7 +138,8 @@ changes, no conflict resolution by code and delayed enforcement tightening.
 ## 6. Required Production Read Approval Checkpoint
 
 Before Phase 2B implementation, a separate review must approve a production
-read-only inventory extension, as specified in
+read-only inventory run using the isolated entry point
+`scripts/inventory-tenant-memberships-production-readonly.mjs`, as specified in
 `docs/REQUIRED_PRODUCTION_READ_APPROVAL_CHECKPOINT.md`.
 
 The confirmed business policy contract is:
@@ -160,7 +161,7 @@ AUTO_MIGRATION_ALLOWED=false
 
 The approval must specify:
 
-- the exact allowlisted project;
+- the exact human-confirmed allowlisted project in code (`CONFIRMED_PRODUCTION_PROJECT_ID`);
 - environment-bound Application Default Credentials or another approved
   non-CLI credential mechanism;
 - no credential, token or service-account value in command arguments;

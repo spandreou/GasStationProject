@@ -78,13 +78,24 @@ Before any command is executed against a production Firestore instance, the foll
 
 Repository tooling enforces this checkpoint via:
 
+- `scripts/inventory-tenant-memberships.mjs` (`inventoryFirestoreProductionReadOnly`, `--source production`)
 - `scripts/validate-production-read-checkpoint.mjs`
 - `npm run qa:production-read-checkpoint`
 
-This validator verifies that:
+The guarded production read-only entry point (`--source production`) enforces:
+- Explicit environment authorization (`ALLOW_PRODUCTION_READ_ONLY_INVENTORY=true`).
+- Allowlisted project ID check (`APPROVED_PRODUCTION_PROJECT_IDS`: `gasstationproject`, `gasstationproject-prod`, `shiftoryx-prod`).
+- Rejection of execution when `FIRESTORE_EMULATOR_HOST` is set.
+- Rejection of `--manifest-output` paths inside the repository worktree.
+- Mandatory `--read-only` flag acknowledgement.
+- ADC authentication (zero credentials passed via command-line arguments).
+- Minimal field projections (`.select('uid', 'tenantId', 'role', 'status', 'createdAt', 'updatedAt')`).
+- Aggregate-only console output (zero raw UIDs, tenant IDs, or private data printed).
+
+The validator verifies that:
 - Role policy constants (`EXPECTED_LEGACY_ROLE=ADMIN`, `EXPECTED_MANAGER_COUNT=0`, `TARGET_ROLE=OWNER`, `AUTO_MIGRATION_ALLOWED=false`) are present and intact.
 - Legacy `ADMIN` records default to `MANUAL_REVIEW_REQUIRED` without explicit external approval.
-- Production execution is blocked and rejected by default.
+- Production execution is blocked and rejected by default whenever safeguards are absent.
 - Offline fixture and emulator rehearsals enforce zero state mutation and identical before/after snapshots.
 
 ---
@@ -96,6 +107,7 @@ This validator verifies that:
 - [x] Role policy contract enforced
 - [x] Safety interpretation constraints specified
 - [x] Production read technical controls specified
-- [x] Repository validation script implemented
+- [x] Guarded production read-only inventory tool implemented (`inventoryFirestoreProductionReadOnly` / `--source production`)
+- [x] Repository validation script implemented (`scripts/validate-production-read-checkpoint.mjs`)
 - [ ] Separate human approval for production read execution (PENDING)
 - [ ] Phase 2B production migration (LOCKED / UNSTARTED)

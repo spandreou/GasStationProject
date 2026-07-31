@@ -353,6 +353,42 @@ export function assertEmulatorReadOnlyTarget({ emulatorHost, projectId }) {
   }
 }
 
+export const APPROVED_PRODUCTION_PROJECT_IDS = new Set([
+  'gasstationproject',
+  'gasstationproject-prod',
+  'shiftoryx-prod',
+]);
+
+export function assertProductionReadOnlyTarget({ projectId }) {
+  const project = cleanString(projectId);
+  if (!project) {
+    throw new Error('Target project ID is required for production read-only inventory.');
+  }
+  if (!APPROVED_PRODUCTION_PROJECT_IDS.has(project)) {
+    throw new Error('Target project is not on the approved production project allowlist.');
+  }
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    throw new Error('Production read-only inventory rejects executions with FIRESTORE_EMULATOR_HOST set.');
+  }
+  if (process.env.ALLOW_PRODUCTION_READ_ONLY_INVENTORY !== 'true') {
+    throw new Error(
+      'Production read-only inventory requires explicit environment authorization (ALLOW_PRODUCTION_READ_ONLY_INVENTORY=true).',
+    );
+  }
+}
+
+export function assertManifestOutputPath(manifestOutput) {
+  if (!manifestOutput) return '';
+  const resolved = path.resolve(cleanString(manifestOutput));
+  const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const relative = path.relative(repoRoot, resolved);
+  const isInsideRepo = !relative.startsWith('..') && !path.isAbsolute(relative);
+  if (isInsideRepo) {
+    throw new Error('Manifest output path must be strictly outside the repository worktree.');
+  }
+  return resolved;
+}
+
 function builtInOfflineFixture() {
   return {
     memberships: [
@@ -448,6 +484,49 @@ export async function inventoryFirestoreReadOnly(options = {}) {
   }
 }
 
+export async function inventoryFirestoreProductionReadOnly(options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('Inventory options must be an object.');
+  }
+  if ('db' in options) {
+    throw new Error('Production inventory does not accept injected Firestore clients.');
+  }
+
+  const { projectId } = options;
+  assertProductionReadOnlyTarget({ projectId });
+
+  const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
+  const adminApp = requireFromFunctions('firebase-admin/app');
+  const adminFirestore = requireFromFunctions('firebase-admin/firestore');
+  const app = adminApp.initializeApp({ projectId }, 'production-owner-inventory-read-only');
+  const firestore = adminFirestore.getFirestore(app);
+
+  try {
+    const membershipSnapshot = await firestore
+      .collection('tenantMemberships')
+      .select('uid', 'tenantId', 'role', 'status', 'createdAt', 'updatedAt')
+      .get();
+    const memberships = membershipSnapshot.docs.map((document) => ({
+      id: document.id,
+      data: document.data(),
+    }));
+    const [userIds, tenantIds, platformAdminIds] = await Promise.all([
+      loadReferenceIds(firestore, 'users'),
+      loadReferenceIds(firestore, 'tenants'),
+      loadReferenceIds(firestore, 'platformAdmins'),
+    ]);
+
+    return classifyMembershipInventory({
+      memberships,
+      userIds,
+      tenantIds,
+      platformAdminIds,
+    });
+  } finally {
+    await adminApp.deleteApp(app);
+  }
+}
+
 function printUsage() {
   console.log(`Usage:
   node scripts/inventory-tenant-memberships.mjs --read-only [options]
@@ -455,18 +534,20 @@ function printUsage() {
 Options:
   --source offline-fixture   Use built-in sanitized synthetic data. Default.
   --source emulator          Read the local Firestore emulator only.
-  --project-id <id>          Required for emulator source.
-  --read-only                Mandatory acknowledgement; no production mode exists.
+  --source production        Read production Firestore (requires ALLOW_PRODUCTION_READ_ONLY_INVENTORY=true).
+  --project-id <id>          Required for emulator or production source.
+  --manifest-output <path>   Optional. File path outside repo for human review manifest.
+  --read-only                Mandatory acknowledgement.
   --help                     Show this help.
 
-The command prints aggregate counts only. It has no production connector and
-does not accept credentials through command-line arguments.`);
+The command prints aggregate counts only. It does not accept credentials through command-line arguments.`);
 }
 
 function parseCliArgs(argv) {
   const parsed = {
     source: 'offline-fixture',
     projectId: '',
+    manifestOutput: '',
     readOnly: false,
     help: false,
   };
@@ -477,6 +558,7 @@ function parseCliArgs(argv) {
     else if (arg === '--read-only') parsed.readOnly = true;
     else if (arg === '--source') parsed.source = cleanString(argv[++index]);
     else if (arg === '--project-id') parsed.projectId = cleanString(argv[++index]);
+    else if (arg === '--manifest-output') parsed.manifestOutput = cleanString(argv[++index]);
     else throw new Error('Unsupported inventory argument.');
   }
 
@@ -504,8 +586,15 @@ async function runCli() {
       emulatorHost: process.env.FIRESTORE_EMULATOR_HOST,
       projectId: args.projectId,
     });
+  } else if (args.source === 'production') {
+    if (args.manifestOutput) {
+      assertManifestOutputPath(args.manifestOutput);
+    }
+    inventory = await inventoryFirestoreProductionReadOnly({
+      projectId: args.projectId,
+    });
   } else {
-    throw new Error('Inventory source must be offline-fixture or emulator.');
+    throw new Error('Inventory source must be offline-fixture, emulator, or production.');
   }
 
   console.log(JSON.stringify(sanitizeInventorySummary(inventory, { source: args.source }), null, 2));

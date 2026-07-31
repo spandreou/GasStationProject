@@ -18,6 +18,7 @@
   AUTO_MIGRATION_ALLOWED=false
   ```
 - Tooling Added:
+  - `scripts/inventory-tenant-memberships.mjs` (`inventoryFirestoreProductionReadOnly`, `--source production`)
   - `scripts/validate-production-read-checkpoint.mjs`
   - `npm run qa:production-read-checkpoint`
 - Verification Status:

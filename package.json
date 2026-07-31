@@ -14,6 +14,7 @@
     "qa:repositories": "node scripts/validate-repository-boundaries.mjs",
     "qa:saas-foundation": "node scripts/validate-saas-foundation.mjs",
     "qa:auth-broker": "node scripts/validate-auth-broker.mjs",
+    "qa:production-read-checkpoint": "node scripts/validate-production-read-checkpoint.mjs",
     "inventory:tenant-memberships": "node scripts/inventory-tenant-memberships.mjs --read-only",
     "test:owner-role-inventory:offline": "node scripts/test-owner-role-inventory-emulator.mjs --offline",
     "test:owner-role-inventory:emulator": "node scripts/test-owner-role-inventory-emulator.mjs --launch",

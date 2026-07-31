@@ -138,7 +138,25 @@ changes, no conflict resolution by code and delayed enforcement tightening.
 ## 6. Required Production Read Approval Checkpoint
 
 Before Phase 2B implementation, a separate review must approve a production
-read-only inventory extension.
+read-only inventory extension, as specified in
+`docs/REQUIRED_PRODUCTION_READ_APPROVAL_CHECKPOINT.md`.
+
+The confirmed business policy contract is:
+
+- 1 legacy `ADMIN` per store representing store ownership;
+- 0 authenticated `MANAGER` memberships (unexpected anomaly if found);
+- target MVP role `OWNER`;
+- `tenantMemberships` as authorization source of truth, `users/{uid}.memberships` as compatibility mirror;
+- platform-admin status separate from tenant operational ownership.
+
+The mandatory role policy contract is:
+
+```text
+EXPECTED_LEGACY_ROLE=ADMIN
+EXPECTED_MANAGER_COUNT=0
+TARGET_ROLE=OWNER
+AUTO_MIGRATION_ALLOWED=false
+```
 
 The approval must specify:
 

@@ -204,19 +204,33 @@ export function testMissingProjectIdEnv() {
   );
 }
 
-// 6. execution locked while exact project confirmation is absent
-export function testExecutionLockedWithoutConfirmedProject() {
-  assert.equal(CONFIRMED_PRODUCTION_PROJECT_ID, '');
+// 6. exact project confirmation accepts only the reviewed production identity
+export function testConfirmedProductionProjectIdentity() {
+  const expectedProjectId = 'gasstationproject-9dd89';
+  const matchingEnvironment = {
+    SHIFTORYX_PRODUCTION_READ_APPROVED: 'YES_READ_ONLY_INVENTORY',
+    SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER: 'shiftoryx-owner-review-01',
+    SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: expectedProjectId,
+    SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR: os.tmpdir(),
+    SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS: '72',
+    SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS: '100',
+  };
+
+  assert.equal(CONFIRMED_PRODUCTION_PROJECT_ID, expectedProjectId);
   assert.throws(
     () =>
       validateProductionEnvironment({
-        SHIFTORYX_PRODUCTION_READ_APPROVED: 'YES_READ_ONLY_INVENTORY',
-        SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER: 'alice',
-        SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: 'gasstationproject',
-        SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR: os.tmpdir(),
+        ...matchingEnvironment,
+        SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: 'different-production-project',
       }),
-    (err) => err.message.includes('EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION'),
+    (err) => err.message.includes('does not match confirmed production project ID'),
   );
+
+  const config = validateProductionEnvironment(matchingEnvironment);
+  assert.equal(config.projectId, expectedProjectId);
+  assert.equal(config.reviewer, 'shiftoryx-owner-review-01');
+  assert.equal(config.retentionHours, 72);
+  assert.equal(config.maxMemberships, 100);
 }
 
 // 7. emulator environment present
@@ -446,7 +460,7 @@ export function testStrictNumericEnvironmentParsing() {
   const base = {
     SHIFTORYX_PRODUCTION_READ_APPROVED: 'YES_READ_ONLY_INVENTORY',
     SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER: 'ops-review-1',
-    SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: 'confirmed-proj',
+    SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: CONFIRMED_PRODUCTION_PROJECT_ID,
     SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR: os.tmpdir(),
   };
 
@@ -467,15 +481,23 @@ export function testStrictNumericEnvironmentParsing() {
   }
 
   for (const value of ['1', '720']) {
-    assert.throws(
-      () => validateProductionEnvironment({ ...base, SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS: value }),
-      (err) => err.message.includes('EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION'),
+    const config = validateProductionEnvironment({
+      ...base,
+      SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS: value,
+    });
+    assert.equal(
+      config.retentionHours,
+      Number(value),
     );
   }
   for (const value of ['1', '1000']) {
-    assert.throws(
-      () => validateProductionEnvironment({ ...base, SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS: value }),
-      (err) => err.message.includes('EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION'),
+    const config = validateProductionEnvironment({
+      ...base,
+      SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS: value,
+    });
+    assert.equal(
+      config.maxMemberships,
+      Number(value),
     );
   }
 }
@@ -483,7 +505,7 @@ export function testStrictNumericEnvironmentParsing() {
 export function testReviewerLabelValidation() {
   const base = {
     SHIFTORYX_PRODUCTION_READ_APPROVED: 'YES_READ_ONLY_INVENTORY',
-    SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: 'confirmed-proj',
+    SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID: CONFIRMED_PRODUCTION_PROJECT_ID,
     SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR: os.tmpdir(),
   };
   for (const reviewer of [
@@ -499,10 +521,11 @@ export function testReviewerLabelValidation() {
     );
   }
 
-  assert.throws(
-    () => validateProductionEnvironment({ ...base, SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER: '  ops-review-1  ' }),
-    (err) => err.message.includes('EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION'),
-  );
+  const config = validateProductionEnvironment({
+    ...base,
+    SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER: '  ops-review-1  ',
+  });
+  assert.equal(config.reviewer, 'ops-review-1');
 }
 
 // 16. maximum exceeded before reference reads
@@ -1218,7 +1241,7 @@ export async function runAllGuardTests() {
     ['missing approval environment', testMissingApprovalEnv],
     ['wrong approval environment', testWrongApprovalEnv],
     ['missing project environment', testMissingProjectIdEnv],
-    ['project confirmation lock', testExecutionLockedWithoutConfirmedProject],
+    ['confirmed project identity', testConfirmedProductionProjectIdentity],
     ['emulator environment rejection', testEmulatorEnvPresentRejection],
     ['missing reviewer label', testMissingReviewerEnv],
     ['missing output directory', testMissingOutputDirEnv],

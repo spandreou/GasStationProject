@@ -17,7 +17,7 @@ import {
  * production read execution can proceed. Leaving this empty or unconfigured ensures
  * that all execution attempts fail closed before Firebase Admin SDK initialization.
  */
-export const CONFIRMED_PRODUCTION_PROJECT_ID = '';
+export const CONFIRMED_PRODUCTION_PROJECT_ID = 'gasstationproject-9dd89';
 
 const REVIEWER_LABEL_MAX_LENGTH = 64;
 const RETENTION_HOURS_DEFAULT = 168;

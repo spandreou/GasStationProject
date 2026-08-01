@@ -310,7 +310,17 @@ export function buildPhase2BPlanningSummary(inventory) {
   };
 }
 
-export function sanitizeInventorySummary(inventory, { source = 'unknown' } = {}) {
+export function sanitizeInventorySummary(
+  inventory,
+  {
+    source = 'unknown',
+    productionReadPerformed = false,
+    productionReadFieldName = 'productionReadPerformed',
+  } = {},
+) {
+  if (!['productionReadPerformed', 'productionAccessPerformed'].includes(productionReadFieldName)) {
+    throw new Error('Unsupported production-read evidence field name.');
+  }
   const reasonCounts = Object.create(null);
   for (const record of inventory.records || []) {
     for (const reason of record.reasons || []) {
@@ -328,7 +338,7 @@ export function sanitizeInventorySummary(inventory, { source = 'unknown' } = {})
     ),
     phase2BPlan: buildPhase2BPlanningSummary(inventory),
     rawIdentifiersPrinted: false,
-    productionAccessPerformed: false,
+    [productionReadFieldName]: Boolean(productionReadPerformed),
     writeOperationsExecuted: 0,
   };
 }

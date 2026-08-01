@@ -19,12 +19,113 @@ import {
  */
 export const CONFIRMED_PRODUCTION_PROJECT_ID = '';
 
+const REVIEWER_LABEL_MAX_LENGTH = 64;
+const RETENTION_HOURS_DEFAULT = 168;
+const RETENTION_HOURS_MIN = 1;
+const RETENTION_HOURS_MAX = 720;
+const MAX_MEMBERSHIPS_DEFAULT = 100;
+const MAX_MEMBERSHIPS_MIN = 1;
+export const MAX_MEMBERSHIPS_HARD_LIMIT = 1000;
+
+function pathComparisonKey(value) {
+  const normalized = path.normalize(path.resolve(value));
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function pathIsWithin(rootPath, targetPath) {
+  const rootKey = pathComparisonKey(rootPath);
+  const targetKey = pathComparisonKey(targetPath);
+  const relative = path.relative(rootKey, targetKey);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function repositoryRootRealPath() {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  return fs.realpathSync(repoRoot);
+}
+
+function assertNoRedirectedPathComponents(absolutePath) {
+  const resolved = path.resolve(absolutePath);
+  const parsed = path.parse(resolved);
+  const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  let current = parsed.root;
+  for (const component of components) {
+    current = path.join(current, component);
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink()) {
+      throw new Error('Output directory path must not use a symbolic link, junction or reparse-point redirect.');
+    }
+  }
+}
+
+export function resolveCanonicalOutputDirectory(rawPath) {
+  const outputDirRaw = typeof rawPath === 'string' ? rawPath : '';
+  if (!outputDirRaw || !path.isAbsolute(outputDirRaw)) {
+    throw new Error('Output directory must be an absolute path strictly outside the repository worktree.');
+  }
+
+  const resolved = path.resolve(outputDirRaw);
+  if (!fs.existsSync(resolved)) {
+    throw new Error('Output directory does not exist.');
+  }
+
+  const stat = fs.lstatSync(resolved);
+  if (stat.isSymbolicLink()) {
+    throw new Error('Output directory path must not use a symbolic link, junction or reparse-point redirect.');
+  }
+  if (!stat.isDirectory()) {
+    throw new Error('Output directory path is not a directory.');
+  }
+
+  assertNoRedirectedPathComponents(resolved);
+  const canonical = fs.realpathSync(resolved);
+  if (pathIsWithin(repositoryRootRealPath(), canonical)) {
+    throw new Error('Output directory must be an absolute path strictly outside the repository worktree.');
+  }
+  return canonical;
+}
+
+function parseStrictDecimalInteger(rawValue, {
+  label,
+  defaultValue,
+  minimum,
+  maximum,
+}) {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return defaultValue;
+  }
+  if (typeof rawValue !== 'string' || !/^(?:0|[1-9][0-9]*)$/u.test(rawValue)) {
+    throw new Error(`${label} must be a strict decimal integer between ${minimum} and ${maximum}.`);
+  }
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${label} must be a strict decimal integer between ${minimum} and ${maximum}.`);
+  }
+  return value;
+}
+
+function validateReviewerLabel(rawValue) {
+  const reviewer = cleanString(rawValue);
+  if (!reviewer) {
+    throw new Error('Production read requires SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER reviewer label to be set.');
+  }
+  if (
+    reviewer.length > REVIEWER_LABEL_MAX_LENGTH ||
+    /[\u0000-\u001f\u007f]/u.test(reviewer) ||
+    /[\\/]/u.test(reviewer) ||
+    reviewer.includes('@')
+  ) {
+    throw new Error(
+      `Production inventory reviewer label must be a non-sensitive operational label of at most ${REVIEWER_LABEL_MAX_LENGTH} characters without control characters, path separators or email addresses.`,
+    );
+  }
+  return reviewer;
+}
+
 export function isRepositoryPath(targetPath) {
   if (!targetPath) return false;
   const resolved = path.resolve(cleanString(targetPath));
-  const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-  const relative = path.relative(repoRoot, resolved);
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
+  return pathIsWithin(repositoryRootRealPath(), resolved);
 }
 
 export function validateProductionEnvironment(env = process.env) {
@@ -37,15 +138,39 @@ export function validateProductionEnvironment(env = process.env) {
     throw new Error('Production read requires SHIFTORYX_PRODUCTION_READ_APPROVED=YES_READ_ONLY_INVENTORY.');
   }
 
-  const reviewer = cleanString(env.SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER);
-  if (!reviewer) {
-    throw new Error('Production read requires SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER to be set.');
-  }
+  const reviewer = validateReviewerLabel(env.SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER);
 
   const projectEnv = cleanString(env.SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID);
   if (!projectEnv) {
     throw new Error('Production read requires SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID to be set.');
   }
+
+  const outputDirRaw = cleanString(env.SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR);
+  if (!outputDirRaw) {
+    throw new Error('Production read requires SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR to be set.');
+  }
+
+  const outputDir = resolveCanonicalOutputDirectory(outputDirRaw);
+
+  const retentionHours = parseStrictDecimalInteger(
+    env.SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS,
+    {
+      label: 'Retention hours',
+      defaultValue: RETENTION_HOURS_DEFAULT,
+      minimum: RETENTION_HOURS_MIN,
+      maximum: RETENTION_HOURS_MAX,
+    },
+  );
+
+  const maxMemberships = parseStrictDecimalInteger(
+    env.SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS,
+    {
+      label: 'Max memberships',
+      defaultValue: MAX_MEMBERSHIPS_DEFAULT,
+      minimum: MAX_MEMBERSHIPS_MIN,
+      maximum: MAX_MEMBERSHIPS_HARD_LIMIT,
+    },
+  );
 
   const confirmedProject = cleanString(CONFIRMED_PRODUCTION_PROJECT_ID);
   if (!confirmedProject || confirmedProject === 'EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION') {
@@ -56,48 +181,12 @@ export function validateProductionEnvironment(env = process.env) {
     throw new Error('Environment project ID does not match confirmed production project ID constant.');
   }
 
-  const outputDirRaw = cleanString(env.SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR);
-  if (!outputDirRaw) {
-    throw new Error('Production read requires SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR to be set.');
-  }
-
-  const outputDir = path.resolve(outputDirRaw);
-  if (!path.isAbsolute(outputDirRaw) || isRepositoryPath(outputDir)) {
-    throw new Error('Output directory must be an absolute path strictly outside the repository worktree.');
-  }
-
-  if (!fs.existsSync(outputDir)) {
-    throw new Error('Output directory does not exist.');
-  }
-
-  const stat = fs.lstatSync(outputDir);
-  if (!stat.isDirectory()) {
-    throw new Error('Output directory path is not a directory.');
-  }
-  if (stat.isSymbolicLink()) {
-    throw new Error('Output directory path must not be a symbolic link.');
-  }
-
-  const retentionHoursRaw = env.SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS
-    ? Number.parseInt(env.SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS, 10)
-    : 168; // Default 7 days
-  if (!Number.isInteger(retentionHoursRaw) || retentionHoursRaw <= 0 || retentionHoursRaw > 720) {
-    throw new Error('Retention hours must be a positive integer <= 720.');
-  }
-
-  const maxMembershipsRaw = env.SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS
-    ? Number.parseInt(env.SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS, 10)
-    : 100;
-  if (!Number.isInteger(maxMembershipsRaw) || maxMembershipsRaw <= 0) {
-    throw new Error('Max memberships limit must be a positive integer.');
-  }
-
   return {
     projectId: confirmedProject,
     reviewer,
     outputDir,
-    retentionHours: retentionHoursRaw,
-    maxMemberships: maxMembershipsRaw,
+    retentionHours,
+    maxMemberships,
   };
 }
 
@@ -111,6 +200,54 @@ export function parseProductionCliArgs(argv) {
   return parsed;
 }
 
+export function validateProductionCliAcknowledgement(parsed) {
+  if (parsed?.help) return parsed;
+  if (!parsed?.readOnly) {
+    throw new Error('Mandatory flag --read-only is required.');
+  }
+  return parsed;
+}
+
+const PRODUCTION_INVENTORY_HELP = `Usage: node scripts/inventory-tenant-memberships-production-readonly.mjs --read-only
+
+Options:
+  --read-only   Mandatory acknowledgement flag.
+  --help        Show this help.
+
+Environment Variables Required:
+  SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID
+  SHIFTORYX_PRODUCTION_READ_APPROVED=YES_READ_ONLY_INVENTORY
+  SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER
+  SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR
+  SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS
+  SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS
+`;
+
+export function safeProductionInventoryErrorCode(error) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (message.includes('Unsupported argument')) return 'UNSUPPORTED_PRODUCTION_READ_ARGUMENT';
+  if (message.includes('--read-only')) return 'READ_ONLY_ACKNOWLEDGEMENT_REQUIRED';
+  if (message.includes('FIRESTORE_EMULATOR_HOST')) return 'PRODUCTION_READ_EMULATOR_ENV_REJECTED';
+  if (message.includes('SHIFTORYX_PRODUCTION_READ_APPROVED')) return 'PRODUCTION_READ_APPROVAL_REQUIRED';
+  if (message.includes('reviewer label') || message.includes('SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER')) {
+    return 'PRODUCTION_READ_REVIEWER_INVALID';
+  }
+  if (message.includes('EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION')) {
+    return 'EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION';
+  }
+  if (message.includes('project ID')) return 'PRODUCTION_READ_PROJECT_INVALID';
+  if (message.includes('Output directory') || error?.code === 'EEXIST') {
+    return error?.code === 'EEXIST'
+      ? 'PRODUCTION_READ_OUTPUT_COLLISION'
+      : 'PRODUCTION_READ_OUTPUT_PATH_INVALID';
+  }
+  if (message.includes('Retention hours') || message.includes('Max memberships')) {
+    return 'PRODUCTION_READ_LIMIT_INVALID';
+  }
+  if (message.includes('exceeds approved maximum')) return 'PRODUCTION_READ_MAXIMUM_EXCEEDED';
+  return 'PRODUCTION_READ_RUNTIME_FAILURE';
+}
+
 export function writeProtectedAuditFile({
   outputDir,
   correlationId,
@@ -119,11 +256,14 @@ export function writeProtectedAuditFile({
   retentionHours,
   inventory,
   mirrorDetails,
+  productionReadPerformed = false,
+  recordSnapshots = [],
 }) {
   const timestamp = new Date().toISOString();
   const retentionDeadline = new Date(Date.now() + retentionHours * 3600000).toISOString();
   const fileName = `shiftoryx-inventory-${correlationId}.json`;
-  const filePath = path.join(outputDir, fileName);
+  const canonicalOutputDir = resolveCanonicalOutputDirectory(outputDir);
+  const filePath = path.join(canonicalOutputDir, fileName);
 
   if (isRepositoryPath(filePath)) {
     throw new Error('Output file path must be strictly outside repository worktree.');
@@ -136,9 +276,14 @@ export function writeProtectedAuditFile({
     projectId,
     retentionDeadlineHours: retentionHours,
     retentionDeadline,
-    inventorySummary: sanitizeInventorySummary(inventory, { source: 'production' }),
+    productionReadPerformed: Boolean(productionReadPerformed),
+    writeOperationsExecuted: 0,
+    inventorySummary: sanitizeInventorySummary(inventory, {
+      source: 'production',
+      productionReadPerformed: Boolean(productionReadPerformed),
+    }),
     mirrorDetails,
-    recordClassifications: inventory.records,
+    recordSnapshots,
   };
 
   // Exclusive file creation with restricted mode 0o600
@@ -154,42 +299,115 @@ export function writeProtectedAuditFile({
   return { filePath, retentionDeadline };
 }
 
-export async function runChunkedReferenceReads(firestore, uniqueUids, uniqueTenantIds, chunkSize = 10) {
+export const REFERENCE_READ_CHUNK_SIZE = 25;
+
+async function readReferenceChunks({
+  firestore,
+  collectionName,
+  ids,
+  fieldMask,
+  chunkSize,
+  onSnapshot,
+}) {
+  for (let index = 0; index < ids.length; index += chunkSize) {
+    const chunk = ids.slice(index, index + chunkSize);
+    const refs = chunk.map((id) => firestore.collection(collectionName).doc(id));
+    const snapshots = await firestore.getAll(...refs, { fieldMask });
+    for (const snapshot of snapshots) {
+      onSnapshot(snapshot);
+    }
+  }
+}
+
+export async function runChunkedReferenceReads(
+  firestore,
+  uniqueUids,
+  uniqueTenantIds,
+  chunkSize = REFERENCE_READ_CHUNK_SIZE,
+) {
+  if (!Number.isInteger(chunkSize) || chunkSize < 1 || chunkSize > REFERENCE_READ_CHUNK_SIZE) {
+    throw new Error(`Reference read chunk size must be between 1 and ${REFERENCE_READ_CHUNK_SIZE}.`);
+  }
   const userResults = new Map();
   const tenantResults = new Map();
   const platformAdminResults = new Map();
 
   const uidList = [...uniqueUids];
-  for (let i = 0; i < uidList.length; i += chunkSize) {
-    const chunk = uidList.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (uid) => {
-        const userDoc = await firestore.collection('users').doc(uid).get();
-        if (userDoc.exists) {
-          const data = userDoc.data() || {};
-          userResults.set(uid, { exists: true, memberships: data.memberships || {} });
-        } else {
-          userResults.set(uid, { exists: false, memberships: null });
-        }
+  await readReferenceChunks({
+    firestore,
+    collectionName: 'users',
+    ids: uidList,
+    fieldMask: ['memberships'],
+    chunkSize,
+    onSnapshot(snapshot) {
+      if (snapshot.exists) {
+        const data = snapshot.data() || {};
+        userResults.set(snapshot.id, { exists: true, memberships: data.memberships || {} });
+      } else {
+        userResults.set(snapshot.id, { exists: false, memberships: null });
+      }
+    },
+  });
 
-        const adminDoc = await firestore.collection('platformAdmins').doc(uid).get();
-        platformAdminResults.set(uid, adminDoc.exists);
-      }),
-    );
-  }
+  await readReferenceChunks({
+    firestore,
+    collectionName: 'platformAdmins',
+    ids: uidList,
+    fieldMask: [],
+    chunkSize,
+    onSnapshot(snapshot) {
+      platformAdminResults.set(snapshot.id, snapshot.exists);
+    },
+  });
 
   const tenantList = [...uniqueTenantIds];
-  for (let i = 0; i < tenantList.length; i += chunkSize) {
-    const chunk = tenantList.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (tenantId) => {
-        const tenantDoc = await firestore.collection('tenants').doc(tenantId).get();
-        tenantResults.set(tenantId, tenantDoc.exists);
-      }),
-    );
-  }
+  await readReferenceChunks({
+    firestore,
+    collectionName: 'tenants',
+    ids: tenantList,
+    fieldMask: [],
+    chunkSize,
+    onSnapshot(snapshot) {
+      tenantResults.set(snapshot.id, snapshot.exists);
+    },
+  });
 
   return { userResults, tenantResults, platformAdminResults };
+}
+
+export async function readProjectedMembershipSnapshot(firestore, maxMemberships) {
+  if (!Number.isInteger(maxMemberships) || maxMemberships < 1 || maxMemberships > MAX_MEMBERSHIPS_HARD_LIMIT) {
+    throw new Error(`Max memberships must be between 1 and ${MAX_MEMBERSHIPS_HARD_LIMIT}.`);
+  }
+  return firestore
+    .collection('tenantMemberships')
+    .select('uid', 'tenantId', 'role', 'status', 'createdAt', 'updatedAt')
+    .limit(maxMemberships + 1)
+    .get();
+}
+
+export function serializeFirestoreTimestamp(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (
+    (typeof value.seconds === 'number' || typeof value.seconds === 'bigint') &&
+    Number.isInteger(Number(value.nanoseconds || 0))
+  ) {
+    return {
+      seconds: String(value.seconds),
+      nanoseconds: Number(value.nanoseconds || 0),
+    };
+  }
+  if (value instanceof Date) {
+    return { iso: value.toISOString() };
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    if (Number.isFinite(date.getTime())) return { iso: date.toISOString() };
+  }
+  if (typeof value?.toDate === 'function') {
+    return { iso: value.toDate().toISOString() };
+  }
+  return { state: 'invalid' };
 }
 
 export async function inventoryFirestoreProductionReadOnlyInternal({
@@ -201,7 +419,7 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
   let userResults = new Map();
   let tenantResults = new Map();
   let platformAdminResults = new Map();
-  let isRealProductionRead = false;
+  let productionReadPerformed = false;
 
   if (fakeAdapter) {
     // Injected dry-run fake adapter (used for testing guards without network)
@@ -210,10 +428,9 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
     userResults = result.userResults || new Map();
     tenantResults = result.tenantResults || new Map();
     platformAdminResults = result.platformAdminResults || new Map();
-    isRealProductionRead = Boolean(result.isRealProductionRead);
+    productionReadPerformed = Boolean(result.productionReadPerformed);
   } else {
     // Real Firebase Admin read boundary
-    isRealProductionRead = true;
     const requireFromFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
     const adminApp = requireFromFunctions('firebase-admin/app');
     const adminFirestore = requireFromFunctions('firebase-admin/firestore');
@@ -221,11 +438,8 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
     const firestore = adminFirestore.getFirestore(app);
 
     try {
-      const snapshot = await firestore
-        .collection('tenantMemberships')
-        .select('uid', 'tenantId', 'role', 'status', 'createdAt', 'updatedAt')
-        .limit(config.maxMemberships + 1)
-        .get();
+      const snapshot = await readProjectedMembershipSnapshot(firestore, config.maxMemberships);
+      productionReadPerformed = true;
 
       if (snapshot.docs.length > config.maxMemberships) {
         throw new Error(
@@ -233,7 +447,12 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
         );
       }
 
-      membershipsData = snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+      membershipsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        path: doc.ref.path,
+        updateTime: doc.updateTime,
+        data: doc.data(),
+      }));
 
       const uniqueUids = new Set(membershipsData.map((m) => cleanString(m.data?.uid)).filter(Boolean));
       const uniqueTenantIds = new Set(membershipsData.map((m) => cleanString(m.data?.tenantId)).filter(Boolean));
@@ -256,6 +475,12 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
   const existingUserIds = new Set([...userResults.entries()].filter(([, v]) => v.exists).map(([k]) => k));
   const existingTenantIds = new Set([...tenantResults.entries()].filter(([, v]) => v).map(([k]) => k));
   const platformAdminIds = new Set([...platformAdminResults.entries()].filter(([, v]) => v).map(([k]) => k));
+  const referencedUserIds = new Set(
+    membershipsData.map((membership) => cleanString(membership.data?.uid)).filter(Boolean),
+  );
+  const referencedTenantIds = new Set(
+    membershipsData.map((membership) => cleanString(membership.data?.tenantId)).filter(Boolean),
+  );
 
   // Perform classification
   const inventory = classifyMembershipInventory({
@@ -324,17 +549,6 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
     }
   }
 
-  // Write protected external audit file
-  const { filePath: auditFilePath, retentionDeadline } = writeProtectedAuditFile({
-    outputDir: config.outputDir,
-    correlationId,
-    reviewer: config.reviewer,
-    projectId: config.projectId,
-    retentionHours: config.retentionHours,
-    inventory,
-    mirrorDetails,
-  });
-
   // Calculate role counts
   let ownerCount = 0;
   let adminCount = 0;
@@ -349,31 +563,96 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
     else unknownRoleCount += 1;
   }
 
-  const missingUserCount = membershipsData.length - existingUserIds.size;
-  const missingTenantCount = membershipsData.length - existingTenantIds.size;
+  const missingUserReferenceCount = [...referencedUserIds].filter(
+    (uid) => !existingUserIds.has(uid),
+  ).length;
+  const missingTenantReferenceCount = [...referencedTenantIds].filter(
+    (tenantId) => !existingTenantIds.has(tenantId),
+  ).length;
   const mirrorMismatchCount = mirrorAbsentCount + mirrorRoleMismatchCount + mirrorStatusMismatchCount + malformedMirrorCount;
 
-  const hasUnexpectedManager = managerCount > 0;
-  const hasAnomalies =
-    hasUnexpectedManager ||
-    unknownRoleCount > 0 ||
-    inventory.counts.INVALID_OR_MALFORMED > 0 ||
-    inventory.counts.CONFLICT_OR_DUPLICATE > 0 ||
-    missingUserCount > 0 ||
-    missingTenantCount > 0 ||
-    mirrorMismatchCount > 0;
+  const expectedPolicyRecordIds = new Set();
+  const structuralOrSecurityRecordIds = new Set();
+  for (const record of inventory.records) {
+    const isExpectedLegacyAdmin =
+      record.classification === 'MANUAL_REVIEW_REQUIRED' &&
+      record.currentRole === 'ADMIN' &&
+      record.reasons.length === 1 &&
+      record.reasons[0] === 'legacy-admin-owner-semantics-not-approved';
+    if (isExpectedLegacyAdmin) {
+      expectedPolicyRecordIds.add(record.id);
+    } else if (
+      record.classification === 'MANUAL_REVIEW_REQUIRED' ||
+      record.classification === 'INVALID_OR_MALFORMED' ||
+      record.classification === 'REVOKED_OR_INACTIVE' ||
+      record.classification === 'CONFLICT_OR_DUPLICATE'
+    ) {
+      structuralOrSecurityRecordIds.add(record.id);
+    }
+  }
+  for (const mirror of mirrorDetails) {
+    if (mirror.mirrorState !== 'MIRROR_CONSISTENT') {
+      structuralOrSecurityRecordIds.add(mirror.id);
+      expectedPolicyRecordIds.delete(mirror.id);
+    }
+  }
+
+  const expectedPolicyManualReviewCount = expectedPolicyRecordIds.size;
+  const structuralOrSecurityManualReviewCount = structuralOrSecurityRecordIds.size;
+  const hasAnomalies = structuralOrSecurityManualReviewCount > 0;
 
   let finalCheckpointVerdict = 'CHECKPOINT_VERDICT_PASS';
-  if (hasUnexpectedManager) {
-    finalCheckpointVerdict = 'UNEXPECTED_MANAGER_DATA_REQUIRES_REVIEW';
-  } else if (hasAnomalies) {
-    finalCheckpointVerdict = 'CHECKPOINT_VERDICT_REQUIRES_MANUAL_REVIEW';
+  if (hasAnomalies) {
+    finalCheckpointVerdict = 'STRUCTURAL_OR_SECURITY_MANUAL_REVIEW';
+  } else if (expectedPolicyManualReviewCount > 0) {
+    finalCheckpointVerdict = 'EXPECTED_POLICY_MANUAL_REVIEW';
   }
+
+  const classificationsById = new Map(inventory.records.map((record) => [record.id, record]));
+  const mirrorsById = new Map(mirrorDetails.map((mirror) => [mirror.id, mirror]));
+  const recordSnapshots = [...membershipsData]
+    .sort((left, right) => cleanString(left.id).localeCompare(cleanString(right.id)))
+    .map((membership) => {
+    const id = cleanString(membership.id);
+    const uid = cleanString(membership.data?.uid);
+    const tenantId = cleanString(membership.data?.tenantId);
+    const classification = classificationsById.get(id);
+    const mirror = mirrorsById.get(id);
+      return {
+        documentId: id,
+        documentPath: cleanString(membership.path) || `tenantMemberships/${id}`,
+        uid,
+        tenantId,
+        role: cleanString(membership.data?.role),
+        status: cleanString(membership.data?.status),
+        createdAt: serializeFirestoreTimestamp(membership.data?.createdAt),
+        updatedAt: serializeFirestoreTimestamp(membership.data?.updatedAt),
+        firestoreDocumentUpdateTime: serializeFirestoreTimestamp(membership.updateTime),
+        classification: classification?.classification || 'INVALID_OR_MALFORMED',
+        classificationReasons: classification?.reasons || ['classification-record-missing'],
+        mirrorState:
+          mirror?.mirrorState ||
+          (!uid || !existingUserIds.has(uid) ? 'USER_REFERENCE_MISSING' : 'NOT_EVALUATED'),
+        platformAdminOverlap: Boolean(uid && platformAdminIds.has(uid)),
+      };
+    });
+
+  const { filePath: auditFilePath, retentionDeadline } = writeProtectedAuditFile({
+    outputDir: config.outputDir,
+    correlationId,
+    reviewer: config.reviewer,
+    projectId: config.projectId,
+    retentionHours: config.retentionHours,
+    inventory,
+    mirrorDetails,
+    productionReadPerformed,
+    recordSnapshots,
+  });
 
   const sanitizedConsoleOutput = {
     correlationId,
     mode: 'READ_ONLY',
-    productionReadPerformed: isRealProductionRead,
+    productionReadPerformed,
     writeOperationsExecuted: 0,
     totalMemberships: inventory.diagnostics.totalMemberships,
     ownerCount,
@@ -384,9 +663,11 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
     malformedCount: inventory.counts.INVALID_OR_MALFORMED,
     duplicateOrConflictCount: inventory.counts.CONFLICT_OR_DUPLICATE,
     platformAdminOverlapCount: inventory.diagnostics.platformAdminsWithExplicitTenantMembership,
-    missingUserCount,
-    missingTenantCount,
+    missingUserReferenceCount,
+    missingTenantReferenceCount,
     mirrorMismatchCount,
+    expectedPolicyManualReviewCount,
+    structuralOrSecurityManualReviewCount,
     classificationCounts: inventory.counts,
     readOnlyVerdict: 'READ_ONLY_ENFORCED',
     zeroWriteVerdict: 'ZERO_WRITES_EXECUTED',
@@ -401,39 +682,50 @@ export async function inventoryFirestoreProductionReadOnlyInternal({
   };
 }
 
-export async function runProductionInventoryCli(argv = process.argv.slice(2), env = process.env) {
+export async function runProductionInventoryCli(
+  argv = process.argv.slice(2),
+  env = process.env,
+  dependencies = {},
+) {
+  const {
+    validateEnvironment = validateProductionEnvironment,
+    executeInventory = inventoryFirestoreProductionReadOnlyInternal,
+    writeStdout = (value) => console.log(value),
+  } = dependencies;
   const cli = parseProductionCliArgs(argv);
   if (cli.help) {
-    console.log(`Usage: node scripts/inventory-tenant-memberships-production-readonly.mjs --read-only
-
-Options:
-  --read-only   Mandatory acknowledgement flag.
-  --help        Show this help.
-
-Environment Variables Required:
-  SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID
-  SHIFTORYX_PRODUCTION_READ_APPROVED=YES_READ_ONLY_INVENTORY
-  SHIFTORYX_PRODUCTION_INVENTORY_REVIEWER
-  SHIFTORYX_PRODUCTION_INVENTORY_OUTPUT_DIR
-  SHIFTORYX_PRODUCTION_INVENTORY_RETENTION_HOURS
-  SHIFTORYX_PRODUCTION_INVENTORY_MAX_MEMBERSHIPS
-`);
-    return;
+    writeStdout(PRODUCTION_INVENTORY_HELP);
+    return { status: 'HELP', exitCode: 0 };
   }
 
-  if (!cli.readOnly) {
-    throw new Error('Mandatory flag --read-only is required.');
-  }
+  validateProductionCliAcknowledgement(cli);
 
   // Validate configuration before importing/initializing SDK
-  const config = validateProductionEnvironment(env);
+  const config = validateEnvironment(env);
 
-  const result = await inventoryFirestoreProductionReadOnlyInternal({ config });
+  const result = await executeInventory({ config });
 
-  console.log(JSON.stringify(result.sanitizedConsoleOutput, null, 2));
+  writeStdout(JSON.stringify(result.sanitizedConsoleOutput, null, 2));
 
-  if (result.hasAnomalies) {
-    process.exitCode = 1;
+  return {
+    status: 'COMPLETED',
+    exitCode: result.hasAnomalies ? 1 : 0,
+    result,
+  };
+}
+
+export async function runProductionInventoryEntrypoint({
+  argv = process.argv.slice(2),
+  env = process.env,
+  dependencies = {},
+  writeStderr = (value) => console.error(value),
+} = {}) {
+  try {
+    const execution = await runProductionInventoryCli(argv, env, dependencies);
+    return execution.exitCode;
+  } catch (error) {
+    writeStderr(safeProductionInventoryErrorCode(error));
+    return 1;
   }
 }
 
@@ -445,8 +737,7 @@ const isDirectInvocation =
     : currentFile === invokedFile;
 
 if (isDirectInvocation) {
-  runProductionInventoryCli().catch((error) => {
-    console.error(`Production read-only inventory execution rejected: ${error.message}`);
-    process.exitCode = 1;
+  runProductionInventoryEntrypoint().then((exitCode) => {
+    process.exitCode = exitCode;
   });
 }

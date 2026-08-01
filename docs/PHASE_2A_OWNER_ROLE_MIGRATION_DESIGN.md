@@ -167,16 +167,38 @@ The approval must specify:
 - no credential, token or service-account value in command arguments;
 - exact field projection from `tenantMemberships`: document ID, `uid`,
   `tenantId`, `role`, `status`, `createdAt`, `updatedAt`;
-- existence-only reads of `users`, `tenants` and `platformAdmins`;
-- approved read of `users/{uid}.memberships[tenantId]` for mirror consistency;
+- exact-ID `users` reads projected to only the `memberships` field, used for
+  document existence and `users/{uid}.memberships[tenantId]` mirror consistency;
+- exact-ID `tenants` and `platformAdmins` reads with an empty field mask for
+  existence only;
+- reference reads chunked at no more than 25 exact IDs per sequential request,
+  only for IDs found in the bounded membership snapshot, with no collection-wide
+  reference scan;
 - aggregate-only console output;
 - an explicitly selected external temporary path for any sensitive review
   manifest;
 - restrictive local access, retention deadline and verified deletion;
 - the exact command and reviewer names.
 
-The current Phase 2A tool cannot perform that read and rejects production
-targets.
+The Phase 2A offline/emulator entry point cannot perform that read and still
+rejects production targets. The separate production reader remains fail-closed
+because `CONFIRMED_PRODUCTION_PROJECT_ID` is empty; this design and its tests do
+not authorize filling that lock or executing the command.
+
+The production-read checkpoint uses two explicit outcomes. A structurally valid
+active legacy `ADMIN` remains `EXPECTED_POLICY_MANUAL_REVIEW` until record-level
+business approval exists. Missing references or timestamp provenance, invalid
+timestamp order, inactive/revoked state, malformed/absent/mismatched mirrors,
+platform-admin overlap, unexpected `MANAGER`/unknown roles, malformed records,
+and duplicate/conflicting claims produce
+`STRUCTURAL_OR_SECURITY_MANUAL_REVIEW` and a non-zero exit.
+
+Missing-reference metrics count unique missing user or tenant IDs rather than
+membership rows. The protected external evidence uses the truthful
+`productionReadPerformed` field and records each membership's canonical path,
+projected values, deterministic Firestore document update time, classification,
+reasons, mirror state, and platform-admin overlap. These record-level values are
+not console output and are not a Phase 2B approval manifest.
 
 ## 7. Phase 2B Approval Manifest
 

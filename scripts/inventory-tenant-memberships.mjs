@@ -188,7 +188,13 @@ async function runCli() {
     throw new Error('Inventory source must be offline-fixture or emulator.');
   }
 
-  console.log(JSON.stringify(sanitizeInventorySummary(inventory, { source: args.source }), null, 2));
+  console.log(JSON.stringify(sanitizeInventorySummary(inventory, {
+    source: args.source,
+    productionReadPerformed: false,
+    // Preserve the established Phase 2A offline/emulator report contract.
+    // The isolated production reader uses productionReadPerformed exclusively.
+    productionReadFieldName: 'productionAccessPerformed',
+  }), null, 2));
 }
 
 const currentFile = path.resolve(fileURLToPath(import.meta.url));

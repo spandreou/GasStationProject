@@ -7,7 +7,10 @@ This document defines the approved target authorization model and records curren
 - Hostname resolves tenant context only.
 - Firebase Auth proves user identity only.
 - Tenant access requires an ACTIVE membership for the same `uid` and `tenantId`.
-- Platform administration and tenant ownership are separate privileges.
+- Platform administration and tenant ownership are separate identity classes.
+- Every ACTIVE platform-admin UID has zero tenant memberships. `OWNER`, `ADMIN`
+  or `MANAGER` overlap is forbidden; inactive/revoked overlap requires manual
+  review and must not be silently deleted.
 - Public viewers read sanitized collections anonymously and have no membership.
 
 ## MVP Tenant Role
@@ -41,7 +44,13 @@ Platform owner authorization uses:
 platformAdmins/{uid}
 ```
 
-The technical compatibility role may remain `SUPER_ADMIN` with `ACTIVE` status. Client writes are denied. Platform admin status does not bypass tenant isolation; operational access still requires the tenant's OWNER membership unless a future trusted support flow is explicitly designed and audited.
+The technical compatibility role may remain `SUPER_ADMIN` with `ACTIVE` status.
+Client writes are denied. Platform-admin status does not bypass tenant isolation
+and never substitutes for tenant membership. A platform-admin identity must not
+hold any tenant membership. Tenant operational access requires a separate
+identity with a canonical `OWNER` / `ACTIVE` membership. Any future trusted
+support flow must be separately designed, least-privileged and audited without
+converting the Platform Admin into a tenant owner.
 
 ## Employees And Public Viewers
 

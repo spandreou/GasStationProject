@@ -6,7 +6,7 @@ Branch: `shiftoryx-production-read-checkpoint`
 
 Base SHA: `7d5cd071fd885170e3ec6fd40e50679d8836ec01`
 
-Status: `PRODUCTION_READ_APPROVAL_CHECKPOINT_VALIDATED_EXECUTION_LOCKED`
+Status: `ONE_SHOT_PRODUCTION_READ_COMPLETED_APPROVAL_CONSUMED`
 
 ---
 
@@ -16,7 +16,7 @@ This document establishes the repository-side policy contract, technical require
 
 Phase 2A established the read-only inventory classification logic, data model contracts, and local Firebase Emulator rehearsal capabilities. The Trivy baseline security remediation was merged via PR #19.
 
-This checkpoint defines the strict boundary between repository design/rehearsal tooling and production execution. **No production read, write, or deployment has been performed.**
+This checkpoint defines the strict boundary between repository design/rehearsal tooling and production execution. The separately approved one-shot production inventory read completed against the confirmed project with zero writes and no deployment. That approval is consumed; no second production read is authorized by this document.
 
 ---
 
@@ -30,7 +30,9 @@ The confirmed ShiftOryx pilot business model and role architecture is defined as
 4. **Target Role**: The target MVP authenticated tenant role is `OWNER`.
 5. **Source of Truth**: `tenantMemberships` (`tenantMemberships/{uid}_{tenantId}`) is the single canonical authorization source of truth.
 6. **Compatibility Mirror**: `users/{uid}.memberships` serves strictly as a secondary compatibility mirror.
-7. **Platform Admin Isolation**: Platform-admin status (`platformAdmins/{uid}`) remains strictly separate from tenant operational ownership and does not grant tenant operational access.
+7. **Platform Admin Isolation**: An ACTIVE platform-admin identity (`platformAdmins/{uid}`) is platform-only, is not a tenant/store owner, must have zero `tenantMemberships`, and does not grant tenant operational access.
+8. **No Dual Role**: `OWNER`, `ADMIN` or `MANAGER` membership for an ACTIVE platform-admin UID is forbidden. An inactive or revoked overlap remains a manual-review anomaly and must not be silently deleted.
+9. **Separate Owner Identity**: Tenant ownership requires a separate explicitly proven identity with a canonical `OWNER` / `ACTIVE` membership; platform-admin status never substitutes for that membership.
 
 ---
 
@@ -55,7 +57,7 @@ Despite the business policy that legacy `ADMIN` represents the store owner, **no
 2. **Review Candidates by Default**: Because the production reader contains no approval manifest, all valid legacy `ADMIN` records **must remain classified as `MANUAL_REVIEW_REQUIRED`** until an external, human-reviewed approval manifest is created.
 3. **Explicit Verdict Separation**: A structurally valid active legacy `ADMIN` whose only reason is `legacy-admin-owner-semantics-not-approved` produces `EXPECTED_POLICY_MANUAL_REVIEW`. That expected policy state does not fail the read-only checkpoint by itself. Every structural or security anomaly produces `STRUCTURAL_OR_SECURITY_MANUAL_REVIEW` and a non-zero CLI exit.
 4. **Unexpected `MANAGER` Records**: Any discovered `MANAGER` membership is an unexpected production anomaly (`EXPECTED_MANAGER_COUNT=0`) and therefore produces the structural/security verdict and a non-zero exit.
-5. **Conflict & Anomaly Handling**: Missing or invalid timestamp provenance/order, missing user or tenant references, malformed/absent/mismatched user mirrors, unknown roles, malformed documents, duplicate or competing claims, inactive status (`INACTIVE`, `SUSPENDED`, `EXPIRED`, `REVOKED`), and platform-admin overlap all force structural/security review.
+5. **Conflict & Anomaly Handling**: Missing or invalid timestamp provenance/order, missing user or tenant references, malformed/absent/mismatched user mirrors, unknown roles, malformed documents, duplicate or competing claims, inactive status (`INACTIVE`, `SUSPENDED`, `EXPIRED`, `REVOKED`), and platform-admin overlap all force structural/security review. An active platform-admin overlap can never become an eligible owner candidate; it requires a separately approved remediation that preserves the platform-admin identity while removing tenant authorization and assigning ownership only to a proven separate owner.
 
 ---
 
@@ -63,7 +65,7 @@ Despite the business policy that legacy `ADMIN` represents the store owner, **no
 
 Before any command is executed against a production Firestore instance, the following strict technical and organizational controls must be satisfied:
 
-1. **Exact Production Project Confirmation Lock**: The code contains `CONFIRMED_PRODUCTION_PROJECT_ID = ''`. Until a human developer explicitly sets and commits a confirmed project ID constant, all execution attempts fail closed immediately before Firebase Admin SDK initialization with `EXACT_PRODUCTION_PROJECT_REQUIRES_HUMAN_CONFIRMATION`.
+1. **Exact Production Project Confirmation Lock**: The code contains the explicitly confirmed production project in `CONFIRMED_PRODUCTION_PROJECT_ID`. This remains a project-identity guard only; it does not constitute reusable approval. The one-shot approval has been consumed, and any future production read requires fresh explicit human approval plus a separately reviewed execution re-lock mechanism before Firebase Admin SDK initialization.
 2. **CLI Acknowledgement Boundary**: Argument parsing only parses supported options. The execution boundary separately requires `--read-only`; `--help` exits before environment inspection or SDK initialization; and every unknown argument is rejected.
 3. **Environment-Only Configuration**: The production CLI (`scripts/inventory-tenant-memberships-production-readonly.mjs`) accepts **only** `--read-only` and `--help`. All configuration parameters must be supplied via environment variables:
    - `SHIFTORYX_PRODUCTION_FIREBASE_PROJECT_ID`
@@ -126,5 +128,6 @@ Validation on Node `v20.20.2` on 1 August 2026 produced 45/45 passing guard case
 - [x] Exact production project confirmation lock implemented (`CONFIRMED_PRODUCTION_PROJECT_ID`)
 - [x] Dedicated 45-case behavioral guard test suite implemented (`scripts/test-production-read-inventory-guards.mjs`)
 - [x] Repository validation script updated (`scripts/validate-production-read-checkpoint.mjs`)
-- [ ] Separate human approval for production read execution (PENDING)
+- [x] Separate human approval for the completed one-shot production read (CONSUMED; zero writes)
+- [ ] Fresh approval and separately reviewed execution re-lock before any future production read (LOCKED)
 - [ ] Phase 2B production migration (LOCKED / UNSTARTED)

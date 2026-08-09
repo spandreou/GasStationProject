@@ -43,7 +43,8 @@ A record becomes `SAFE_CANDIDATE` only when all of these are true:
 7. user-profile membership mirror is absent by approved policy or matches the
    canonical record exactly;
 8. there is no duplicate or competing active ownership claim;
-9. any platform-admin overlap is explicitly reviewed;
+9. the candidate UID has no ACTIVE `platformAdmins/{uid}` record and therefore
+   no platform-admin overlap;
 10. business ownership evidence identifies this user as the intended tenant
     OWNER;
 11. the approval manifest records exact current role, status and Firestore
@@ -133,7 +134,8 @@ Risks:
 - blanket migration makes later privilege attribution and rollback ambiguous.
 
 Mitigation: explicit record-level evidence, exact preconditions, no inactive
-changes, no conflict resolution by code and delayed enforcement tightening.
+changes, no conflict resolution by code, rejection of every Platform Admin +
+tenant role overlap and delayed enforcement tightening.
 
 ## 6. Required Production Read Approval Checkpoint
 
@@ -148,7 +150,12 @@ The confirmed business policy contract is:
 - 0 authenticated `MANAGER` memberships (unexpected anomaly if found);
 - target MVP role `OWNER`;
 - `tenantMemberships` as authorization source of truth, `users/{uid}.memberships` as compatibility mirror;
-- platform-admin status separate from tenant operational ownership.
+- platform-admin status separate from tenant operational ownership;
+- every ACTIVE platform-admin UID has zero `tenantMemberships`;
+- `OWNER`, `ADMIN` or `MANAGER` overlap is forbidden, while inactive/revoked
+  overlap is blocked for manual review and is never silently deleted;
+- tenant ownership belongs to a separate explicitly proven identity with an
+  `OWNER` / `ACTIVE` membership.
 
 The mandatory role policy contract is:
 
@@ -180,10 +187,14 @@ The approval must specify:
 - restrictive local access, retention deadline and verified deletion;
 - the exact command and reviewer names.
 
-The Phase 2A offline/emulator entry point cannot perform that read and still
-rejects production targets. The separate production reader remains fail-closed
-because `CONFIRMED_PRODUCTION_PROJECT_ID` is empty; this design and its tests do
-not authorize filling that lock or executing the command.
+The Phase 2A offline/emulator entry point cannot perform a production read and
+still rejects production targets. The separately approved one-shot production
+reader was locked to the confirmed project, executed exactly once and produced
+the protected read-only inventory with zero writes. That approval is consumed:
+the populated `CONFIRMED_PRODUCTION_PROJECT_ID` is only a project-identity guard
+and is not reusable authorization. No second read is authorized by this design;
+any future production read requires a fresh explicit approval and a separately
+reviewed execution re-lock mechanism.
 
 The production-read checkpoint uses two explicit outcomes. A structurally valid
 active legacy `ADMIN` remains `EXPECTED_POLICY_MANUAL_REVIEW` until record-level
@@ -212,7 +223,7 @@ contain, per approved record:
 - expected Firestore update time;
 - expected user/tenant existence;
 - expected user-profile mirror state;
-- platform-admin overlap decision;
+- expected absence of an ACTIVE platform-admin record for the owner candidate;
 - business-owner evidence reference;
 - reviewer and decision timestamp;
 - target role `OWNER`;
@@ -271,7 +282,8 @@ Transaction reads:
 1. canonical membership;
 2. `users/{uid}`;
 3. `tenants/{tenantId}`;
-4. `platformAdmins/{uid}` if present in the manifest;
+4. `platformAdmins/{uid}` to prove that the owner candidate is not an ACTIVE
+   platform admin;
 5. proposed platform audit event;
 6. user-profile membership mirror when applicable.
 
@@ -285,7 +297,8 @@ Required assertions before any write:
 - user and tenant still exist;
 - tenant is not in an unapproved disabled state;
 - no duplicate/conflict decision changed;
-- platform-admin overlap matches the approved decision;
+- the owner candidate has no ACTIVE platform-admin record and the expected
+  platform-admin isolation state has not changed;
 - mirror state matches the manifest;
 - audit idempotency key is unused or represents the exact already-applied
   operation.
@@ -378,11 +391,15 @@ Rollback requires separate approval and a dedicated transaction that asserts:
 - current role is `OWNER`;
 - current status remains `ACTIVE`;
 - current update time equals the Phase 2B result;
+- the candidate UID has no ACTIVE `platformAdmins/{uid}` record;
 - no later legitimate change occurred.
 
 Then restore only the approved preimage fields and create a corresponding
 immutable rollback audit event. Never delete or rename the membership. If a
-post-migration change occurred, stop for manual reconciliation.
+post-migration change occurred, stop for manual reconciliation. A rollback must
+never restore a tenant membership to an ACTIVE platform-admin UID; recovery must
+preserve the zero-membership invariant and a separately proven OWNER identity or
+fail closed for manual recovery.
 
 ## 14. Post-Migration Verification
 
@@ -403,7 +420,10 @@ System regression:
 - wrong-tenant denial;
 - missing/inactive/unknown-role denial;
 - platform admin without explicit membership denied tenant-private access;
-- explicit platform-admin tenant membership treated only as that membership;
+- Platform Admin + `OWNER`, `ADMIN` or `MANAGER` membership flagged as the
+  forbidden `PLATFORM_ADMIN_TENANT_MEMBERSHIP_FORBIDDEN` state;
+- platform admin with an inactive/revoked membership blocked for manual review;
+- platform-admin status never treated as a substitute for tenant membership;
 - auth broker ticket creation/exchange and role-change re-check;
 - BP Kallis pilot behavior;
 - build, Node 20 scheduler QA, repository, public-readonly, SaaS, auth broker,
@@ -439,7 +459,7 @@ Phase 2B must not start until reviewers approve:
 - ADMIN policy;
 - MANAGER policy;
 - multi-owner policy;
-- platform-admin overlap policy;
+- platform-admin zero-membership invariant and overlap-remediation evidence;
 - user-profile mirror policy;
 - production read inventory and sensitive-output handling;
 - exact eligible manifest;

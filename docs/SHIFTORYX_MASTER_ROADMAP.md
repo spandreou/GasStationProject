@@ -72,6 +72,13 @@ Current domain status: `PURCHASED_NOT_CONFIGURED`. Ownership is confirmed, but D
 
 Τεχνικά μπορεί προσωρινά να παραμείνει role `SUPER_ADMIN` για compatibility, αλλά στο UI εμφανίζεται ως ShiftOryx Admin. Η πρόσβαση ελέγχεται από `platformAdmins/{uid}` με `ACTIVE` status. Δεν επιτρέπονται client writes σε `platformAdmins`.
 
+An ACTIVE ShiftOryx Platform Admin is a platform-only identity and is not a
+tenant/store owner. Its UID must have zero `tenantMemberships`; an `OWNER`,
+`ADMIN` or `MANAGER` membership for that UID is a forbidden dual-role state.
+An inactive or revoked membership for that UID remains an anomaly requiring
+manual review and must not be silently deleted. Platform-admin status never
+substitutes for tenant membership and never grants tenant authorization.
+
 ### 2.2 Owner
 
 Ο `OWNER` είναι ο μόνος authenticated tenant role. Δεν δημιουργούνται `ADMIN`, `MANAGER`, `VIEWER` ή authenticated `EMPLOYEE` roles στο MVP.
@@ -629,6 +636,8 @@ Tasks:
 - back up and inventory `ADMIN`/`MANAGER` memberships and legacy authorization surfaces without printing personal records,
 - define eligibility, compatibility behavior and a reversible migration map,
 - design the owner authorization helper while keeping platform admin separate,
+- enforce the zero-membership invariant for every ACTIVE platform-admin UID and
+  require a separate explicitly proven `OWNER` / `ACTIVE` tenant identity,
 - rehearse proposed membership, Rules and compatibility changes in Firebase emulators,
 - test cross-tenant denial, public employee access and BP Kallis regression in the rehearsal environment.
 
@@ -643,6 +652,8 @@ Tasks:
 - migrate only eligible legacy memberships to `OWNER`,
 - apply the separately approved compatibility/enforcement changes,
 - keep platform-admin authorization separate from tenant access,
+- reject Platform Admin + tenant `OWNER`/`ADMIN`/`MANAGER` dual-role states;
+  inactive or revoked overlaps remain blocked for manual review,
 - validate owner access, anonymous sanitized employee access, cross-tenant denial and BP Kallis behavior,
 - stop for human review before Phase 3.
 

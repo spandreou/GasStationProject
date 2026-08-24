@@ -184,6 +184,8 @@ manifest to all of these exact values:
 - expected current role (`OWNER` for the confirmed overlap);
 - expected current status (`ACTIVE`);
 - expected Firestore membership update time / last-update precondition;
+  this token preserves Firestore `seconds` and `nanoseconds` losslessly and must
+  never be reduced to a JavaScript `Date` or ISO string;
 - expected platform-admin user mirror shape and values;
 - exact proof that the affected canonical membership is the platform-admin UID's
   only `tenantMemberships` document and that its user mirror contains only the

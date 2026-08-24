@@ -2,6 +2,7 @@ const TENANT_ROLES = new Set(['OWNER', 'ADMIN', 'MANAGER']);
 const ACTIVE_STATUS = 'ACTIVE';
 const INACTIVE_MEMBERSHIP_STATUSES = new Set(['INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED']);
 const SAFE_IDENTIFIER = /^[^/\u0000-\u001f\u007f\s][^/\u0000-\u001f\u007f]{0,126}[^/\u0000-\u001f\u007f\s]$|^[^/\u0000-\u001f\u007f\s]$/u;
+const FIRESTORE_SECONDS = /^-?(0|[1-9]\d*)$/u;
 
 export class RemediationPreconditionError extends Error {
   constructor(code) {
@@ -26,7 +27,24 @@ function isIdentifier(value) {
 }
 
 function isTimestampToken(value) {
-  return typeof value === 'string' && value.length > 0 && Number.isFinite(Date.parse(value));
+  return (
+    isPlainObject(value) &&
+    Object.keys(value).length === 2 &&
+    typeof value.seconds === 'string' &&
+    FIRESTORE_SECONDS.test(value.seconds) &&
+    Number.isInteger(value.nanoseconds) &&
+    value.nanoseconds >= 0 &&
+    value.nanoseconds <= 999_999_999
+  );
+}
+
+function sameTimestampToken(left, right) {
+  return (
+    isTimestampToken(left) &&
+    isTimestampToken(right) &&
+    left.seconds === right.seconds &&
+    left.nanoseconds === right.nanoseconds
+  );
 }
 
 function isMembershipState(value) {
@@ -300,14 +318,16 @@ export function buildPlatformAdminOverlapRemediationPlan(input) {
     fail('OVERLAP_MEMBERSHIP_MISMATCH');
   }
   if (!isTimestampToken(overlap.updateTime)) fail('INVALID_REMEDIATION_INPUT');
-  if (overlap.updateTime !== expected.overlapUpdateTime) fail('STALE_OVERLAP_MEMBERSHIP');
+  if (!sameTimestampToken(overlap.updateTime, expected.overlapUpdateTime)) {
+    fail('STALE_OVERLAP_MEMBERSHIP');
+  }
   const observedPlatformMembership = snapshot.platformTenantMemberships[0];
   if (
     observedPlatformMembership.uid !== overlap.uid ||
     observedPlatformMembership.tenantId !== overlap.tenantId ||
     observedPlatformMembership.role !== overlap.role ||
     observedPlatformMembership.status !== overlap.status ||
-    observedPlatformMembership.updateTime !== overlap.updateTime
+    !sameTimestampToken(observedPlatformMembership.updateTime, overlap.updateTime)
   ) {
     fail('OVERLAP_MEMBERSHIP_MISMATCH');
   }

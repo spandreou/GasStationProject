@@ -13,7 +13,10 @@ const SYNTHETIC = Object.freeze({
   tenantId: 'synthetic-store',
   overlapMembershipId: 'synthetic-platform-admin_synthetic-store',
   ownerMembershipId: 'synthetic-business-owner_synthetic-store',
-  overlapUpdateTime: '2026-08-09T08:30:00.000Z',
+  overlapUpdateTime: Object.freeze({
+    seconds: '1786264200',
+    nanoseconds: 100_000,
+  }),
 });
 
 function buildValidInput() {
@@ -235,8 +238,28 @@ function runPlanTests() {
   inactiveAdmin.snapshot.platformAdmin.status = 'SUSPENDED';
   expectCode('PLATFORM_ADMIN_NOT_ACTIVE', () => buildPlatformAdminOverlapRemediationPlan(inactiveAdmin));
 
+  const equivalentTimestampValue = buildValidInput();
+  equivalentTimestampValue.snapshot.overlapMembership.updateTime = {
+    seconds: '1786264200',
+    nanoseconds: 100_000,
+  };
+  equivalentTimestampValue.snapshot.platformTenantMemberships[0].updateTime = {
+    seconds: '1786264200',
+    nanoseconds: 100_000,
+  };
+  assert.doesNotThrow(() =>
+    buildPlatformAdminOverlapRemediationPlan(equivalentTimestampValue),
+  );
+
   const stale = buildValidInput();
-  stale.snapshot.overlapMembership.updateTime = '2026-08-09T08:31:00.000Z';
+  stale.snapshot.overlapMembership.updateTime = {
+    seconds: '1786264200',
+    nanoseconds: 200_000,
+  };
+  stale.snapshot.platformTenantMemberships[0].updateTime = {
+    seconds: '1786264200',
+    nanoseconds: 200_000,
+  };
   expectCode('STALE_OVERLAP_MEMBERSHIP', () => buildPlatformAdminOverlapRemediationPlan(stale));
 
   const wrongRole = buildValidInput();
@@ -309,7 +332,7 @@ function runPlanTests() {
     tenantId: 'synthetic-other-store',
     role: 'MANAGER',
     status: 'REVOKED',
-    updateTime: '2026-08-09T08:29:00.000Z',
+    updateTime: { seconds: '1786264140', nanoseconds: 0 },
   });
   expectCode('PLATFORM_ADDITIONAL_MEMBERSHIP_CONFLICT', () =>
     buildPlatformAdminOverlapRemediationPlan(additionalPlatformMembership),

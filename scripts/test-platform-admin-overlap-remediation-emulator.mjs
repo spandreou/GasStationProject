@@ -149,7 +149,20 @@ function createSyntheticEmulatorCredential(certFactory) {
 
 function updateTimeToken(snapshot) {
   assert.ok(snapshot.updateTime, 'DOCUMENT_UPDATE_TIME_REQUIRED');
-  return snapshot.updateTime.toDate().toISOString();
+  const seconds = snapshot.updateTime.seconds;
+  const nanoseconds = snapshot.updateTime.nanoseconds;
+  assert.ok(
+    typeof seconds === 'number' || typeof seconds === 'bigint',
+    'DOCUMENT_UPDATE_TIME_SECONDS_REQUIRED',
+  );
+  assert.ok(
+    Number.isInteger(nanoseconds) && nanoseconds >= 0 && nanoseconds <= 999_999_999,
+    'DOCUMENT_UPDATE_TIME_NANOSECONDS_REQUIRED',
+  );
+  return {
+    seconds: String(seconds),
+    nanoseconds,
+  };
 }
 
 function normalizeForSnapshot(value) {

@@ -1,3 +1,8 @@
+import {
+  OwnerIdentityValidationError,
+  validateOwnerConfirmationInput,
+} from './owner-identity-validator.mjs';
+
 const TENANT_ROLES = new Set(['OWNER', 'ADMIN', 'MANAGER']);
 const ACTIVE_STATUS = 'ACTIVE';
 const INACTIVE_MEMBERSHIP_STATUSES = new Set(['INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED']);
@@ -82,6 +87,18 @@ function sameMembershipState(left, right) {
 
 function validateExpected(expected) {
   if (!isPlainObject(expected)) fail('INVALID_REMEDIATION_INPUT');
+
+  try {
+    validateOwnerConfirmationInput({
+      ownerUid: expected.ownerUid,
+      tenantId: expected.tenantId,
+    });
+  } catch (error) {
+    if (error instanceof OwnerIdentityValidationError) {
+      fail('INVALID_REMEDIATION_INPUT');
+    }
+    throw error;
+  }
 
   const identifiers = [
     expected.projectId,

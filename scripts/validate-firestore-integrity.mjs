@@ -99,7 +99,7 @@ assert(matchBlock('users').includes('allow read: if isAdmin() || isSelf(uid);'),
 assert(matchBlock('users').includes('allow create, update: if isAdmin() && validUserProfile(uid);'), 'SaaS users must be admin writable only.');
 assert(matchBlock('tenantMemberships').includes('resource.data.uid == request.auth.uid'), 'Tenant memberships must support uid-based self lookup.');
 assert(matchBlock('tenantMemberships').includes("resource.data.status == 'ACTIVE'"), 'Tenant membership self lookup must require ACTIVE status.');
-assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Tenant admin roles must be OWNER, ADMIN, MANAGER.');
+assert(firestoreRules.includes("role in ['OWNER']"), 'Tenant admin role must be OWNER only.');
 assert(firestoreRules.includes("'INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'"), 'Tenant memberships must model inactive denied statuses.');
 assert(matchBlock('tenantMemberships').includes('resource.data.tenantId is string'), 'Tenant membership tenant-admin reads must be bound to the membership tenant.');
 assert(matchBlock('tenantMemberships').includes('isTenantAdmin(resource.data.tenantId)'), 'Tenant admins may only read memberships for their own tenant.');

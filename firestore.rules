@@ -192,13 +192,6 @@ service cloud.firestore {
       ];
     }
 
-    function privateAbsenceFields() {
-      return [
-        'employeeId', 'type', 'startDate', 'endDate', 'reason', 'note',
-        'internalComments', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'
-      ];
-    }
-
     function validAbsence() {
       return request.resource.data.keys().hasAll([
         'employeeId', 'type', 'startDate', 'endDate', 'replacementMode'
@@ -259,21 +252,6 @@ service cloud.firestore {
         (!('endDate' in request.resource.data) || isIsoDate(request.resource.data.endDate)) &&
         (!('totalDays' in request.resource.data) || (request.resource.data.totalDays is int && request.resource.data.totalDays >= 1)) &&
         (!('status' in request.resource.data) || request.resource.data.status in ['ACTIVE', 'CANCELLED']);
-    }
-
-    function validPrivateAbsence() {
-      return request.resource.data.keys().hasAll(['employeeId']) &&
-        request.resource.data.keys().hasOnly(privateAbsenceFields()) &&
-        request.resource.data.employeeId is string &&
-        request.resource.data.employeeId.size() > 0 &&
-        (!('type' in request.resource.data) || request.resource.data.type in ['LEAVE', 'SICK', 'OTHER']) &&
-        (!('startDate' in request.resource.data) || isIsoDate(request.resource.data.startDate)) &&
-        (!('endDate' in request.resource.data) || isIsoDate(request.resource.data.endDate)) &&
-        isOptionalString('reason') &&
-        isOptionalString('note') &&
-        isOptionalString('internalComments') &&
-        isOptionalString('createdBy') &&
-        isOptionalString('updatedBy');
     }
 
     function settingsFields() {
@@ -542,9 +520,7 @@ service cloud.firestore {
     }
 
     match /employee_absences_private/{absenceId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin() && validPrivateAbsence();
-      allow delete: if isAdmin();
+      allow read, write: if false;
     }
 
     match /announcements/{announcementId} {

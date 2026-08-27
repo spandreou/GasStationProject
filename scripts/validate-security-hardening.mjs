@@ -105,6 +105,7 @@ assert(
   'shiftTemplates',
   'employeeAbsences',
   'employeeAbsencesPublic',
+  'employee_absences_private',
   'attendance_history',
   'week_locks',
   'week_history',

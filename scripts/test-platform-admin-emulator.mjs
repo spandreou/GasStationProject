@@ -284,6 +284,67 @@ async function runTests() {
     'Clients must not write tenantMemberships'
   );
 
+  // E. Legacy Root employee_absences_private fail-closed enforcement
+  await setAdminDoc('employee_absences_private/absence-1', {
+    employeeId: 'emp-bp',
+    reason: 'medical',
+    internalComments: 'legacy private note',
+  });
+
+  // 1. Super admin (Platform Admin) is denied read/write/delete
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-1',
+    { idToken: superAdmin.idToken },
+    403,
+    'Platform admin must not read legacy employee_absences_private'
+  );
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-2',
+    { method: 'PATCH', idToken: superAdmin.idToken, data: { employeeId: 'emp-bp', reason: 'other' } },
+    403,
+    'Platform admin must not create legacy employee_absences_private'
+  );
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-1',
+    { method: 'PATCH', idToken: superAdmin.idToken, data: { reason: 'updated' } },
+    403,
+    'Platform admin must not update legacy employee_absences_private'
+  );
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-1',
+    { method: 'DELETE', idToken: superAdmin.idToken },
+    403,
+    'Platform admin must not delete legacy employee_absences_private'
+  );
+
+  // 2. Tenant admin is denied read/write/delete
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-1',
+    { idToken: bpAdmin.idToken },
+    403,
+    'Tenant admin must not read legacy employee_absences_private'
+  );
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-2',
+    { method: 'PATCH', idToken: bpAdmin.idToken, data: { employeeId: 'emp-bp', reason: 'other' } },
+    403,
+    'Tenant admin must not create legacy employee_absences_private'
+  );
+
+  // 3. Anonymous is denied read/write
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-1',
+    {},
+    403,
+    'Anonymous must not read legacy employee_absences_private'
+  );
+  await expectFirestoreStatus(
+    'employee_absences_private/absence-2',
+    { method: 'PATCH', data: { employeeId: 'emp-bp', reason: 'other' } },
+    403,
+    'Anonymous must not create legacy employee_absences_private'
+  );
+
   console.log('All Platform Super-Admin Decoupling Emulator Tests passed successfully!');
 }
 

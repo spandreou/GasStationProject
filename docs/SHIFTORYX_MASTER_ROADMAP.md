@@ -627,37 +627,35 @@ Deliverable: `docs/CURRENT_STATE.md` με implemented/partial/missing/legacy/ris
 
 Stop: no business logic changes.
 
-### Phase 2A — Read-Only Role Inventory And Migration Design
+### Phase 2A — Read-Only Role Inventory And Migration Design (CLOSED)
 
-Goal: design OWNER-only normalization without changing production membership data or breaking the pilot.
+Status: **CLOSED**
 
-Tasks:
+Achievements:
+- Read-only inventory and discovery of production memberships completed.
+- Pure syntactic owner validator and deterministic overlap remediation planner implemented and verified.
+- Platform Admin decoupling and zero-membership invariant established across emulator test suites.
+- Production rehearsal proved 100% clean isolation.
 
-- back up and inventory `ADMIN`/`MANAGER` memberships and legacy authorization surfaces without printing personal records,
-- define eligibility, compatibility behavior and a reversible migration map,
-- design the owner authorization helper while keeping platform admin separate,
-- enforce the zero-membership invariant for every ACTIVE platform-admin UID and
-  require a separate explicitly proven `OWNER` / `ACTIVE` tenant identity,
-- rehearse proposed membership, Rules and compatibility changes in Firebase emulators,
-- test cross-tenant denial, public employee access and BP Kallis regression in the rehearsal environment.
+### Phase 2B — Separately Approved Controlled OWNER Migration (CLOSED)
 
-Stop: Phase 2A is read-only for production and authorizes no production membership, Rules or data write. Human review is required before Phase 2B.
+Status: **CLOSED (NO DATA MIGRATION REQUIRED)**
 
-### Phase 2B — Separately Approved Controlled OWNER Migration
-
-Prerequisite: new explicit human approval based on the accepted Phase 2A inventory, rehearsal evidence, backup and rollback map.
-
-Tasks:
-
-- migrate only eligible legacy memberships to `OWNER`,
-- apply the separately approved compatibility/enforcement changes,
-- keep platform-admin authorization separate from tenant access,
-- reject Platform Admin + tenant `OWNER`/`ADMIN`/`MANAGER` dual-role states;
-  inactive or revoked overlaps remain blocked for manual review,
-- validate owner access, anonymous sanitized employee access, cross-tenant denial and BP Kallis behavior,
-- stop for human review before Phase 3.
-
-No Phase 2B production migration is authorized by documentation synchronization.
+Production Closure Summary:
+- **Functions Runtime**: Node.js 22 LTS (Gen 2, Firebase Functions v7, Firebase Admin SDK v14) deployed and verified.
+- **Rules Remediation**: PR #31 deployed; `employee_absences_private` permanently fail-closed (`allow read, write: if false;`).
+- **Platform Admin / Tenant OWNER Overlap Remediated**: Platform Admin (`UxRxFzjU0Wbf0g98p9phN7yV0JJ3`) has 0 tenant memberships and no mirror.
+- **Pilot OWNER Identity Established**: `IlyYsuAS3mYZ5CK8lYtp5NhIJBU2` is confirmed active test pilot `OWNER` for `bp-kallis` (`REAL_BUSINESS_OWNER_PRESENT=NO`, `ACCOUNT_TYPE=TEST_PILOT`, `FUTURE_REAL_OWNER_TRANSFER_REQUIRED=YES`).
+- **Production Inventory**: `TOTAL_MEMBERSHIP_COUNT=1`, `OWNER_COUNT=1`, `ADMIN_COUNT=0`, `MANAGER_COUNT=0`, `PLATFORM_ADMIN_OVERLAP_COUNT=0`, `MANUAL_REVIEW_COUNT=0`.
+- **Phase 2B Migration Scope**: Evaluated as `EMPTY`. No data migration writer was required or executed.
+- **OWNER-Only Enforcement Merged (PR #32)**:
+  - Frontend, Firestore Rules, Storage Rules, and Cloud Functions enforce `OWNER` only.
+  - Active Platform Admin hard separation enforced (`!isActivePlatformAdmin()`).
+- **Production Rollout Completed**:
+  - Firestore OWNER-only Rules deployed (`rulesets/7de47fff-549a-42bc-af67-5ab6fd32098d`).
+  - Storage OWNER-only Rules deployed (`rulesets/3fdf1c09-6807-4f25-9255-26e677c9a8f8`).
+  - Cloud Functions deployed: `createAuthTicket`, `exchangeAuthTicket` (Node 22 Gen 2). `cleanupAuthTickets` preserved intact.
+- **Phase 2 Status**: **CLOSED**. Next Phase: **Phase 3** (`PHASE_3_STARTED=NO`).
 
 ### Phase 3 — Registration Token Backend
 

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import {
   FieldValue,
   Timestamp,
   getFirestore,
 } from 'firebase-admin/firestore';
+import { onInit } from 'firebase-functions/v2/core';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import {
@@ -22,9 +23,21 @@ import {
   validateTicketFormat,
 } from './authBrokerCore.js';
 
-initializeApp();
+let db;
 
-const db = getFirestore();
+function getDb() {
+  if (!db) {
+    if (!getApps().length) {
+      initializeApp();
+    }
+    db = getFirestore();
+  }
+  return db;
+}
+
+onInit(() => {
+  getDb();
+});
 
 const DEFAULT_BASE_DOMAIN = 'homelabshare.gr';
 const DEFAULT_CENTRAL_DOMAIN = 'gas.homelabshare.gr';
@@ -76,6 +89,7 @@ function unavailable(reason = 'unavailable') {
 }
 
 async function getTenantOrDeny(tenantId) {
+  const db = getDb();
   const snapshot = await db.doc(`tenants/${tenantId}`).get();
   if (!snapshot.exists) deny('tenant-not-found');
   const tenant = { id: snapshot.id, ...snapshot.data() };
@@ -91,6 +105,7 @@ function getTenantOriginFromTenant(tenant, fallbackTenantId, baseDomain) {
 }
 
 async function getActiveMembershipOrDeny(uid, tenantId) {
+  const db = getDb();
   const membershipId = `${uid}_${tenantId}`;
   const snapshot = await db.doc(`tenantMemberships/${membershipId}`).get();
   if (!snapshot.exists) deny('missing-membership');
@@ -153,6 +168,7 @@ export const createAuthTicket = onCall(
       nowMs,
     });
 
+    const db = getDb();
     await db.doc(`authTickets/${ticketHash}`).set({
       ...ticketDoc,
       createdAt: FieldValue.serverTimestamp(),
@@ -190,6 +206,7 @@ export const exchangeAuthTicket = onCall(
     if (!originTenantId) deny('invalid-tenant-host');
 
     const ticketHash = hashAuthTicket(ticketValidation.ticket);
+    const db = getDb();
     const ticketRef = db.doc(`authTickets/${ticketHash}`);
     let consumedTicket = null;
 
@@ -248,6 +265,7 @@ export const cleanupAuthTickets = onSchedule(
     const cutoff = Timestamp.fromMillis(Date.now() - RETENTION_MS);
     const expiredCutoff = Timestamp.fromMillis(Date.now() - AUTH_TICKET_TTL_MS);
     const refs = new Map();
+    const db = getDb();
 
     const expired = await db.collection('authTickets').where('expiresAt', '<', expiredCutoff).limit(250).get();
     expired.docs.forEach((doc) => refs.set(doc.ref.path, doc.ref));

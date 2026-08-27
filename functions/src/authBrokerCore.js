@@ -7,7 +7,7 @@ export const AUTH_TICKET_STATUS = {
   used: 'USED',
 };
 
-export const AUTH_BROKER_ROLES = ['OWNER', 'ADMIN', 'MANAGER'];
+export const AUTH_BROKER_ROLES = ['OWNER'];
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 

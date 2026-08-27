@@ -116,7 +116,7 @@ assert(
   'published_schedules',
 ].forEach(assertLegacyCollectionDenied);
 assert(!firestoreRules.includes('request.auth.token.admin == true'), 'Firestore rules must not authorize tenant admins by custom claim.');
-assert(firestoreRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Firestore rules must validate tenant admin roles.');
+assert(firestoreRules.includes("role in ['OWNER']"), 'Firestore rules must validate tenant owner role.');
 assert(firestoreRules.includes('allow read: if isAdmin()'), 'Protected Firestore reads must require admin authorization.');
 assert(firestoreRules.includes('affectedKeys().hasOnly'), 'Firestore rules must restrict unexpected fields.');
 assert(firestoreRules.includes('match /users/{uid}'), 'Firestore rules must define SaaS users/{uid} rules.');
@@ -165,7 +165,7 @@ assert(
 );
 assert(!matchBlock('monthly_schedule_exports').includes('allow read: if true;'), 'Monthly PDF archive metadata must not be public readable.');
 assert(!storageRules.includes('request.auth.token.admin == true'), 'Storage rules must not authorize admins by custom claim.');
-assert(storageRules.includes("role in ['OWNER', 'ADMIN', 'MANAGER']"), 'Storage rules must validate tenant admin roles.');
+assert(storageRules.includes("role in ['OWNER']"), 'Storage rules must validate tenant owner role.');
 assert(storageRules.includes('match /tenants/{tenantId}/monthly_schedule_pdfs/{yearMonth}/{fileName}'), 'Storage rules must define private monthly PDF archive paths.');
 assert(storageRules.includes('allow read: if isTenantAdmin(tenantId)'), 'Monthly PDF archive files must be tenant-admin-readable only.');
 assert(storageRules.includes('allow write: if isTenantAdmin(tenantId)'), 'Monthly PDF archive files must be tenant-admin-writable only.');

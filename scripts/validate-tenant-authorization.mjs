@@ -25,8 +25,8 @@ const tenant = { id: 'bp-kallis', slug: 'bp-kallis' };
 
 assert(ACTIVE_MEMBERSHIP_STATUS === 'ACTIVE', 'Active membership status must be ACTIVE.');
 assert(
-  ['OWNER', 'ADMIN', 'MANAGER'].every((role) => ADMIN_TENANT_ROLES.includes(role)),
-  'Supported admin tenant roles must be OWNER, ADMIN, MANAGER.',
+  ADMIN_TENANT_ROLES.length === 1 && ADMIN_TENANT_ROLES[0] === 'OWNER',
+  'Supported admin tenant roles must be OWNER only.',
 );
 assert(
   ['INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'].every((status) => INACTIVE_MEMBERSHIP_STATUSES.includes(status)),
@@ -44,12 +44,24 @@ for (const role of ADMIN_TENANT_ROLES) {
   );
 }
 
+for (const legacyRole of ['ADMIN', 'MANAGER']) {
+  assertDenied(
+    resolveTenantAdminAuthorization({
+      user,
+      tenant,
+      membership: { uid: user.uid, tenantId: tenant.id, status: 'ACTIVE', role: legacyRole },
+    }),
+    'invalid-role',
+    `Legacy ${legacyRole} role must be denied`,
+  );
+}
+
 for (const status of INACTIVE_MEMBERSHIP_STATUSES) {
   assertDenied(
     resolveTenantAdminAuthorization({
       user,
       tenant,
-      membership: { uid: user.uid, tenantId: tenant.id, status, role: 'ADMIN' },
+      membership: { uid: user.uid, tenantId: tenant.id, status, role: 'OWNER' },
     }),
     'inactive-membership',
     `${status} membership`,

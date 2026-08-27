@@ -106,6 +106,10 @@ function getTenantOriginFromTenant(tenant, fallbackTenantId, baseDomain) {
 
 async function getActiveMembershipOrDeny(uid, tenantId) {
   const db = getDb();
+  const platformAdminSnap = await db.doc(`platformAdmins/${uid}`).get();
+  if (platformAdminSnap.exists && platformAdminSnap.data()?.status === 'ACTIVE') {
+    deny('platform-admin-tenant-access-forbidden');
+  }
   const membershipId = `${uid}_${tenantId}`;
   const snapshot = await db.doc(`tenantMemberships/${membershipId}`).get();
   if (!snapshot.exists) deny('missing-membership');
@@ -219,6 +223,12 @@ export const exchangeAuthTicket = onCall(
       if (ticket.expiresAt?.toMillis?.() <= Date.now()) deny('ticket-expired');
       if (ticket.allowedTenantOrigin !== origin) deny('ticket-origin-mismatch');
       if (ticket.tenantId !== originTenantId) deny('ticket-tenant-mismatch');
+
+      const platformAdminRef = db.doc(`platformAdmins/${ticket.uid}`);
+      const platformAdminSnapshot = await transaction.get(platformAdminRef);
+      if (platformAdminSnapshot.exists && platformAdminSnapshot.data()?.status === 'ACTIVE') {
+        deny('platform-admin-tenant-access-forbidden');
+      }
 
       const membershipRef = db.doc(`tenantMemberships/${ticket.uid}_${ticket.tenantId}`);
       const membershipSnapshot = await transaction.get(membershipRef);

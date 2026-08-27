@@ -5,23 +5,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isPlatformAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+
     function isTenantAdminRole(role) {
-      return role in ['OWNER', 'ADMIN', 'MANAGER'];
+      return role in ['OWNER'];
     }
 
     function isTenantAdmin(tenantId) {
       return isSignedIn() &&
+        !isPlatformAdmin() &&
         exists(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)) &&
         get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.uid == request.auth.uid &&
         get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.tenantId == tenantId &&
         get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.status == 'ACTIVE' &&
         isTenantAdminRole(get(/databases/$(database)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.role);
-    }
-
-    function isPlatformAdmin() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)).data.status == 'ACTIVE';
     }
 
     function isAdmin() {

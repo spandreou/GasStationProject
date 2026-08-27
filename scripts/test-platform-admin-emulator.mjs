@@ -126,8 +126,10 @@ async function runTests() {
   // Create Auth users
   const superAdmin = await createAuthUser({ uid: 'super-admin-uid', email: 'super@example.test' });
   const suspendedAdmin = await createAuthUser({ uid: 'suspended-admin-uid', email: 'suspended@example.test' });
+  const bpOwner = await createAuthUser({ uid: 'bp-owner-uid', email: 'bp-owner@example.test' });
   const bpAdmin = await createAuthUser({ uid: 'bp-admin-uid', email: 'bp-admin@example.test' });
-  const ekoAdmin = await createAuthUser({ uid: 'eko-admin-uid', email: 'eko-admin@example.test' });
+  const bpManager = await createAuthUser({ uid: 'bp-manager-uid', email: 'bp-manager@example.test' });
+  const ekoOwner = await createAuthUser({ uid: 'eko-owner-uid', email: 'eko-owner@example.test' });
 
   // 1. Bootstrap script validates and writes active super admin
   const code = await runBootstrapScript([
@@ -154,10 +156,29 @@ async function runTests() {
     slug: 'bp-kallis',
     displayName: 'BP Kallis',
   });
+  await setAdminDoc('tenantMemberships/bp-owner-uid_bp-kallis', {
+    uid: 'bp-owner-uid',
+    tenantId: 'bp-kallis',
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
   await setAdminDoc('tenantMemberships/bp-admin-uid_bp-kallis', {
     uid: 'bp-admin-uid',
     tenantId: 'bp-kallis',
     role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+  await setAdminDoc('tenantMemberships/bp-manager-uid_bp-kallis', {
+    uid: 'bp-manager-uid',
+    tenantId: 'bp-kallis',
+    role: 'MANAGER',
+    status: 'ACTIVE',
+  });
+  // Synthetic overlap: super-admin has a synthetic OWNER tenant membership
+  await setAdminDoc('tenantMemberships/super-admin-uid_bp-kallis', {
+    uid: 'super-admin-uid',
+    tenantId: 'bp-kallis',
+    role: 'OWNER',
     status: 'ACTIVE',
   });
 
@@ -165,10 +186,10 @@ async function runTests() {
     slug: 'eko-example',
     displayName: 'EKO Example',
   });
-  await setAdminDoc('tenantMemberships/eko-admin-uid_eko-example', {
-    uid: 'eko-admin-uid',
+  await setAdminDoc('tenantMemberships/eko-owner-uid_eko-example', {
+    uid: 'eko-owner-uid',
     tenantId: 'eko-example',
-    role: 'ADMIN',
+    role: 'OWNER',
     status: 'ACTIVE',
   });
 
@@ -249,37 +270,61 @@ async function runTests() {
     'Clients must never write to platformAdmins collection'
   );
 
-  // D. Tenant-Scoped Separation remains operational
-  // 1. BP Admin can access BP data
+  // D. Tenant-Scoped Separation & OWNER-only Authorization
+  // 1. BP OWNER can access BP data
   await setAdminDoc('tenants/bp-kallis/employees/emp-bp', { fullName: 'BP Employee' });
   await expectFirestoreStatus(
     'tenants/bp-kallis/employees/emp-bp',
-    { idToken: bpAdmin.idToken },
+    { idToken: bpOwner.idToken },
     200,
-    'BP admin must read BP employees'
+    'BP OWNER must read BP employees'
   );
 
-  // 2. BP Admin cannot access EKO data
+  // 2. Legacy BP ADMIN is denied (OWNER-only runtime contract)
+  await expectFirestoreStatus(
+    'tenants/bp-kallis/employees/emp-bp',
+    { idToken: bpAdmin.idToken },
+    403,
+    'Legacy BP ADMIN must be denied BP employees access'
+  );
+
+  // 3. Legacy BP MANAGER is denied (OWNER-only runtime contract)
+  await expectFirestoreStatus(
+    'tenants/bp-kallis/employees/emp-bp',
+    { idToken: bpManager.idToken },
+    403,
+    'Legacy BP MANAGER must be denied BP employees access'
+  );
+
+  // 4. Platform Admin with synthetic OWNER membership is DENIED (Hard Separation)
+  await expectFirestoreStatus(
+    'tenants/bp-kallis/employees/emp-bp',
+    { idToken: superAdmin.idToken },
+    403,
+    'Platform Admin with synthetic membership must be denied tenant access'
+  );
+
+  // 5. BP OWNER cannot access EKO data (cross-tenant isolation)
   await setAdminDoc('tenants/eko-example/employees/emp-eko', { fullName: 'EKO Employee' });
   await expectFirestoreStatus(
     'tenants/eko-example/employees/emp-eko',
-    { idToken: bpAdmin.idToken },
+    { idToken: bpOwner.idToken },
     403,
-    'BP admin must not read EKO employees'
+    'BP OWNER must not read EKO employees'
   );
 
-  // 3. EKO Admin can access EKO data
+  // 6. EKO OWNER can access EKO data
   await expectFirestoreStatus(
     'tenants/eko-example/employees/emp-eko',
-    { idToken: ekoAdmin.idToken },
+    { idToken: ekoOwner.idToken },
     200,
-    'EKO admin must read EKO employees'
+    'EKO OWNER must read EKO employees'
   );
 
-  // 4. Client cannot write tenantMemberships
+  // 7. Client cannot write tenantMemberships
   await expectFirestoreStatus(
     'tenantMemberships/hacker-uid_bp-kallis',
-    { method: 'PATCH', idToken: bpAdmin.idToken, data: { role: 'OWNER' } },
+    { method: 'PATCH', idToken: bpOwner.idToken, data: { role: 'OWNER' } },
     403,
     'Clients must not write tenantMemberships'
   );

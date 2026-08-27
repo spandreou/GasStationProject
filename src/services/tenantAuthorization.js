@@ -1,6 +1,6 @@
 export const ACTIVE_MEMBERSHIP_STATUS = 'ACTIVE';
 export const INACTIVE_MEMBERSHIP_STATUSES = ['INACTIVE', 'SUSPENDED', 'EXPIRED', 'REVOKED'];
-export const ADMIN_TENANT_ROLES = ['OWNER', 'ADMIN', 'MANAGER'];
+export const ADMIN_TENANT_ROLES = ['OWNER'];
 export const TENANT_ACCESS_DENIED_MESSAGE = 'Δεν έχετε πρόσβαση σε αυτό το πρατήριο.';
 
 function normalizeToken(value) {

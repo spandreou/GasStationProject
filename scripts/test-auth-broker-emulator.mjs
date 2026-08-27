@@ -147,6 +147,32 @@ async function seedTenant() {
     status: 'ACTIVE',
   });
 
+  await setAdminDoc(`tenantMemberships/test-admin-role-uid_${TENANT_ID}`, {
+    uid: 'test-admin-role-uid',
+    tenantId: TENANT_ID,
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  await setAdminDoc(`tenantMemberships/test-manager-role-uid_${TENANT_ID}`, {
+    uid: 'test-manager-role-uid',
+    tenantId: TENANT_ID,
+    role: 'MANAGER',
+    status: 'ACTIVE',
+  });
+
+  await setAdminDoc('platformAdmins/test-platform-admin-uid', {
+    uid: 'test-platform-admin-uid',
+    role: 'SUPER_ADMIN',
+    status: 'ACTIVE',
+  });
+  await setAdminDoc(`tenantMemberships/test-platform-admin-uid_${TENANT_ID}`, {
+    uid: 'test-platform-admin-uid',
+    tenantId: TENANT_ID,
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+
   await setAdminDoc('tenants/eko-example', {
     slug: 'eko-example',
     domain: 'eko-example.homelabshare.gr',
@@ -530,6 +556,27 @@ async function run() {
     idToken: invalidRole.idToken,
     data: { returnTo: `${TENANT_ORIGIN}/app`, tenantId: TENANT_ID },
   }, 'inactive-or-invalid-membership');
+
+  const legacyAdmin = await createAuthUser({ uid: 'test-admin-role-uid', email: 'admin@example.test' });
+  await expectFunctionFailure('createAuthTicket', {
+    origin: CENTRAL_ORIGIN,
+    idToken: legacyAdmin.idToken,
+    data: { returnTo: `${TENANT_ORIGIN}/app`, tenantId: TENANT_ID },
+  }, 'inactive-or-invalid-membership');
+
+  const legacyManager = await createAuthUser({ uid: 'test-manager-role-uid', email: 'manager@example.test' });
+  await expectFunctionFailure('createAuthTicket', {
+    origin: CENTRAL_ORIGIN,
+    idToken: legacyManager.idToken,
+    data: { returnTo: `${TENANT_ORIGIN}/app`, tenantId: TENANT_ID },
+  }, 'inactive-or-invalid-membership');
+
+  const platformAdminWithMembership = await createAuthUser({ uid: 'test-platform-admin-uid', email: 'platform-overlap@example.test' });
+  await expectFunctionFailure('createAuthTicket', {
+    origin: CENTRAL_ORIGIN,
+    idToken: platformAdminWithMembership.idToken,
+    data: { returnTo: `${TENANT_ORIGIN}/app`, tenantId: TENANT_ID },
+  }, 'platform-admin-tenant-access-forbidden');
 
   const missingMembership = await createAuthUser({ uid: 'test-missing-uid', email: 'missing@example.test' });
   await expectFunctionFailure('createAuthTicket', {

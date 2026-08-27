@@ -2,12 +2,19 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function isPlatformAdmin() {
+      return request.auth != null &&
+        firestore.exists(/databases/(default)/documents/platformAdmins/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/platformAdmins/$(request.auth.uid)).data.status == 'ACTIVE';
+    }
+
     function isTenantAdminRole(role) {
-      return role in ['OWNER', 'ADMIN', 'MANAGER'];
+      return role in ['OWNER'];
     }
 
     function isTenantAdmin(tenantId) {
       return request.auth != null &&
+        !isPlatformAdmin() &&
         firestore.exists(/databases/(default)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)) &&
         firestore.get(/databases/(default)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.uid == request.auth.uid &&
         firestore.get(/databases/(default)/documents/tenantMemberships/$(request.auth.uid + '_' + tenantId)).data.tenantId == tenantId &&

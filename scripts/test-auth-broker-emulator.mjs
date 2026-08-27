@@ -578,6 +578,90 @@ async function run() {
     data: { returnTo: `${TENANT_ORIGIN}/app`, tenantId: TENANT_ID },
   }, 'platform-admin-tenant-access-forbidden');
 
+  // Race / transition test: Normal OWNER obtains ticket, then becomes active Platform Admin before exchange
+  const transitionUser = await createAuthUser({ uid: 'transition-owner-uid', email: 'transition@example.test' });
+  await setAdminDoc(`tenantMemberships/transition-owner-uid_${TENANT_ID}`, {
+    uid: 'transition-owner-uid',
+    tenantId: TENANT_ID,
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+
+  const transitionTicket = await createTicket({ idToken: transitionUser.idToken });
+  const transitionTicketHash = crypto.createHash('sha256').update(transitionTicket.ticket, 'utf8').digest('hex');
+
+  // Activate platformAdmins doc before exchange
+  await setAdminDoc('platformAdmins/transition-owner-uid', {
+    uid: 'transition-owner-uid',
+    role: 'SUPER_ADMIN',
+    status: 'ACTIVE',
+  });
+
+  // Attempt exchange -> must fail with platform-admin-tenant-access-forbidden
+  await expectFunctionFailure('exchangeAuthTicket', {
+    origin: TENANT_ORIGIN,
+    data: { ticket: transitionTicket.ticket },
+  }, 'platform-admin-tenant-access-forbidden');
+
+  // Verify ticket remains PENDING and unconsumed
+  const unconsumedTicketDoc = await getAdminDoc(`authTickets/${transitionTicketHash}`);
+  assert.ok(unconsumedTicketDoc, 'ticket document must exist after failed exchange');
+  assert.equal(unconsumedTicketDoc.status, 'PENDING', 'ticket status must remain PENDING after failed transaction');
+  assert.equal(unconsumedTicketDoc.usedAt == null, true, 'ticket must not have usedAt after failed transaction');
+  assert.equal(unconsumedTicketDoc.usedByOrigin == null, true, 'ticket must not have usedByOrigin after failed transaction');
+
+  // Deactivate platformAdmins doc (set status to SUSPENDED)
+  await setAdminDoc('platformAdmins/transition-owner-uid', {
+    uid: 'transition-owner-uid',
+    role: 'SUPER_ADMIN',
+    status: 'SUSPENDED',
+  });
+
+  // Now exchange the still-valid pending ticket -> must succeed
+  const recoveredExchange = await callFunction('exchangeAuthTicket', {
+    origin: TENANT_ORIGIN,
+    data: { ticket: transitionTicket.ticket },
+  });
+  const recoveredResult = getFunctionResult(recoveredExchange);
+  assert.ok(recoveredResult.customToken, 'recovered exchange must return custom token');
+  assert.equal(recoveredResult.tenantId, TENANT_ID, 'recovered exchange returns tenantId');
+  assert.equal(recoveredResult.role, 'OWNER', 'recovered exchange returns OWNER role');
+
+  // Verify ticket is now USED
+  const consumedTicketDoc = await getAdminDoc(`authTickets/${transitionTicketHash}`);
+  assert.equal(consumedTicketDoc.status, 'USED', 'ticket must now be marked USED');
+  assert.equal(consumedTicketDoc.usedByOrigin, TENANT_ORIGIN, 'usedByOrigin must be recorded');
+
+  // Exchange-time legacy role defense:
+  // User creates ticket as OWNER, but role is modified to ADMIN before exchange
+  const legacyRaceUser = await createAuthUser({ uid: 'legacy-race-uid', email: 'legacy-race@example.test' });
+  await setAdminDoc(`tenantMemberships/legacy-race-uid_${TENANT_ID}`, {
+    uid: 'legacy-race-uid',
+    tenantId: TENANT_ID,
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+  const legacyRaceTicket = await createTicket({ idToken: legacyRaceUser.idToken });
+  const legacyRaceTicketHash = crypto.createHash('sha256').update(legacyRaceTicket.ticket, 'utf8').digest('hex');
+
+  // Demote to legacy ADMIN
+  await setAdminDoc(`tenantMemberships/legacy-race-uid_${TENANT_ID}`, {
+    uid: 'legacy-race-uid',
+    tenantId: TENANT_ID,
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
+
+  // Attempt exchange -> must fail with inactive-or-invalid-membership
+  await expectFunctionFailure('exchangeAuthTicket', {
+    origin: TENANT_ORIGIN,
+    data: { ticket: legacyRaceTicket.ticket },
+  }, 'inactive-or-invalid-membership');
+
+  // Verify ticket remained PENDING
+  const unconsumedLegacyTicket = await getAdminDoc(`authTickets/${legacyRaceTicketHash}`);
+  assert.equal(unconsumedLegacyTicket.status, 'PENDING', 'ticket must remain PENDING after legacy demotion failure');
+
   const missingMembership = await createAuthUser({ uid: 'test-missing-uid', email: 'missing@example.test' });
   await expectFunctionFailure('createAuthTicket', {
     origin: CENTRAL_ORIGIN,

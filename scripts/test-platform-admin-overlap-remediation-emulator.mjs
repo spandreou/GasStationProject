@@ -788,6 +788,9 @@ async function launchEmulatorTest() {
         env: childEnvironment,
       },
     );
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    if (result.error) throw result.error;
     const rehearsalPassed =
       result.status === 0 ||
       (String(result.stdout || '').includes('PLATFORM_ADMIN_OVERLAP_EMULATOR_REHEARSAL_PASSED') &&

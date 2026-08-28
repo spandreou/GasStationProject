@@ -4,6 +4,7 @@ import {
 } from '../../firebase/config';
 import {
   confirmAdminPasswordReset,
+  createUserAccount,
   getAdminAuthModeLabel,
   getPublicConfiguredAdminEmail,
   sendAdminPasswordResetEmail,
@@ -19,6 +20,7 @@ export const firebaseAuthRepository = {
   subscribeAuth,
   subscribeAdminAuth,
   signInAdmin,
+  createUserAccount,
   signInWithBrokerCustomToken,
   signOutAdmin,
   sendAdminPasswordResetEmail,

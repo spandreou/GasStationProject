@@ -35,6 +35,16 @@ export default function LoginPage() {
       return;
     }
 
+    try {
+      const isPlatformAdmin = await authRepository.isPlatformAdmin?.(user.uid);
+      if (isPlatformAdmin) {
+        window.location.assign('/admin-console');
+        return;
+      }
+    } catch {
+      // Continue normal tenant resolution
+    }
+
     if (returnTo) {
       const returnDestination = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
       if (returnDestination.allowed && returnDestination.url) {
@@ -74,8 +84,8 @@ export default function LoginPage() {
       return;
     }
 
-    setStatus('error');
-    setMessage(destination.message || TENANT_ACCESS_MESSAGES.noAccess);
+    // Zero memberships -> guidance
+    window.location.assign('/stores');
   }
 
   async function handleSubmit(event) {
@@ -115,7 +125,10 @@ export default function LoginPage() {
   return (
     <AuthPageShell
       title="Sign in"
-      subtitle="Manage all your fuel stations from one platform."
+      subtitle="ShiftOryx Central Authentication Portal"
+      footerText="Έχετε Registration Token;"
+      footerLinkText="Εγγραφή & Ενεργοποίηση"
+      footerLinkHref="/register"
     >
       <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-900">
         {modeLabel}

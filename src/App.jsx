@@ -4,6 +4,7 @@ import AuthTicketCallback from './components/auth/AuthTicketCallback';
 import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
 import LoginPage from './components/auth/LoginPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import RegisterPage from './components/auth/RegisterPage';
 import RouteNoticePage from './components/auth/RouteNoticePage';
 import SelectTenantPage from './components/auth/SelectTenantPage';
 import TenantGate from './components/auth/TenantGate';
@@ -147,11 +148,13 @@ export default function App() {
     page = <CentralLandingPage />;
   } else if (routePath === '/login') {
     page = <LoginPage />;
+  } else if (routePath === '/register') {
+    page = <RegisterPage />;
   } else if (routePath === '/forgot-password') {
     page = <ForgotPasswordPage />;
   } else if (routePath === '/reset-password') {
     page = <ResetPasswordPage />;
-  } else if (routePath === '/select-tenant') {
+  } else if (routePath === '/select-tenant' || routePath === '/stores') {
     page = <SelectTenantPage />;
   } else if (routePath === '/request-token') {
     page = (

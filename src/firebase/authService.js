@@ -2,6 +2,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   confirmPasswordReset,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
@@ -68,6 +69,15 @@ export async function signInAdmin({ email, password, rememberDevice = true }) {
   const normalizedEmail = normalizeEmail(email);
   await setPersistence(auth, rememberDevice ? browserLocalPersistence : browserSessionPersistence);
   const credentials = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+  return credentials.user;
+}
+
+export async function createUserAccount({ email, password }) {
+  assertAdminAuthConfigured();
+
+  const normalizedEmail = normalizeEmail(email);
+  await setPersistence(auth, browserLocalPersistence);
+  const credentials = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
   return credentials.user;
 }
 

@@ -65,13 +65,25 @@ export default function CentralLandingPage() {
               Central login, tenant selection and secure station dashboards for schedule generation,
               employee visibility and programme exports.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row flex-wrap">
+              <a
+                href="/register"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3 text-sm font-black text-white shadow-xl shadow-cyan-900/30 hover:from-cyan-400 hover:to-blue-500"
+              >
+                Εγγραφή με Token
+                <ArrowRight size={18} />
+              </a>
               <a
                 href="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 text-sm font-black text-white shadow-xl shadow-cyan-200 hover:bg-cyan-700"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-300 hover:bg-slate-800"
               >
                 Sign In
-                <ArrowRight size={18} />
+              </a>
+              <a
+                href="/stores"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-800 shadow-sm hover:border-slate-300"
+              >
+                Τα Καταστήματά μου
               </a>
               <a
                 href="mailto:support@homelabshare.gr?subject=ShiftOryx%20Demo"

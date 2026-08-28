@@ -22,6 +22,13 @@ import {
   validateBrokerReturnTo,
   validateTicketFormat,
 } from './authBrokerCore.js';
+import {
+  assertActivePlatformAdmin,
+  generateTokenService,
+  listTokensService,
+  revokeTokenService,
+  validateTokenService,
+} from './registrationTokenService.js';
 
 let db;
 
@@ -293,5 +300,96 @@ export const cleanupAuthTickets = onSchedule(
     const batch = db.batch();
     refs.forEach((ref) => batch.delete(ref));
     await batch.commit();
+  },
+);
+
+export const generateRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    try {
+      return await generateTokenService(db, {
+        adminUid: uid,
+        expiresInHours: request.data?.expiresInHours,
+        label: request.data?.label,
+        businessCategoryHint: request.data?.businessCategoryHint,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία δημιουργίας registration token.');
+    }
+  },
+);
+
+export const listRegistrationTokens = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    try {
+      return await listTokensService(db, {
+        limit: request.data?.limit,
+        startAfterCursor: request.data?.startAfterCursor,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('internal', 'Αποτυχία ανάκτησης registration tokens.');
+    }
+  },
+);
+
+export const revokeRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    const tokenId = request.data?.tokenId;
+    if (!tokenId || typeof tokenId !== 'string') {
+      throw new HttpsError('invalid-argument', 'Το tokenId είναι απαραίτητο.');
+    }
+
+    return await revokeTokenService(db, {
+      adminUid: uid,
+      tokenId,
+    });
+  },
+);
+
+export const validateRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const rawToken = request.data?.token;
+    const clientIp =
+      request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+      request.rawRequest?.ip ||
+      'anonymous';
+
+    const db = getDb();
+    try {
+      return await validateTokenService(db, {
+        rawToken,
+        clientIdentifier: clientIp,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError && err.code === 'resource-exhausted') {
+        throw err;
+      }
+      return { valid: false };
+    }
   },
 );

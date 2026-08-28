@@ -512,6 +512,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /registrationTokens/{tokenId} {
+      allow read, write: if false;
+    }
+
+    match /platformAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
     match /employeeAbsences/{absenceId} {
       allow read, write: if false;
     }

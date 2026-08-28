@@ -22,6 +22,13 @@ import {
   validateBrokerReturnTo,
   validateTicketFormat,
 } from './authBrokerCore.js';
+import {
+  assertActivePlatformAdmin,
+  generateTokenService,
+  listTokensService,
+  revokeTokenService,
+  validateTokenService,
+} from './registrationTokenService.js';
 
 let db;
 
@@ -295,3 +302,86 @@ export const cleanupAuthTickets = onSchedule(
     await batch.commit();
   },
 );
+
+export const generateRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    try {
+      return await generateTokenService(db, {
+        adminUid: uid,
+        input: request.data,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία δημιουργίας registration token.');
+    }
+  },
+);
+
+export const listRegistrationTokens = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    try {
+      return await listTokensService(db, {
+        input: request.data,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία ανάκτησης registration tokens.');
+    }
+  },
+);
+
+export const revokeRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const db = getDb();
+    await assertActivePlatformAdmin(db, uid);
+
+    try {
+      return await revokeTokenService(db, {
+        adminUid: uid,
+        input: request.data,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία ανάκλησης registration token.');
+    }
+  },
+);
+
+export const validateRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const rawToken = request.data?.token;
+    const db = getDb();
+    try {
+      return await validateTokenService(db, {
+        rawToken,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError && err.code === 'resource-exhausted') {
+        throw err;
+      }
+      return { valid: false };
+    }
+  },
+);
+

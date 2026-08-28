@@ -32,12 +32,15 @@ PHASE4_AUTH_MODEL = AUTHENTICATED_USER_CLAIMS_VALID_REGISTRATION_TOKEN
 ### 2.2 Role & Existing Membership Policy
 - **Canonical Role:** `OWNER` is the exclusive authenticated role created for tenant memberships in Phase 4.
 - **Legacy Roles:** No `ADMIN` or `MANAGER` memberships are ever created.
-- **Existing Membership Policy:**
+- **Existing & Malformed Membership Policy:**
   ```text
   PHASE4_EXISTING_MEMBERSHIP_POLICY = FAIL_CLOSED_IF_ANY_CANONICAL_MEMBERSHIP_EXISTS
+  MALFORMED_MEMBERSHIP_STATE = FAIL_CLOSED_MANUAL_REVIEW_REQUIRED
   ```
   - `tenantMemberships` is the canonical source of truth.
-  - If the caller already possesses **any** document in `tenantMemberships` (whether `ACTIVE`, `REVOKED`, legacy `ADMIN`, legacy `MANAGER`, or unknown role) or in `users/{uid}.memberships`, provisioning is denied (`failed-precondition`). Multi-store / multi-tenant ownership lifecycle is deferred to Phase 8.
+  - Dual Detection: Pre-condition inspection checks both the `uid` field query (`where('uid', '==', callerUid)`) AND the canonical document ID range prefix (`[${callerUid}_, ${callerUid}_\uf8ff]`) to catch malformed legacy records with missing/wrong internal `uid` fields.
+  - Strict Compatibility Mirror: `users/{uid}.memberships` must be absent or a plain empty map `{}`. Any non-empty map or malformed primitive/array/null value causes immediate fail-closed rejection (`failed-precondition`).
+  - Multi-store / multi-tenant ownership lifecycle is deferred to Phase 8.
 - **Platform Admin Decoupling:** Active Platform Administrators (`platformAdmins/{uid}.status === 'ACTIVE'`) are strictly forbidden from provisioning or owning tenants (`ACTIVE_PLATFORM_ADMIN_PROVISIONING = DENIED`).
 - **Sources of Truth:**
   - Primary source of truth: `tenantMemberships/{uid}_{tenantId}` (`role: 'OWNER'`, `status: 'ACTIVE'`).

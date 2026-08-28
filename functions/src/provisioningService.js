@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { consumeRegistrationToken } from './registrationTokenService.js';
 import {
@@ -32,10 +32,20 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
     }
 
     // 2. Canonical Membership Check (Source of Truth)
-    // Fail-closed policy: An actor with ANY existing tenant membership cannot provision a new tenant in Phase 4 MVP.
+    // Fail-closed policy: An actor with ANY existing canonical tenant membership cannot provision a new tenant in Phase 4 MVP.
+    // Check both field-based query (uid == callerUid) and canonical doc ID prefix (${callerUid}_) to catch malformed legacy records.
     const canonicalMembershipsQuery = db.collection('tenantMemberships').where('uid', '==', callerUid).limit(1);
-    const canonicalMembershipsSnap = await transaction.get(canonicalMembershipsQuery);
-    if (!canonicalMembershipsSnap.empty) {
+    const canonicalDocIdQuery = db.collection('tenantMemberships')
+      .where(FieldPath.documentId(), '>=', `${callerUid}_`)
+      .where(FieldPath.documentId(), '<=', `${callerUid}_\uf8ff`)
+      .limit(1);
+
+    const [canonicalMembershipsSnap, canonicalDocIdSnap] = await Promise.all([
+      transaction.get(canonicalMembershipsQuery),
+      transaction.get(canonicalDocIdQuery),
+    ]);
+
+    if (!canonicalMembershipsSnap.empty || !canonicalDocIdSnap.empty) {
       throw new HttpsError(
         'failed-precondition',
         'Ο χρήστης έχει ήδη συσχετισμό με tenant.',
@@ -46,12 +56,21 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
     const userRef = db.doc(`users/${callerUid}`);
     const userSnap = await transaction.get(userRef);
     if (userSnap.exists) {
-      const existingMemberships = userSnap.data()?.memberships;
-      if (existingMemberships && typeof existingMemberships === 'object' && Object.keys(existingMemberships).length > 0) {
-        throw new HttpsError(
-          'failed-precondition',
-          'Ο χρήστης έχει ήδη συσχετισμό με tenant.',
-        );
+      const userData = userSnap.data() || {};
+      if ('memberships' in userData) {
+        const existingMemberships = userData.memberships;
+        // Malformed memberships (null, non-object, array) or non-empty object must fail closed
+        if (
+          existingMemberships === null ||
+          typeof existingMemberships !== 'object' ||
+          Array.isArray(existingMemberships) ||
+          Object.keys(existingMemberships).length > 0
+        ) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Ο χρήστης έχει ήδη συσχετισμό με tenant.',
+          );
+        }
       }
     }
 

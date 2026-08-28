@@ -464,13 +464,196 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorOnlyRes.status, 200, 'User with mirror-only membership must be rejected');
 
-  // Verify tokens remain ACTIVE
-  for (const t of [tokActiveOwner, tokRevokedOwner, tokLegacyAdmin, tokLegacyManager, tokUnknownRole, tokMirrorOnly]) {
+  // 3g. Malformed Canonical Membership — Missing UID field
+  const missingUidCaller = 'user-canonical-missing-uid';
+  const missingUidToken = await createAuthUser({ uid: missingUidCaller, email: 'missinguid@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${missingUidCaller}_existing-store-g`).set({
+    tenantId: 'existing-store-g',
+    role: 'OWNER',
+    status: 'ACTIVE',
+    // uid is deliberately omitted
+  });
+  const tokMissingUid = await generateToken({ label: 'Missing UID Doc ID Attempt' });
+  const missingUidRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMissingUid.rawToken, slug: 'new-store-missing-uid', displayName: 'New Store' },
+    missingUidToken,
+  );
+  assert.notEqual(missingUidRes.status, 200, 'User with canonical doc ID matching prefix (missing uid field) must be rejected');
+
+  // 3h. Malformed Canonical Membership — Wrong UID field
+  const wrongUidCaller = 'user-canonical-wrong-uid';
+  const wrongUidToken = await createAuthUser({ uid: wrongUidCaller, email: 'wronguid@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${wrongUidCaller}_existing-store-h`).set({
+    uid: 'different-user-uid',
+    tenantId: 'existing-store-h',
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+  const tokWrongUid = await generateToken({ label: 'Wrong UID Doc ID Attempt' });
+  const wrongUidRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokWrongUid.rawToken, slug: 'new-store-wrong-uid', displayName: 'New Store' },
+    wrongUidToken,
+  );
+  assert.notEqual(wrongUidRes.status, 200, 'User with canonical doc ID matching prefix (wrong internal uid) must be rejected');
+
+  // 3i. Field-Only Legacy Membership (Non-canonical doc ID, valid uid field)
+  const legacyFieldCaller = 'user-legacy-field-only';
+  const legacyFieldToken = await createAuthUser({ uid: legacyFieldCaller, email: 'legacyfield@test.com', password: 'Password123!' });
+  await adminDb.doc('tenantMemberships/legacy-doc-id-random-12345').set({
+    uid: legacyFieldCaller,
+    tenantId: 'existing-store-i',
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+  const tokLegacyField = await generateToken({ label: 'Legacy Field Attempt' });
+  const legacyFieldRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokLegacyField.rawToken, slug: 'new-store-legacy-field', displayName: 'New Store' },
+    legacyFieldToken,
+  );
+  assert.notEqual(legacyFieldRes.status, 200, 'User with legacy non-canonical doc ID but matching uid field must be rejected');
+
+  // 3j. Malformed Mirror String
+  const malformedMirrorStrUid = 'user-mirror-str';
+  const malformedMirrorStrToken = await createAuthUser({ uid: malformedMirrorStrUid, email: 'mirrorstr@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${malformedMirrorStrUid}`).set({
+    uid: malformedMirrorStrUid,
+    memberships: 'corrupted-string-value',
+  });
+  const tokMirrorStr = await generateToken({ label: 'Mirror String Attempt' });
+  const mirrorStrRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorStr.rawToken, slug: 'new-store-mirror-str', displayName: 'New Store' },
+    malformedMirrorStrToken,
+  );
+  assert.notEqual(mirrorStrRes.status, 200, 'User with string memberships mirror must be rejected');
+
+  // 3k. Malformed Mirror Array
+  const malformedMirrorArrUid = 'user-mirror-arr';
+  const malformedMirrorArrToken = await createAuthUser({ uid: malformedMirrorArrUid, email: 'mirrorarr@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${malformedMirrorArrUid}`).set({
+    uid: malformedMirrorArrUid,
+    memberships: ['store-a', 'store-b'],
+  });
+  const tokMirrorArr = await generateToken({ label: 'Mirror Array Attempt' });
+  const mirrorArrRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorArr.rawToken, slug: 'new-store-mirror-arr', displayName: 'New Store' },
+    malformedMirrorArrToken,
+  );
+  assert.notEqual(mirrorArrRes.status, 200, 'User with array memberships mirror must be rejected');
+
+  // 3l. Malformed Mirror Number
+  const malformedMirrorNumUid = 'user-mirror-num';
+  const malformedMirrorNumToken = await createAuthUser({ uid: malformedMirrorNumUid, email: 'mirrornum@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${malformedMirrorNumUid}`).set({
+    uid: malformedMirrorNumUid,
+    memberships: 12345,
+  });
+  const tokMirrorNum = await generateToken({ label: 'Mirror Number Attempt' });
+  const mirrorNumRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorNum.rawToken, slug: 'new-store-mirror-num', displayName: 'New Store' },
+    malformedMirrorNumToken,
+  );
+  assert.notEqual(mirrorNumRes.status, 200, 'User with number memberships mirror must be rejected');
+
+  // 3m. Malformed Mirror Boolean
+  const malformedMirrorBoolUid = 'user-mirror-bool';
+  const malformedMirrorBoolToken = await createAuthUser({ uid: malformedMirrorBoolUid, email: 'mirrorbool@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${malformedMirrorBoolUid}`).set({
+    uid: malformedMirrorBoolUid,
+    memberships: true,
+  });
+  const tokMirrorBool = await generateToken({ label: 'Mirror Boolean Attempt' });
+  const mirrorBoolRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorBool.rawToken, slug: 'new-store-mirror-bool', displayName: 'New Store' },
+    malformedMirrorBoolToken,
+  );
+  assert.notEqual(mirrorBoolRes.status, 200, 'User with boolean memberships mirror must be rejected');
+
+  // 3n. Malformed Mirror Null
+  const malformedMirrorNullUid = 'user-mirror-null';
+  const malformedMirrorNullToken = await createAuthUser({ uid: malformedMirrorNullUid, email: 'mirrornull@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${malformedMirrorNullUid}`).set({
+    uid: malformedMirrorNullUid,
+    memberships: null,
+  });
+  const tokMirrorNull = await generateToken({ label: 'Mirror Null Attempt' });
+  const mirrorNullRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorNull.rawToken, slug: 'new-store-mirror-null', displayName: 'New Store' },
+    malformedMirrorNullToken,
+  );
+  assert.notEqual(mirrorNullRes.status, 200, 'User with null memberships mirror must be rejected');
+
+  // 3o. Empty Mirror Object ({}) - Must be eligible and succeed!
+  const emptyMirrorUid = 'user-mirror-empty-obj';
+  const emptyMirrorToken = await createAuthUser({ uid: emptyMirrorUid, email: 'emptyobj@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${emptyMirrorUid}`).set({
+    uid: emptyMirrorUid,
+    email: 'emptyobj@test.com',
+    memberships: {},
+  });
+  const tokEmptyMirror = await generateToken({ label: 'Mirror Empty Obj Attempt' });
+  const emptyMirrorRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokEmptyMirror.rawToken, slug: 'new-store-empty-obj', displayName: 'Empty Obj Store' },
+    emptyMirrorToken,
+  );
+  assert.equal(emptyMirrorRes.status, 200, 'User with plain empty object memberships mirror must be eligible');
+  assert.equal(emptyMirrorRes.body?.result?.success, true);
+
+  // Verify tokens remain ACTIVE for all rejected tests
+  const rejectedTokens = [
+    tokActiveOwner,
+    tokRevokedOwner,
+    tokLegacyAdmin,
+    tokLegacyManager,
+    tokUnknownRole,
+    tokMirrorOnly,
+    tokMissingUid,
+    tokWrongUid,
+    tokLegacyField,
+    tokMirrorStr,
+    tokMirrorArr,
+    tokMirrorNum,
+    tokMirrorBool,
+    tokMirrorNull,
+  ];
+
+  for (const t of rejectedTokens) {
     const tSnap = await adminDb.doc(`registrationTokens/${t.tokenId}`).get();
     assert.equal(tSnap.data()?.status, 'ACTIVE', 'Token must remain ACTIVE after rejected membership check');
   }
 
-  console.log('Existing Membership Policy Matrix passed.');
+  // Verify no orphaned tenant was created for failed attempts
+  for (const failedSlug of [
+    'new-store-active-owner',
+    'new-store-revoked-owner',
+    'new-store-legacy-admin',
+    'new-store-legacy-manager',
+    'new-store-unknown-role',
+    'new-store-mirror-only',
+    'new-store-missing-uid',
+    'new-store-wrong-uid',
+    'new-store-legacy-field',
+    'new-store-mirror-str',
+    'new-store-mirror-arr',
+    'new-store-mirror-num',
+    'new-store-mirror-bool',
+    'new-store-mirror-null',
+  ]) {
+    const tSnap = await adminDb.doc(`tenants/${failedSlug}`).get();
+    const rSnap = await adminDb.doc(`slugReservations/${failedSlug}`).get();
+    assert.equal(tSnap.exists, false, `Tenant "${failedSlug}" must not exist`);
+    assert.equal(rSnap.exists, false, `Slug reservation "${failedSlug}" must not exist`);
+  }
+
+  console.log('Existing & Malformed Membership Policy Matrix passed.');
 
   // ==========================================================
   // TEST 4: Slug Reservation & Collision Matrix

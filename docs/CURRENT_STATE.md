@@ -39,12 +39,14 @@ The detailed audit contains 39 classified areas:
 - React 19/Vite 8 frontend builds successfully and is served as an Nginx SPA in the checked-in container configuration.
 - Firebase Auth login, logout, forgot-password and reset-password foundations exist.
 - Tenant-scoped repository paths and matching membership authorization exist; hostname selects context but membership authorizes private access.
-- Firestore and Storage rules default-deny unrecognized paths; private tenant data requires an active matching `OWNER`, `ADMIN` or `MANAGER` membership.
+- Firestore and Storage rules default-deny unrecognized paths; private tenant data requires an active matching `OWNER` membership and rejects active platform admins (`!isActivePlatformAdmin()`).
 - Sanitized public schedules, months, employees and announcements exist as dedicated anonymously readable collections.
+- `employee_absences_private` is permanently fail-closed (`allow read, write: if false;`).
 - A deterministic TypeScript scheduler engine implements rotations, fixed days off, absences/replacements, Sunday coverage, warnings, validation and manual-override preservation.
 - Owner-only PDF/Excel/Word/WhatsApp exports and a feature-flagged private monthly PDF archive exist.
-- A short-lived Firebase auth-ticket broker foundation exists with hashed tickets, exact-origin checks, transactional one-time consumption and custom-token exchange.
-- `platformAdmins/{uid}` is separate from tenant ownership, and client writes to platform-admin and membership records are denied.
+- A short-lived Firebase auth-ticket broker foundation exists on Node.js 22 (Gen 2) with hashed tickets, exact-origin checks, transactional one-time consumption and custom-token exchange for `OWNER` only.
+- `platformAdmins/{uid}` is strictly decoupled from tenant ownership: active platform admins have 0 tenant memberships and cannot access tenant private data.
+- Production data remediation complete: BP Kallis pilot OWNER established (`IlyYsuAS3mYZ5CK8lYtp5NhIJBU2`), zero overlap with platform admin, zero legacy `ADMIN`/`MANAGER` memberships.
 
 ## Partial Or Risky Capabilities
 
@@ -52,7 +54,6 @@ The detailed audit contains 39 classified areas:
 - Unknown tenant hosts do not render the target safe unknown-tenant page.
 - Enabling `VITE_ENABLE_TENANT_GATE=true` would gate anonymous tenant `/` and `/app` routes and redirect public employees to login. The defect is dormant while the flag remains false.
 - Dockerfile/Compose do not pass `VITE_ENABLE_TENANT_GATE` or `VITE_ENABLE_AUTH_BROKER`, so their documented container rollout cannot be enabled through the current build contract.
-- New provisioning writes `OWNER`, but runtime/rules still accept legacy `ADMIN`/`MANAGER`; the legacy BP Kallis seed defaults to `ADMIN`.
 - Tenant lifecycle status is not part of the Firestore/Storage membership authorization predicate.
 - Owners can write `subscription/current` client-side; subscription entitlements and server enforcement do not exist.
 - Public schedule/month rules validate `shifts` only as a list, not the nested public shift schema.

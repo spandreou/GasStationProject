@@ -1,5 +1,5 @@
 {
-  "name": "shiftoryx-functions",
+  "name": "gasstation-auth-broker-functions",
   "private": true,
   "type": "module",
   "engines": {

@@ -117,7 +117,7 @@ assert(loginPage.includes('rememberDevice'), 'Login page must expose remember-de
 assert(loginPage.includes('MAX_EMAIL_LENGTH'), 'Login page must bound email input length.');
 assert(loginPage.includes('MAX_PASSWORD_LENGTH'), 'Login page must bound password input length.');
 assert(!loginPage.includes('console.log') && !loginPage.includes('console.error'), 'Login page must not log auth failures.');
-assert(centralLandingPage.includes('ShiftOryx'), 'Central landing page must present the ShiftOryx product.');
+assert(centralLandingPage.includes('GasStation Shift Manager'), 'Central landing page must present the GasStation product.');
 assert(centralLandingPage.includes('/login'), 'Central landing page must link to login.');
 assert(centralLandingPage.includes('Request Demo'), 'Central landing page must include a request-demo placeholder.');
 assert(forgotPassword.includes('Αν υπάρχει λογαριασμός με αυτό το email'), 'Forgot password must use a generic response.');

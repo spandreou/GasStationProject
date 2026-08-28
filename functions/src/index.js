@@ -29,6 +29,7 @@ import {
   revokeTokenService,
   validateTokenService,
 } from './registrationTokenService.js';
+import { provisionTenantService } from './provisioningService.js';
 
 let db;
 
@@ -384,4 +385,31 @@ export const validateRegistrationToken = onCall(
     }
   },
 );
+
+export const provisionTenantFromRegistrationToken = onCall(
+  {
+    region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    const email = request.auth?.token?.email;
+    const db = getDb();
+
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Απαιτείται ταυτοποίηση χρήστη.');
+    }
+
+    try {
+      return await provisionTenantService(db, {
+        callerUid: uid,
+        callerEmail: email,
+        input: request.data,
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία αρχικοποίησης tenant.');
+    }
+  },
+);
+
 

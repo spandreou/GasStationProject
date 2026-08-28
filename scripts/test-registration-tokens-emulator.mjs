@@ -42,8 +42,8 @@ async function createAuthUser({ uid, email, password }) {
   return data.idToken;
 }
 
-async function callFunction(name, data = {}, idToken = null) {
-  const headers = { 'Content-Type': 'application/json' };
+async function callFunction(name, data = {}, idToken = null, extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extraHeaders };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
   const res = await fetch(`${functionsBase}/${name}`, {
@@ -75,7 +75,7 @@ async function firestoreDirectRequest(path, { method = 'GET', idToken, data } = 
 
 async function runRegistrationTokenEmulatorTests() {
   console.log('==========================================================');
-  console.log('STARTING REGISTRATION TOKEN EMULATOR INTEGRATION TESTS');
+  console.log('STARTING HARDENED REGISTRATION TOKEN EMULATOR INTEGRATION TESTS');
   console.log('==========================================================');
 
   // Setup test identities
@@ -125,7 +125,7 @@ async function runRegistrationTokenEmulatorTests() {
   console.log('✓ Test identities and roles seeded.');
 
   // --------------------------------------------------------------------------
-  // TEST 1: UNAUTHORIZED TOKEN GENERATION
+  // TEST 1: UNAUTHORIZED TOKEN GENERATION CHECKS
   // --------------------------------------------------------------------------
   console.log('\n--- 1. UNAUTHORIZED TOKEN GENERATION CHECKS ---');
 
@@ -148,9 +148,9 @@ async function runRegistrationTokenEmulatorTests() {
   console.log('✓ Anonymous, regular user, inactive admin, and tenant OWNER are properly denied.');
 
   // --------------------------------------------------------------------------
-  // TEST 2: AUTHORIZED TOKEN GENERATION & INTEGRITY
+  // TEST 2: AUTHORIZED TOKEN GENERATION & IDENTIFIER SEPARATION
   // --------------------------------------------------------------------------
-  console.log('\n--- 2. AUTHORIZED TOKEN GENERATION & INTEGRITY ---');
+  console.log('\n--- 2. AUTHORIZED GENERATION & IDENTIFIER SEPARATION ---');
 
   const genRes = await callFunction(
     'generateRegistrationToken',
@@ -167,43 +167,53 @@ async function runRegistrationTokenEmulatorTests() {
   const rawToken = genRes.body?.result?.token;
   const tokenId = genRes.body?.result?.tokenId;
 
-  assert.ok(rawToken && rawToken.startsWith('stx_'), 'Raw token must be returned once on creation');
-  assert.ok(tokenId && tokenId.length === 64, 'Token ID must be 64-char SHA256 hex string');
+  assert.ok(rawToken && rawToken.startsWith('stx_'), 'Raw token must start with stx_');
+  assert.ok(tokenId && tokenId.startsWith('rtok_'), 'Management tokenId must start with rtok_');
 
-  // Verify Firestore document integrity
-  const docSnap = await adminDb.doc(`registrationTokens/${tokenId}`).get();
-  assert.equal(docSnap.exists, true, 'Token document must exist in Firestore');
-  const tokenDoc = docSnap.data();
+  const tokenHash = hashRegistrationToken(rawToken);
 
-  assert.equal(tokenDoc.status, 'ACTIVE', 'Status must be ACTIVE');
-  assert.equal(tokenDoc.tokenHash, tokenId, 'tokenHash must match document ID');
-  assert.equal(tokenDoc.createdBy, platformAdminUid, 'createdBy must record admin UID');
+  // CRITICAL SECURITY ASSERTIONS:
+  // 1. tokenId MUST NOT equal tokenHash!
+  assert.notEqual(tokenId, tokenHash, 'CRITICAL: tokenId must be opaque management ID, NOT tokenHash');
+  // 2. Generation response must NOT contain tokenHash!
+  assert.equal(genRes.body?.result?.tokenHash, undefined, 'tokenHash must NOT be in generation response');
+  assert.equal(JSON.stringify(genRes.body).includes(tokenHash), false, 'tokenHash must not appear in generation body');
+
+  // 3. Verify Firestore documents
+  const tokenDocSnap = await adminDb.doc(`registrationTokens/${tokenId}`).get();
+  assert.equal(tokenDocSnap.exists, true, 'registrationTokens doc must exist with tokenId');
+  const tokenDoc = tokenDocSnap.data();
+
+  assert.equal(tokenDoc.status, 'ACTIVE');
+  assert.equal(tokenDoc.tokenId, tokenId);
+  assert.equal(tokenDoc.createdBy, platformAdminUid);
   assert.equal(tokenDoc.label, 'BP Kallis Store 2');
   assert.equal(tokenDoc.businessCategoryHint, 'FUEL_STATION');
+  assert.equal(tokenDoc.tokenHash, undefined, 'tokenHash must NOT be stored in registrationTokens document');
 
-  // CRITICAL SECURITY ASSERTION: Raw token must NEVER be stored in Firestore!
-  assert.equal(
-    JSON.stringify(tokenDoc).includes(rawToken),
-    false,
-    'CRITICAL SECURITY: Raw token string must NOT appear anywhere in the Firestore document!',
-  );
+  const lookupDocSnap = await adminDb.doc(`registrationTokenLookups/${tokenHash}`).get();
+  assert.equal(lookupDocSnap.exists, true, 'registrationTokenLookups doc must exist with tokenHash');
+  assert.equal(lookupDocSnap.data()?.tokenId, tokenId, 'Lookup doc must map to tokenId');
 
-  // Check audit log
+  // 4. Raw token must NEVER appear in Firestore!
+  assert.equal(JSON.stringify(tokenDoc).includes(rawToken), false, 'Raw token NOT in registrationTokens');
+  assert.equal(JSON.stringify(lookupDocSnap.data()).includes(rawToken), false, 'Raw token NOT in registrationTokenLookups');
+
+  // 5. Check platformAuditLogs: uses opaque tokenId, never tokenHash or rawToken!
   const auditSnap = await adminDb
     .collection('platformAuditLogs')
     .where('action', '==', 'REGISTRATION_TOKEN_GENERATED')
     .where('tokenId', '==', tokenId)
     .get();
-  assert.equal(auditSnap.empty, false, 'Platform audit log must be recorded');
+  assert.equal(auditSnap.empty, false, 'Audit log recorded with opaque tokenId');
   const auditDoc = auditSnap.docs[0].data();
+  assert.equal(auditDoc.tokenId, tokenId);
   assert.equal(auditDoc.actorUid, platformAdminUid);
-  assert.equal(
-    JSON.stringify(auditDoc).includes(rawToken),
-    false,
-    'Raw token must NOT appear in audit logs',
-  );
+  assert.equal(auditDoc.tokenHash, undefined, 'tokenHash must NOT be in audit log');
+  assert.equal(JSON.stringify(auditDoc).includes(tokenHash), false, 'tokenHash must not appear in audit payload');
+  assert.equal(JSON.stringify(auditDoc).includes(rawToken), false, 'Raw token must not appear in audit payload');
 
-  console.log('✓ Token generated, stored securely as SHA-256 hash, raw token not stored in database.');
+  console.log('✓ Generation creates opaque tokenId and server-only lookup. tokenHash and rawToken are protected.');
 
   // --------------------------------------------------------------------------
   // TEST 3: LIST REGISTRATION TOKENS (SAFE METADATA)
@@ -226,27 +236,30 @@ async function runRegistrationTokenEmulatorTests() {
   assert.equal(found.label, 'BP Kallis Store 2');
   assert.equal(found.businessCategoryHint, 'FUEL_STATION');
 
-  // CRITICAL SECURITY: tokenHash and rawToken must NOT be present in list response
-  assert.equal(found.tokenHash, undefined, 'tokenHash must be stripped from list output');
-  assert.equal(
-    JSON.stringify(adminList.body).includes(rawToken),
-    false,
-    'Raw token must not appear in list output',
-  );
+  // CRITICAL SECURITY: tokenHash, lookupHash, and rawToken must NOT be present in list response
+  assert.equal(found.tokenHash, undefined, 'tokenHash must NOT be in list response');
+  assert.equal(JSON.stringify(adminList.body).includes(tokenHash), false, 'tokenHash must not appear in list response');
+  assert.equal(JSON.stringify(adminList.body).includes(rawToken), false, 'Raw token must not appear in list response');
 
   console.log('✓ Safe metadata listing verified without token hash exposure.');
 
   // --------------------------------------------------------------------------
-  // TEST 4: PUBLIC VALIDATION & GENERIC INVALID RESPONSES
+  // TEST 4: PUBLIC VALIDATION & MINIMAL METADATA
   // --------------------------------------------------------------------------
-  console.log('\n--- 4. PUBLIC VALIDATION & GENERIC INVALID RESPONSES ---');
+  console.log('\n--- 4. PUBLIC VALIDATION & MINIMAL METADATA ---');
 
   // Valid token
   const validRes = await callFunction('validateRegistrationToken', { token: rawToken });
   assert.equal(validRes.status, 200);
   assert.equal(validRes.body?.result?.valid, true);
-  assert.equal(validRes.body?.result?.label, 'BP Kallis Store 2');
+  assert.ok(validRes.body?.result?.expiresAt);
   assert.equal(validRes.body?.result?.businessCategoryHint, 'FUEL_STATION');
+
+  // CRITICAL SECURITY: Public validation must NOT expose label, tokenId, tokenHash, createdBy, etc.
+  assert.equal(validRes.body?.result?.label, undefined, 'label must NOT be in public validation response');
+  assert.equal(validRes.body?.result?.tokenId, undefined, 'tokenId must NOT be in public validation response');
+  assert.equal(validRes.body?.result?.tokenHash, undefined, 'tokenHash must NOT be in public validation response');
+  assert.equal(validRes.body?.result?.createdBy, undefined, 'createdBy must NOT be in public validation response');
 
   // Missing token
   const missingRes = await callFunction('validateRegistrationToken', {});
@@ -264,18 +277,65 @@ async function runRegistrationTokenEmulatorTests() {
   assert.equal(nonExistentRes.status, 200);
   assert.equal(nonExistentRes.body?.result?.valid, false);
 
-  console.log('✓ Public validation works and returns generic valid=false on invalid tokens.');
+  console.log('✓ Public validation returns minimal safe metadata and generic valid=false on invalid tokens.');
 
   // --------------------------------------------------------------------------
-  // TEST 5: REVOCATION
+  // TEST 5: FAIL-CLOSED EXPIRATION & MALFORMED RECORDS
   // --------------------------------------------------------------------------
-  console.log('\n--- 5. REVOCATION CHECKS ---');
+  console.log('\n--- 5. FAIL-CLOSED EXPIRATION & MALFORMED RECORDS ---');
+
+  // Token with missing expiresAt -> fail closed (INVALID -> validation valid=false)
+  const malformedRaw = 'stx_' + 'm'.repeat(43);
+  const malformedHash = hashRegistrationToken(malformedRaw);
+  const malformedTokenId = 'rtok_' + 'm'.repeat(32);
+
+  await adminDb.doc(`registrationTokens/${malformedTokenId}`).set({
+    tokenId: malformedTokenId,
+    status: 'ACTIVE',
+    createdAt: Timestamp.now(),
+    // MISSING expiresAt!
+  });
+  await adminDb.doc(`registrationTokenLookups/${malformedHash}`).set({
+    tokenId: malformedTokenId,
+  });
+
+  const malformedVal = await callFunction('validateRegistrationToken', { token: malformedRaw });
+  assert.equal(malformedVal.body?.result?.valid, false, 'Missing expiresAt must fail closed as valid=false');
+
+  // Expired token -> EXPIRED -> validation valid=false
+  const expiredRaw = 'stx_' + 'e'.repeat(43);
+  const expiredHash = hashRegistrationToken(expiredRaw);
+  const expiredTokenId = 'rtok_' + 'e'.repeat(32);
+
+  await adminDb.doc(`registrationTokens/${expiredTokenId}`).set({
+    tokenId: expiredTokenId,
+    status: 'ACTIVE',
+    createdAt: Timestamp.fromMillis(Date.now() - 100000),
+    expiresAt: Timestamp.fromMillis(Date.now() - 5000),
+  });
+  await adminDb.doc(`registrationTokenLookups/${expiredHash}`).set({
+    tokenId: expiredTokenId,
+  });
+
+  const expiredVal = await callFunction('validateRegistrationToken', { token: expiredRaw });
+  assert.equal(expiredVal.body?.result?.valid, false, 'Expired token must validate as false');
+
+  console.log('✓ Fail-closed expiration verified for missing, malformed, and expired tokens.');
+
+  // --------------------------------------------------------------------------
+  // TEST 6: REVOCATION USING OPAQUE TOKEN ID
+  // --------------------------------------------------------------------------
+  console.log('\n--- 6. REVOCATION USING OPAQUE MANAGEMENT TOKEN ID ---');
 
   // Tenant owner denied
   const ownerRevoke = await callFunction('revokeRegistrationToken', { tokenId }, tenantOwnerToken);
   assert.equal(ownerRevoke.status, 403, 'Tenant owner cannot revoke tokens');
 
-  // Platform admin revokes
+  // Passing SHA-256 hash or raw token instead of opaque tokenId is rejected
+  const hashRevoke = await callFunction('revokeRegistrationToken', { tokenId: tokenHash }, platformAdminToken);
+  assert.equal(hashRevoke.status, 400, 'SHA256 hash must be rejected as tokenId');
+
+  // Platform admin revokes using opaque tokenId
   const adminRevoke = await callFunction('revokeRegistrationToken', { tokenId }, platformAdminToken);
   assert.equal(adminRevoke.status, 200);
   assert.equal(adminRevoke.body?.result?.status, 'REVOKED');
@@ -288,28 +348,18 @@ async function runRegistrationTokenEmulatorTests() {
   const adminRevoke2 = await callFunction('revokeRegistrationToken', { tokenId }, platformAdminToken);
   assert.equal(adminRevoke2.status, 200);
 
-  console.log('✓ Revocation enforced; revoked tokens fail validation generically.');
+  // Check revocation audit log uses opaque tokenId
+  const revokeAuditSnap = await adminDb
+    .collection('platformAuditLogs')
+    .where('action', '==', 'REGISTRATION_TOKEN_REVOKED')
+    .where('tokenId', '==', tokenId)
+    .get();
+  assert.equal(revokeAuditSnap.empty, false, 'Revocation audit log must be recorded');
+  const revokeAuditDoc = revokeAuditSnap.docs[0].data();
+  assert.equal(revokeAuditDoc.tokenId, tokenId);
+  assert.equal(JSON.stringify(revokeAuditDoc).includes(tokenHash), false, 'tokenHash must not appear in audit log');
 
-  // --------------------------------------------------------------------------
-  // TEST 6: EXPIRATION DERIVATION
-  // --------------------------------------------------------------------------
-  console.log('\n--- 6. EXPIRATION DERIVATION CHECKS ---');
-
-  // Create an expired token manually in Firestore
-  const expiredRaw = 'stx_' + 'e'.repeat(43);
-  const expiredHash = hashRegistrationToken(expiredRaw);
-  await adminDb.doc(`registrationTokens/${expiredHash}`).set({
-    status: 'ACTIVE',
-    tokenHash: expiredHash,
-    createdAt: Timestamp.fromMillis(Date.now() - 100000),
-    expiresAt: Timestamp.fromMillis(Date.now() - 5000),
-    createdBy: platformAdminUid,
-  });
-
-  const expiredVal = await callFunction('validateRegistrationToken', { token: expiredRaw });
-  assert.equal(expiredVal.body?.result?.valid, false, 'Expired token must validate as false');
-
-  console.log('✓ Expired token validates as generic false.');
+  console.log('✓ Revocation using opaque tokenId enforced and audited.');
 
   // --------------------------------------------------------------------------
   // TEST 7: ATOMIC CONSUMPTION & CONCURRENCY
@@ -335,7 +385,6 @@ async function runRegistrationTokenEmulatorTests() {
           db: adminDb,
           rawToken: concurrentToken,
           consumedBy: `consumer-${i}`,
-          metadata: { attempt: i },
         });
       }),
     );
@@ -353,17 +402,52 @@ async function runRegistrationTokenEmulatorTests() {
   const finalDoc = (await adminDb.doc(`registrationTokens/${concurrentTokenId}`).get()).data();
   assert.equal(finalDoc.status, 'CONSUMED');
   assert.ok(finalDoc.consumedAt);
+  assert.ok(finalDoc.consumedBy);
+  assert.equal(finalDoc.metadata, undefined, 'Arbitrary metadata must NOT be persisted');
 
-  // Validate consumed token
-  const postConsumeVal = await callFunction('validateRegistrationToken', { token: concurrentToken });
-  assert.equal(postConsumeVal.body?.result?.valid, false, 'Consumed token must validate as false');
+  // Attempting to revoke a CONSUMED token must fail closed
+  const revokeConsumedRes = await callFunction(
+    'revokeRegistrationToken',
+    { tokenId: concurrentTokenId },
+    platformAdminToken,
+  );
+  assert.equal(revokeConsumedRes.status, 400, 'Revoking a CONSUMED token must fail closed');
 
   console.log('✓ Concurrency test passed: exactly 1 success out of 10 concurrent attempts.');
 
   // --------------------------------------------------------------------------
-  // TEST 8: FIRESTORE SECURITY RULES REGRESSION
+  // TEST 8: RATE LIMIT STORAGE BOUND & SPOOFING RESISTANCE
   // --------------------------------------------------------------------------
-  console.log('\n--- 8. FIRESTORE SECURITY RULES REGRESSION ---');
+  console.log('\n--- 8. RATE LIMIT STORAGE BOUND & SPOOFING RESISTANCE ---');
+
+  // Test that sending arbitrary X-Forwarded-For headers does not create new rate limit documents
+  for (let i = 0; i < 5; i++) {
+    await callFunction(
+      'validateRegistrationToken',
+      { token: 'stx_test_spoof' },
+      null,
+      { 'X-Forwarded-For': `10.${i}.0.1, 192.168.1.1` },
+    );
+  }
+
+  const rateLimitDocsSnap = await adminDb.collection('rateLimits').get();
+  assert.equal(
+    rateLimitDocsSnap.size,
+    1,
+    `rateLimits collection must contain exactly 1 stable document (found ${rateLimitDocsSnap.size})`,
+  );
+  assert.equal(
+    rateLimitDocsSnap.docs[0].id,
+    'registration_token_public_validation',
+    'Document ID must be the stable global limiter doc',
+  );
+
+  console.log('✓ Rate limit storage cardinality is strictly bounded to 1 single stable document.');
+
+  // --------------------------------------------------------------------------
+  // TEST 9: FIRESTORE SECURITY RULES REGRESSION
+  // --------------------------------------------------------------------------
+  console.log('\n--- 9. FIRESTORE SECURITY RULES REGRESSION ---');
 
   // Direct client read on registrationTokens -> 403 Forbidden
   const clientReadTokens = await firestoreDirectRequest(`registrationTokens/${tokenId}`, {
@@ -372,13 +456,20 @@ async function runRegistrationTokenEmulatorTests() {
   });
   assert.equal(clientReadTokens.status, 403, 'Client read on registrationTokens must be 403');
 
-  // Direct client write on registrationTokens -> 403 Forbidden
-  const clientWriteTokens = await firestoreDirectRequest(`registrationTokens/hack`, {
+  // Direct client read on registrationTokenLookups -> 403 Forbidden
+  const clientReadLookups = await firestoreDirectRequest(`registrationTokenLookups/${tokenHash}`, {
+    method: 'GET',
+    idToken: tenantOwnerToken,
+  });
+  assert.equal(clientReadLookups.status, 403, 'Client read on registrationTokenLookups must be 403');
+
+  // Direct client write on registrationTokenLookups -> 403 Forbidden
+  const clientWriteLookups = await firestoreDirectRequest(`registrationTokenLookups/hack`, {
     method: 'PATCH',
     idToken: tenantOwnerToken,
-    data: { fields: { status: { stringValue: 'ACTIVE' } } },
+    data: { fields: { tokenId: { stringValue: 'hack' } } },
   });
-  assert.equal(clientWriteTokens.status, 403, 'Client write on registrationTokens must be 403');
+  assert.equal(clientWriteLookups.status, 403, 'Client write on registrationTokenLookups must be 403');
 
   // Direct client read on platformAuditLogs -> 403 Forbidden
   const clientReadAudit = await firestoreDirectRequest(`platformAuditLogs/any`, {
@@ -410,10 +501,10 @@ async function runRegistrationTokenEmulatorTests() {
   });
   assert.equal(clientWriteRate.status, 403, 'Client write on rateLimits must be 403');
 
-  console.log('✓ Firestore Security Rules strictly deny client direct access to registrationTokens, platformAuditLogs, and rateLimits.');
+  console.log('✓ Firestore Security Rules strictly deny direct access to registrationTokens, registrationTokenLookups, platformAuditLogs, and rateLimits.');
 
   console.log('\n==========================================================');
-  console.log('ALL REGISTRATION TOKEN EMULATOR INTEGRATION TESTS PASSED 100%');
+  console.log('ALL HARDENED REGISTRATION TOKEN EMULATOR INTEGRATION TESTS PASSED 100%');
   console.log('==========================================================');
   await adminApp.delete();
 }

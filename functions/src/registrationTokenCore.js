@@ -1,135 +1,168 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-export const REGISTRATION_TOKEN_BYTES = 32; // 256 bits of cryptographically secure entropy
 export const REGISTRATION_TOKEN_PREFIX = 'stx_';
+export const MANAGEMENT_TOKEN_ID_PREFIX = 'rtok_';
+export const TOKEN_FORMAT_REGEX = /^stx_[a-zA-Z0-9_-]{43,64}$/;
+export const MANAGEMENT_TOKEN_ID_REGEX = /^rtok_[a-f0-9]{32}$/;
 
-export const DEFAULT_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (168 hours)
-export const MIN_TOKEN_TTL_HOURS = 1;
-export const MAX_TOKEN_TTL_HOURS = 720; // 30 days
+export const ALLOWED_BUSINESS_CATEGORIES = Object.freeze([
+  'FUEL_STATION',
+  'CAFE',
+  'RESTAURANT',
+  'HAIR_SALON',
+  'RETAIL',
+  'OTHER',
+]);
 
-export const REGISTRATION_TOKEN_STATUS = Object.freeze({
+export const TOKEN_STATUS = Object.freeze({
   active: 'ACTIVE',
   revoked: 'REVOKED',
   consumed: 'CONSUMED',
+  expired: 'EXPIRED',
+  invalid: 'INVALID',
 });
 
-export const ALLOWED_BUSINESS_CATEGORIES = Object.freeze(
-  new Set(['FUEL_STATION', 'CAFE', 'RESTAURANT', 'HAIR_SALON', 'RETAIL', 'OTHER']),
-);
+export const DEFAULT_TTL_HOURS = 168; // 7 days
+export const MIN_TTL_HOURS = 1;
+export const MAX_TTL_HOURS = 720; // 30 days
+export const MAX_LABEL_LENGTH = 100;
+export const MAX_LIST_LIMIT = 100;
+export const DEFAULT_LIST_LIMIT = 25;
 
-const TOKEN_FORMAT_REGEX = /^stx_[a-zA-Z0-9_-]{43,64}$/;
-
-function toCleanString(value) {
-  return String(value || '').trim();
-}
-
-/**
- * Generates a cryptographically secure, URL-safe registration token with >= 256 bits of entropy.
- * Format: stx_ + base64url(32 random bytes) -> 47 characters total.
- */
 export function generateRawRegistrationToken() {
-  const bytes = randomBytes(REGISTRATION_TOKEN_BYTES);
-  const base64url = bytes.toString('base64url');
-  return `${REGISTRATION_TOKEN_PREFIX}${base64url}`;
+  const entropy = randomBytes(32).toString('base64url');
+  return `${REGISTRATION_TOKEN_PREFIX}${entropy}`;
 }
 
-/**
- * Validates the syntactic format of a raw registration token.
- */
+export function generateManagementTokenId() {
+  const entropy = randomBytes(16).toString('hex');
+  return `${MANAGEMENT_TOKEN_ID_PREFIX}${entropy}`;
+}
+
 export function validateRegistrationTokenFormat(token) {
-  const clean = toCleanString(token);
-  return {
-    valid: TOKEN_FORMAT_REGEX.test(clean),
-    token: clean,
-  };
+  if (typeof token !== 'string') {
+    return { valid: false, reason: 'token-must-be-string' };
+  }
+  const cleanToken = token.trim();
+  if (!cleanToken) {
+    return { valid: false, reason: 'token-empty' };
+  }
+  if (!TOKEN_FORMAT_REGEX.test(cleanToken)) {
+    return { valid: false, reason: 'token-invalid-format' };
+  }
+  return { valid: true, token: cleanToken };
 }
 
-/**
- * Computes the SHA-256 cryptographic hash of a valid raw registration token.
- * Only the hash is stored in Firestore; raw token material is never persisted.
- */
+export function validateManagementTokenIdFormat(tokenId) {
+  if (typeof tokenId !== 'string') {
+    return { valid: false, reason: 'token-id-must-be-string' };
+  }
+  const cleanId = tokenId.trim();
+  if (!MANAGEMENT_TOKEN_ID_REGEX.test(cleanId)) {
+    return { valid: false, reason: 'token-id-invalid-format' };
+  }
+  return { valid: true, tokenId: cleanId };
+}
+
 export function hashRegistrationToken(token) {
   const validation = validateRegistrationTokenFormat(token);
   if (!validation.valid) {
-    throw new Error('invalid-registration-token-format');
+    throw new Error(`Cannot hash invalid registration token: ${validation.reason}`);
   }
   return createHash('sha256').update(validation.token, 'utf8').digest('hex');
 }
 
-/**
- * Derives the effective token status taking server expiry into account.
- */
-export function deriveEffectiveStatus(tokenData, nowMs = Date.now()) {
-  if (!tokenData || typeof tokenData !== 'object') {
-    return 'UNKNOWN';
+export function extractExpiresAtMs(tokenData) {
+  if (!tokenData || typeof tokenData !== 'object') return null;
+
+  if (tokenData.expiresAt) {
+    if (typeof tokenData.expiresAt.toMillis === 'function') {
+      const ms = tokenData.expiresAt.toMillis();
+      return Number.isInteger(ms) && ms > 0 ? ms : null;
+    }
+    if (typeof tokenData.expiresAt === 'number') {
+      return Number.isInteger(tokenData.expiresAt) && tokenData.expiresAt > 0
+        ? tokenData.expiresAt
+        : null;
+    }
+    if (tokenData.expiresAt instanceof Date) {
+      const ms = tokenData.expiresAt.getTime();
+      return Number.isInteger(ms) && ms > 0 ? ms : null;
+    }
   }
 
-  if (tokenData.status === REGISTRATION_TOKEN_STATUS.consumed) {
-    return 'CONSUMED';
+  if (typeof tokenData.expiresAtMs === 'number') {
+    return Number.isInteger(tokenData.expiresAtMs) && tokenData.expiresAtMs > 0
+      ? tokenData.expiresAtMs
+      : null;
   }
 
-  if (tokenData.status === REGISTRATION_TOKEN_STATUS.revoked) {
-    return 'REVOKED';
-  }
-
-  let expiresAtMs = 0;
-  if (tokenData.expiresAt?.toMillis) {
-    expiresAtMs = tokenData.expiresAt.toMillis();
-  } else if (tokenData.expiresAt instanceof Date) {
-    expiresAtMs = tokenData.expiresAt.getTime();
-  } else if (typeof tokenData.expiresAt === 'number') {
-    expiresAtMs = tokenData.expiresAt;
-  } else if (typeof tokenData.expiresAt === 'string') {
-    expiresAtMs = new Date(tokenData.expiresAt).getTime();
-  }
-
-  if (expiresAtMs > 0 && expiresAtMs <= nowMs) {
-    return 'EXPIRED';
-  }
-
-  if (tokenData.status === REGISTRATION_TOKEN_STATUS.active) {
-    return 'ACTIVE';
-  }
-
-  return tokenData.status || 'UNKNOWN';
+  return null;
 }
 
-/**
- * Validates administrative token generation input.
- */
-export function validateTokenGenerationInput(input = {}) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+export function deriveEffectiveStatus(tokenData, nowMs = Date.now()) {
+  if (!tokenData || typeof tokenData !== 'object') {
+    return TOKEN_STATUS.invalid;
+  }
+
+  const rawStatus = String(tokenData.status || '').trim().toUpperCase();
+
+  if (rawStatus === TOKEN_STATUS.revoked) {
+    return TOKEN_STATUS.revoked;
+  }
+
+  if (rawStatus === TOKEN_STATUS.consumed) {
+    return TOKEN_STATUS.consumed;
+  }
+
+  if (rawStatus === TOKEN_STATUS.active) {
+    const expiresAtMs = extractExpiresAtMs(tokenData);
+    // Fail closed: missing or malformed expiresAt MUST NOT derive ACTIVE
+    if (expiresAtMs === null) {
+      return TOKEN_STATUS.invalid;
+    }
+    if (expiresAtMs <= nowMs) {
+      return TOKEN_STATUS.expired;
+    }
+    return TOKEN_STATUS.active;
+  }
+
+  return TOKEN_STATUS.invalid;
+}
+
+function isPlainObject(val) {
+  return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
+
+export function validateTokenGenerationInput(input) {
+  if (!isPlainObject(input)) {
     throw new Error('invalid-input-object');
   }
 
   const allowedKeys = new Set(['expiresInHours', 'label', 'businessCategoryHint']);
   for (const key of Object.keys(input)) {
     if (!allowedKeys.has(key)) {
-      throw new Error(`unknown-field: ${key}`);
+      throw new Error(`unexpected-input-field-${key}`);
     }
   }
 
-  let expiresInHours = 168; // Default: 7 days
-  if (input.expiresInHours !== undefined) {
-    if (
-      typeof input.expiresInHours !== 'number' ||
-      !Number.isInteger(input.expiresInHours) ||
-      input.expiresInHours < MIN_TOKEN_TTL_HOURS ||
-      input.expiresInHours > MAX_TOKEN_TTL_HOURS
-    ) {
-      throw new Error(`invalid-expiresInHours: must be an integer between ${MIN_TOKEN_TTL_HOURS} and ${MAX_TOKEN_TTL_HOURS}`);
+  let expiresInHours = DEFAULT_TTL_HOURS;
+  if (input.expiresInHours !== undefined && input.expiresInHours !== null) {
+    const parsedHours = Number(input.expiresInHours);
+    if (!Number.isInteger(parsedHours) || parsedHours < MIN_TTL_HOURS || parsedHours > MAX_TTL_HOURS) {
+      throw new Error(`invalid-expires-in-hours-must-be-integer-between-${MIN_TTL_HOURS}-and-${MAX_TTL_HOURS}`);
     }
-    expiresInHours = input.expiresInHours;
+    expiresInHours = parsedHours;
   }
 
   let label = null;
   if (input.label !== undefined && input.label !== null) {
     if (typeof input.label !== 'string') {
-      throw new Error('invalid-label: must be a string');
+      throw new Error('invalid-label-must-be-string');
     }
     const cleanLabel = input.label.trim();
-    if (cleanLabel.length > 100) {
-      throw new Error('invalid-label: max length is 100 characters');
+    if (cleanLabel.length > MAX_LABEL_LENGTH) {
+      throw new Error(`invalid-label-exceeds-max-length-${MAX_LABEL_LENGTH}`);
     }
     label = cleanLabel || null;
   }
@@ -137,13 +170,13 @@ export function validateTokenGenerationInput(input = {}) {
   let businessCategoryHint = null;
   if (input.businessCategoryHint !== undefined && input.businessCategoryHint !== null) {
     if (typeof input.businessCategoryHint !== 'string') {
-      throw new Error('invalid-businessCategoryHint: must be a string');
+      throw new Error('invalid-business-category-hint-must-be-string');
     }
-    const category = input.businessCategoryHint.trim().toUpperCase();
-    if (!ALLOWED_BUSINESS_CATEGORIES.has(category)) {
-      throw new Error(`invalid-businessCategoryHint: allowed values are ${[...ALLOWED_BUSINESS_CATEGORIES].join(', ')}`);
+    const cleanCategory = input.businessCategoryHint.trim().toUpperCase();
+    if (!ALLOWED_BUSINESS_CATEGORIES.includes(cleanCategory)) {
+      throw new Error(`invalid-business-category-hint-must-be-one-of-${ALLOWED_BUSINESS_CATEGORIES.join(',')}`);
     }
-    businessCategoryHint = category;
+    businessCategoryHint = cleanCategory;
   }
 
   return {
@@ -151,4 +184,61 @@ export function validateTokenGenerationInput(input = {}) {
     label,
     businessCategoryHint,
   };
+}
+
+export function validateTokenListInput(input) {
+  if (input !== undefined && input !== null && !isPlainObject(input)) {
+    throw new Error('invalid-input-object');
+  }
+
+  const safeInput = input || {};
+  const allowedKeys = new Set(['limit', 'startAfterCursor']);
+  for (const key of Object.keys(safeInput)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`unexpected-input-field-${key}`);
+    }
+  }
+
+  let limit = DEFAULT_LIST_LIMIT;
+  if (safeInput.limit !== undefined && safeInput.limit !== null) {
+    const parsedLimit = Number(safeInput.limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > MAX_LIST_LIMIT) {
+      throw new Error(`invalid-limit-must-be-integer-between-1-and-${MAX_LIST_LIMIT}`);
+    }
+    limit = parsedLimit;
+  }
+
+  let startAfterCursor = null;
+  if (safeInput.startAfterCursor !== undefined && safeInput.startAfterCursor !== null) {
+    if (typeof safeInput.startAfterCursor !== 'string') {
+      throw new Error('invalid-cursor-must-be-string');
+    }
+    const cleanCursor = safeInput.startAfterCursor.trim();
+    if (cleanCursor.length > 100) {
+      throw new Error('invalid-cursor-length');
+    }
+    startAfterCursor = cleanCursor || null;
+  }
+
+  return { limit, startAfterCursor };
+}
+
+export function validateTokenRevokeInput(input) {
+  if (!isPlainObject(input)) {
+    throw new Error('invalid-input-object');
+  }
+
+  const allowedKeys = new Set(['tokenId']);
+  for (const key of Object.keys(input)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`unexpected-input-field-${key}`);
+    }
+  }
+
+  const formatCheck = validateManagementTokenIdFormat(input.tokenId);
+  if (!formatCheck.valid) {
+    throw new Error(`invalid-token-id: ${formatCheck.reason}`);
+  }
+
+  return { tokenId: formatCheck.tokenId };
 }

@@ -315,9 +315,7 @@ export const generateRegistrationToken = onCall(
     try {
       return await generateTokenService(db, {
         adminUid: uid,
-        expiresInHours: request.data?.expiresInHours,
-        label: request.data?.label,
-        businessCategoryHint: request.data?.businessCategoryHint,
+        ...(request.data || {}),
       });
     } catch (err) {
       if (err instanceof HttpsError) throw err;
@@ -336,10 +334,7 @@ export const listRegistrationTokens = onCall(
     await assertActivePlatformAdmin(db, uid);
 
     try {
-      return await listTokensService(db, {
-        limit: request.data?.limit,
-        startAfterCursor: request.data?.startAfterCursor,
-      });
+      return await listTokensService(db, request.data || {});
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       throw new HttpsError('internal', 'Αποτυχία ανάκτησης registration tokens.');
@@ -356,15 +351,15 @@ export const revokeRegistrationToken = onCall(
     const db = getDb();
     await assertActivePlatformAdmin(db, uid);
 
-    const tokenId = request.data?.tokenId;
-    if (!tokenId || typeof tokenId !== 'string') {
-      throw new HttpsError('invalid-argument', 'Το tokenId είναι απαραίτητο.');
+    try {
+      return await revokeTokenService(db, {
+        adminUid: uid,
+        ...(request.data || {}),
+      });
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία ανάκλησης registration token.');
     }
-
-    return await revokeTokenService(db, {
-      adminUid: uid,
-      tokenId,
-    });
   },
 );
 
@@ -374,16 +369,10 @@ export const validateRegistrationToken = onCall(
   },
   async (request) => {
     const rawToken = request.data?.token;
-    const clientIp =
-      request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
-      request.rawRequest?.ip ||
-      'anonymous';
-
     const db = getDb();
     try {
       return await validateTokenService(db, {
         rawToken,
-        clientIdentifier: clientIp,
       });
     } catch (err) {
       if (err instanceof HttpsError && err.code === 'resource-exhausted') {
@@ -393,3 +382,4 @@ export const validateRegistrationToken = onCall(
     }
   },
 );
+

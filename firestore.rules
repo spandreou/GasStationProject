@@ -516,6 +516,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /registrationTokenLookups/{lookupId} {
+      allow read, write: if false;
+    }
+
     match /platformAuditLogs/{logId} {
       allow read, write: if false;
     }

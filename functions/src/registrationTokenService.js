@@ -1,148 +1,175 @@
-import { createHash } from 'node:crypto';
-import {
-  FieldValue,
-  Timestamp,
-} from 'firebase-admin/firestore';
+import { randomUUID } from 'node:crypto';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
-  REGISTRATION_TOKEN_STATUS,
   deriveEffectiveStatus,
+  extractExpiresAtMs,
+  generateManagementTokenId,
   generateRawRegistrationToken,
   hashRegistrationToken,
   validateRegistrationTokenFormat,
   validateTokenGenerationInput,
+  validateTokenListInput,
+  validateTokenRevokeInput,
 } from './registrationTokenCore.js';
 
+export const RATE_LIMIT_DOC_ID = 'registration_token_public_validation';
+export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+export const RATE_LIMIT_MAX_ATTEMPTS = 60; // 60 attempts / minute globally
+
 export async function assertActivePlatformAdmin(db, uid) {
-  if (!uid) {
-    throw new HttpsError('unauthenticated', 'Απαιτείται ταυτοποίηση.');
+  if (!uid || typeof uid !== 'string') {
+    throw new HttpsError('unauthenticated', 'Απαιτείται ταυτοποίηση χρήστη.');
   }
 
-  const snapshot = await db.doc(`platformAdmins/${uid}`).get();
-  if (!snapshot.exists || snapshot.data()?.status !== 'ACTIVE') {
-    throw new HttpsError('permission-denied', 'Απαιτούνται δικαιώματα διαχειριστή πλατφόρμας.');
+  const adminSnap = await db.doc(`platformAdmins/${uid}`).get();
+  if (!adminSnap.exists || adminSnap.data()?.status !== 'ACTIVE') {
+    throw new HttpsError('permission-denied', 'Δεν έχετε δικαιώματα διαχειριστή πλατφόρμας.');
   }
 
-  return snapshot.data();
+  return adminSnap.data();
 }
 
-export async function checkRateLimit(db, clientIdentifier, options = {}) {
-  const maxAttempts = options.maxAttempts || 15;
-  const windowMs = options.windowMs || 5 * 60 * 1000; // 5 minutes
-  const safeIdentifier = String(clientIdentifier || 'unknown').trim();
-  const bucket = Math.floor(Date.now() / windowMs);
-  const rateLimitKey = createHash('sha256')
-    .update(`rl_val_${safeIdentifier}_${bucket}`)
-    .digest('hex');
-
-  const ref = db.doc(`rateLimits/${rateLimitKey}`);
+export async function checkGlobalValidationRateLimit(db, nowMs = Date.now()) {
+  const rateLimitRef = db.doc(`rateLimits/${RATE_LIMIT_DOC_ID}`);
 
   await db.runTransaction(async (transaction) => {
-    const snap = await transaction.get(ref);
+    const snap = await transaction.get(rateLimitRef);
     if (!snap.exists) {
-      transaction.set(ref, {
+      transaction.set(rateLimitRef, {
+        windowStartMs: nowMs,
         count: 1,
-        expiresAt: Timestamp.fromMillis(Date.now() + windowMs * 2),
+        updatedAt: FieldValue.serverTimestamp(),
       });
-    } else {
-      const currentCount = snap.data()?.count || 0;
-      if (currentCount >= maxAttempts) {
-        throw new HttpsError(
-          'resource-exhausted',
-          'Υπέρβαση ορίου αιτημάτων. Παρακαλώ δοκιμάστε ξανά αργότερα.',
-          { reason: 'rate-limit-exceeded' },
-        );
-      }
-      transaction.update(ref, {
-        count: FieldValue.increment(1),
-      });
+      return;
     }
+
+    const data = snap.data();
+    const windowStartMs = Number(data.windowStartMs) || 0;
+    const currentCount = Number(data.count) || 0;
+
+    if (nowMs - windowStartMs >= RATE_LIMIT_WINDOW_MS) {
+      transaction.set(rateLimitRef, {
+        windowStartMs: nowMs,
+        count: 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    if (currentCount >= RATE_LIMIT_MAX_ATTEMPTS) {
+      throw new HttpsError(
+        'resource-exhausted',
+        'Υπέρβαση ορίου αιτημάτων ελέγχου. Παρακαλώ δοκιμάστε ξανά σε λίγο.',
+      );
+    }
+
+    transaction.update(rateLimitRef, {
+      count: currentCount + 1,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 }
 
 export async function generateTokenService(db, { adminUid, expiresInHours, label, businessCategoryHint }) {
-  const validated = validateTokenGenerationInput({ expiresInHours, label, businessCategoryHint });
+  const validatedInput = validateTokenGenerationInput({
+    expiresInHours,
+    label,
+    businessCategoryHint,
+  });
+
   const rawToken = generateRawRegistrationToken();
   const tokenHash = hashRegistrationToken(rawToken);
-  const ttlMs = validated.expiresInHours * 60 * 60 * 1000;
-  const expiresAt = Timestamp.fromMillis(Date.now() + ttlMs);
+  const tokenId = generateManagementTokenId();
 
-  const tokenRef = db.doc(`registrationTokens/${tokenHash}`);
-  const auditRef = db.collection('platformAuditLogs').doc();
+  const nowMs = Date.now();
+  const expiresAtMs = nowMs + validatedInput.expiresInHours * 3600 * 1000;
+  const auditId = randomUUID();
 
-  const batch = db.batch();
-  batch.set(tokenRef, {
-    status: REGISTRATION_TOKEN_STATUS.active,
-    tokenHash,
-    createdAt: FieldValue.serverTimestamp(),
-    expiresAt,
-    createdBy: adminUid,
-    label: validated.label,
-    businessCategoryHint: validated.businessCategoryHint,
-    revokedAt: null,
-    revokedBy: null,
-    consumedAt: null,
-    consumedBy: null,
-    consumptionMetadata: null,
+  const tokenRef = db.doc(`registrationTokens/${tokenId}`);
+  const lookupRef = db.doc(`registrationTokenLookups/${tokenHash}`);
+  const auditRef = db.doc(`platformAuditLogs/${auditId}`);
+
+  await db.runTransaction(async (transaction) => {
+    // 1. Create main management document
+    transaction.set(tokenRef, {
+      tokenId,
+      status: 'ACTIVE',
+      createdAt: FieldValue.serverTimestamp(),
+      createdAtMs: nowMs,
+      expiresAt: Timestamp.fromMillis(expiresAtMs),
+      expiresAtMs,
+      revokedAt: null,
+      revokedBy: null,
+      consumedAt: null,
+      consumedBy: null,
+      label: validatedInput.label,
+      businessCategoryHint: validatedInput.businessCategoryHint,
+      createdBy: adminUid,
+    });
+
+    // 2. Create server-only lookup link
+    transaction.set(lookupRef, {
+      tokenId,
+      createdAt: FieldValue.serverTimestamp(),
+      expiresAt: Timestamp.fromMillis(expiresAtMs),
+    });
+
+    // 3. Record sanitized audit log with opaque management tokenId
+    transaction.set(auditRef, {
+      action: 'REGISTRATION_TOKEN_GENERATED',
+      tokenId,
+      actorUid: adminUid,
+      createdAt: FieldValue.serverTimestamp(),
+      label: validatedInput.label,
+      businessCategoryHint: validatedInput.businessCategoryHint,
+      expiresAt: Timestamp.fromMillis(expiresAtMs),
+    });
   });
-
-  batch.set(auditRef, {
-    action: 'REGISTRATION_TOKEN_GENERATED',
-    tokenId: tokenHash,
-    actorUid: adminUid,
-    timestamp: FieldValue.serverTimestamp(),
-    details: {
-      expiresAt: expiresAt.toDate().toISOString(),
-      label: validated.label,
-      businessCategoryHint: validated.businessCategoryHint,
-    },
-  });
-
-  await batch.commit();
 
   return {
     success: true,
+    tokenId,
     token: rawToken,
-    tokenId: tokenHash,
-    createdAt: new Date().toISOString(),
-    expiresAt: expiresAt.toDate().toISOString(),
-    label: validated.label,
-    businessCategoryHint: validated.businessCategoryHint,
+    expiresAt: expiresAtMs,
   };
 }
 
-export async function listTokensService(db, { limit = 20, startAfterCursor } = {}) {
-  const pageSize = Math.min(Math.max(Number.isInteger(limit) ? limit : 20, 1), 100);
+export async function listTokensService(db, { limit, startAfterCursor }) {
+  const validated = validateTokenListInput({ limit, startAfterCursor });
 
-  let query = db.collection('registrationTokens').orderBy('createdAt', 'desc').limit(pageSize);
+  let query = db.collection('registrationTokens').orderBy('createdAt', 'desc').limit(validated.limit);
 
-  if (startAfterCursor && typeof startAfterCursor === 'string') {
-    const cursorDoc = await db.doc(`registrationTokens/${startAfterCursor}`).get();
+  if (validated.startAfterCursor) {
+    const cursorDoc = await db.doc(`registrationTokens/${validated.startAfterCursor}`).get();
     if (cursorDoc.exists) {
       query = query.startAfter(cursorDoc);
     }
   }
 
   const snapshot = await query.get();
+  const nowMs = Date.now();
 
-  const tokens = snapshot.docs.map((doc) => {
-    const data = doc.data();
+  const tokens = snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    const status = deriveEffectiveStatus(data, nowMs);
+
     return {
-      tokenId: doc.id,
-      status: deriveEffectiveStatus(data),
-      rawStatus: data.status || 'UNKNOWN',
-      createdAt: data.createdAt?.toDate?.()?.toISOString?.() || null,
-      expiresAt: data.expiresAt?.toDate?.()?.toISOString?.() || null,
-      revokedAt: data.revokedAt?.toDate?.()?.toISOString?.() || null,
-      consumedAt: data.consumedAt?.toDate?.()?.toISOString?.() || null,
-      createdBy: data.createdBy || null,
+      tokenId: docSnap.id,
+      status,
+      createdAt: data.createdAt?.toMillis?.() || data.createdAtMs || null,
+      expiresAt: data.expiresAt?.toMillis?.() || data.expiresAtMs || null,
+      revokedAt: data.revokedAt?.toMillis?.() || null,
+      consumedAt: data.consumedAt?.toMillis?.() || null,
       label: data.label || null,
       businessCategoryHint: data.businessCategoryHint || null,
     };
   });
 
-  const nextCursor =
-    snapshot.docs.length === pageSize ? snapshot.docs[snapshot.docs.length - 1].id : null;
+  let nextCursor = null;
+  if (snapshot.docs.length === validated.limit) {
+    nextCursor = snapshot.docs[snapshot.docs.length - 1].id;
+  }
 
   return {
     success: true,
@@ -152,156 +179,166 @@ export async function listTokensService(db, { limit = 20, startAfterCursor } = {
 }
 
 export async function revokeTokenService(db, { adminUid, tokenId }) {
-  if (!tokenId || typeof tokenId !== 'string') {
-    throw new HttpsError('invalid-argument', 'Το tokenId είναι απαραίτητο.');
-  }
+  const validated = validateTokenRevokeInput({ tokenId });
+  const tokenRef = db.doc(`registrationTokens/${validated.tokenId}`);
+  const auditId = randomUUID();
+  const auditRef = db.doc(`platformAuditLogs/${auditId}`);
 
-  const tokenRef = db.doc(`registrationTokens/${tokenId.trim()}`);
+  let finalStatus = 'REVOKED';
 
-  return await db.runTransaction(async (transaction) => {
+  await db.runTransaction(async (transaction) => {
     const snap = await transaction.get(tokenRef);
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Το registration token δεν βρέθηκε.');
     }
 
-    const data = snap.data();
-    if (data.status === REGISTRATION_TOKEN_STATUS.consumed) {
+    const tokenData = snap.data();
+    if (tokenData.status === 'CONSUMED') {
       throw new HttpsError(
         'failed-precondition',
-        'Το registration token έχει ήδη καταναλωθεί και δεν μπορεί να ανακληθεί.',
+        'Το token έχει ήδη χρησιμοποιηθεί και δεν μπορεί να ανακληθεί.',
       );
     }
 
-    if (data.status === REGISTRATION_TOKEN_STATUS.revoked) {
-      return { success: true, tokenId: snap.id, status: 'REVOKED', idempotent: true };
+    // Idempotent revocation
+    if (tokenData.status === 'REVOKED') {
+      finalStatus = 'REVOKED';
+      return;
     }
 
     transaction.update(tokenRef, {
-      status: REGISTRATION_TOKEN_STATUS.revoked,
+      status: 'REVOKED',
       revokedAt: FieldValue.serverTimestamp(),
       revokedBy: adminUid,
     });
 
-    const auditRef = db.collection('platformAuditLogs').doc();
     transaction.set(auditRef, {
       action: 'REGISTRATION_TOKEN_REVOKED',
-      tokenId: snap.id,
+      tokenId: validated.tokenId,
       actorUid: adminUid,
-      timestamp: FieldValue.serverTimestamp(),
-      details: {
-        label: data.label || null,
-        businessCategoryHint: data.businessCategoryHint || null,
-      },
+      createdAt: FieldValue.serverTimestamp(),
     });
-
-    return { success: true, tokenId: snap.id, status: 'REVOKED' };
-  });
-}
-
-export async function validateTokenService(db, { rawToken, clientIdentifier }) {
-  if (clientIdentifier) {
-    await checkRateLimit(db, clientIdentifier);
-  }
-
-  const validation = validateRegistrationTokenFormat(rawToken);
-  if (!validation.valid) {
-    return { valid: false };
-  }
-
-  const tokenHash = hashRegistrationToken(validation.token);
-  const snap = await db.doc(`registrationTokens/${tokenHash}`).get();
-
-  if (!snap.exists) {
-    return { valid: false };
-  }
-
-  const data = snap.data();
-  const effectiveStatus = deriveEffectiveStatus(data);
-
-  if (effectiveStatus !== 'ACTIVE') {
-    return { valid: false };
-  }
-
-  return {
-    valid: true,
-    expiresAt: data.expiresAt?.toDate?.()?.toISOString?.() || null,
-    label: data.label || null,
-    businessCategoryHint: data.businessCategoryHint || null,
-  };
-}
-
-export async function consumeRegistrationToken(
-  transaction,
-  { db, rawToken, consumedBy = null, metadata = null },
-) {
-  const validation = validateRegistrationTokenFormat(rawToken);
-  if (!validation.valid) {
-    const error = new Error('invalid-registration-token-format');
-    error.code = 'INVALID_FORMAT';
-    throw error;
-  }
-
-  const tokenHash = hashRegistrationToken(validation.token);
-  const tokenRef = db.doc(`registrationTokens/${tokenHash}`);
-  const snap = await transaction.get(tokenRef);
-
-  if (!snap.exists) {
-    const error = new Error('registration-token-not-found');
-    error.code = 'NOT_FOUND';
-    throw error;
-  }
-
-  const data = snap.data();
-  const effectiveStatus = deriveEffectiveStatus(data);
-
-  if (data.status === REGISTRATION_TOKEN_STATUS.consumed) {
-    const error = new Error('registration-token-already-consumed');
-    error.code = 'ALREADY_CONSUMED';
-    throw error;
-  }
-
-  if (data.status === REGISTRATION_TOKEN_STATUS.revoked) {
-    const error = new Error('registration-token-revoked');
-    error.code = 'REVOKED';
-    throw error;
-  }
-
-  if (effectiveStatus === 'EXPIRED') {
-    const error = new Error('registration-token-expired');
-    error.code = 'EXPIRED';
-    throw error;
-  }
-
-  if (effectiveStatus !== 'ACTIVE') {
-    const error = new Error('registration-token-inactive');
-    error.code = 'INACTIVE';
-    throw error;
-  }
-
-  transaction.update(tokenRef, {
-    status: REGISTRATION_TOKEN_STATUS.consumed,
-    consumedAt: FieldValue.serverTimestamp(),
-    consumedBy: consumedBy || null,
-    consumptionMetadata: metadata || null,
-  });
-
-  const auditRef = db.collection('platformAuditLogs').doc();
-  transaction.set(auditRef, {
-    action: 'REGISTRATION_TOKEN_CONSUMED',
-    tokenId: tokenHash,
-    actorUid: consumedBy || null,
-    timestamp: FieldValue.serverTimestamp(),
-    details: {
-      label: data.label || null,
-      businessCategoryHint: data.businessCategoryHint || null,
-      metadata: metadata || null,
-    },
   });
 
   return {
     success: true,
-    tokenId: tokenHash,
-    label: data.label || null,
-    businessCategoryHint: data.businessCategoryHint || null,
+    status: finalStatus,
+  };
+}
+
+export async function validateTokenService(db, { rawToken }) {
+  // 1. Enforce global bounded rate limit
+  await checkGlobalValidationRateLimit(db);
+
+  // 2. Syntax check
+  const validation = validateRegistrationTokenFormat(rawToken);
+  if (!validation.valid) {
+    return { valid: false };
+  }
+
+  // 3. Hash computation
+  const tokenHash = hashRegistrationToken(validation.token);
+
+  // 4. Server-only lookup
+  const lookupSnap = await db.doc(`registrationTokenLookups/${tokenHash}`).get();
+  if (!lookupSnap.exists) {
+    return { valid: false };
+  }
+
+  const tokenId = lookupSnap.data()?.tokenId;
+  if (!tokenId) {
+    return { valid: false };
+  }
+
+  // 5. Read management token doc
+  const tokenSnap = await db.doc(`registrationTokens/${tokenId}`).get();
+  if (!tokenSnap.exists) {
+    return { valid: false };
+  }
+
+  const tokenData = tokenSnap.data();
+  const nowMs = Date.now();
+  const effectiveStatus = deriveEffectiveStatus(tokenData, nowMs);
+
+  if (effectiveStatus !== 'ACTIVE') {
+    return { valid: false };
+  }
+
+  const expiresAtMs = extractExpiresAtMs(tokenData);
+
+  // Safe minimal public response
+  return {
+    valid: true,
+    expiresAt: expiresAtMs,
+    businessCategoryHint: tokenData.businessCategoryHint || null,
+  };
+}
+
+export async function consumeRegistrationToken(transaction, { db, rawToken, consumedBy }) {
+  const validation = validateRegistrationTokenFormat(rawToken);
+  if (!validation.valid) {
+    throw new Error('registration-token-invalid-format');
+  }
+
+  const tokenHash = hashRegistrationToken(validation.token);
+  const lookupRef = db.doc(`registrationTokenLookups/${tokenHash}`);
+  const lookupSnap = await transaction.get(lookupRef);
+
+  if (!lookupSnap.exists) {
+    throw new Error('registration-token-not-found');
+  }
+
+  const tokenId = lookupSnap.data()?.tokenId;
+  if (!tokenId) {
+    throw new Error('registration-token-corrupt-lookup');
+  }
+
+  const tokenRef = db.doc(`registrationTokens/${tokenId}`);
+  const tokenSnap = await transaction.get(tokenRef);
+
+  if (!tokenSnap.exists) {
+    throw new Error('registration-token-not-found');
+  }
+
+  const tokenData = tokenSnap.data();
+  const nowMs = Date.now();
+  const effectiveStatus = deriveEffectiveStatus(tokenData, nowMs);
+
+  if (effectiveStatus === 'REVOKED') {
+    throw new Error('registration-token-revoked');
+  }
+  if (effectiveStatus === 'EXPIRED') {
+    throw new Error('registration-token-expired');
+  }
+  if (effectiveStatus === 'CONSUMED') {
+    throw new Error('registration-token-already-consumed');
+  }
+  if (effectiveStatus !== 'ACTIVE') {
+    throw new Error('registration-token-not-active');
+  }
+
+  const cleanConsumedBy = String(consumedBy || 'system').trim();
+
+  // Atomically update token to CONSUMED
+  transaction.update(tokenRef, {
+    status: 'CONSUMED',
+    consumedAt: FieldValue.serverTimestamp(),
+    consumedBy: cleanConsumedBy,
+  });
+
+  // Record audit log
+  const auditId = randomUUID();
+  const auditRef = db.doc(`platformAuditLogs/${auditId}`);
+  transaction.set(auditRef, {
+    action: 'REGISTRATION_TOKEN_CONSUMED',
+    tokenId,
+    actorUid: cleanConsumedBy,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  return {
+    tokenId,
+    status: 'CONSUMED',
+    businessCategoryHint: tokenData.businessCategoryHint || null,
   };
 }

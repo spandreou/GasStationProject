@@ -31,9 +31,9 @@ export default function CentralLandingPage() {
         <header className="flex items-center justify-between gap-4">
           <a href="/" className="flex items-center gap-3 font-black text-slate-950">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-950 text-white shadow-lg shadow-slate-300">
-              GS
+              SO
             </span>
-            <span>GasStation Shift Manager</span>
+            <span>ShiftOryx</span>
           </a>
           <nav className="flex items-center gap-2">
             <a
@@ -74,7 +74,7 @@ export default function CentralLandingPage() {
                 <ArrowRight size={18} />
               </a>
               <a
-                href="mailto:support@homelabshare.gr?subject=GasStation%20Shift%20Manager%20Demo"
+                href="mailto:support@homelabshare.gr?subject=ShiftOryx%20Demo"
                 className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-800 shadow-sm hover:border-slate-300"
               >
                 Request Demo

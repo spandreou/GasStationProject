@@ -9,10 +9,10 @@ export default function AuthPageShell({ title, subtitle, children, footer = 'Pow
         <div className="mb-6 text-center">
           <a href="/" className="inline-flex items-center gap-3 text-left">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-950 text-sm font-black text-white shadow-lg shadow-slate-300">
-              GS
+              SO
             </span>
             <span>
-              <span className="block text-sm font-black text-slate-950">GasStation Shift Manager</span>
+              <span className="block text-sm font-black text-slate-950">ShiftOryx</span>
               <span className="block text-xs font-semibold text-slate-500">SaaS Portal</span>
             </span>
           </a>

@@ -3,10 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { consumeRegistrationToken } from './registrationTokenService.js';
 import {
-  DEFAULT_CUSTOMIZATION_MODE,
-  DEFAULT_TEMPLATE_ID,
-  DEFAULT_TEMPLATE_VERSION,
-  validateBusinessCategory,
+  resolveCategoryAndTemplate,
   validateProvisioningInput,
 } from './provisioningCore.js';
 
@@ -33,38 +30,51 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       );
     }
 
-    // 2. Tenant collision check
+    // 2. Canonical Membership Check (Source of Truth)
+    // Fail-closed policy: An actor with ANY existing tenant membership cannot provision a new tenant in Phase 4 MVP.
+    const canonicalMembershipsQuery = db.collection('tenantMemberships').where('uid', '==', callerUid).limit(1);
+    const canonicalMembershipsSnap = await transaction.get(canonicalMembershipsQuery);
+    if (!canonicalMembershipsSnap.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Ο χρήστης έχει ήδη συσχετισμό με tenant.',
+      );
+    }
+
+    // 3. Compatibility Mirror Integrity Check (users/{uid}.memberships)
+    const userRef = db.doc(`users/${callerUid}`);
+    const userSnap = await transaction.get(userRef);
+    if (userSnap.exists) {
+      const existingMemberships = userSnap.data()?.memberships;
+      if (existingMemberships && typeof existingMemberships === 'object' && Object.keys(existingMemberships).length > 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Ο χρήστης έχει ήδη συσχετισμό με tenant.',
+        );
+      }
+    }
+
+    // 4. Tenant Collision Check
     const tenantRef = db.doc(`tenants/${validated.slug}`);
     const tenantSnap = await transaction.get(tenantRef);
     if (tenantSnap.exists) {
       throw new HttpsError(
         'already-exists',
-        `Το αναγνωριστικό "${validated.slug}" χρησιμοποιείται ήδη.`,
+        'Το αναγνωριστικό tenant χρησιμοποιείται ήδη.',
       );
     }
 
-    // 3. User document and membership collision check
-    const userRef = db.doc(`users/${callerUid}`);
-    const userSnap = await transaction.get(userRef);
-    const existingMemberships = userSnap.exists ? userSnap.data()?.memberships || {} : {};
-
-    if (existingMemberships[validated.slug]) {
+    // 5. Slug Reservation Collision Check
+    const reservationRef = db.doc(`slugReservations/${validated.slug}`);
+    const reservationSnap = await transaction.get(reservationRef);
+    if (reservationSnap.exists) {
       throw new HttpsError(
         'already-exists',
-        `Έχετε ήδη συσχετισμό με το tenant "${validated.slug}".`,
+        'Το αναγνωριστικό tenant χρησιμοποιείται ήδη.',
       );
     }
 
-    const membershipRef = db.doc(`tenantMemberships/${callerUid}_${validated.slug}`);
-    const membershipSnap = await transaction.get(membershipRef);
-    if (membershipSnap.exists) {
-      throw new HttpsError(
-        'already-exists',
-        `Υπάρχει ήδη membership για τον χρήστη στο tenant "${validated.slug}".`,
-      );
-    }
-
-    // 4. Check & consume token atomically within the transaction
+    // 6. Check & consume token atomically within the transaction
     let consumedToken;
     try {
       consumedToken = await consumeRegistrationToken(transaction, {
@@ -90,31 +100,42 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       ) {
         throw new HttpsError('invalid-argument', 'Το registration token δεν είναι έγκυρο.');
       }
-      throw new HttpsError('internal', `Αποτυχία εξαργύρωσης token: ${err.message}`);
+      throw new HttpsError('internal', 'Αποτυχία αρχικοποίησης tenant.');
     }
 
-    const businessCategory = validateBusinessCategory(
+    // 7. Resolve category and template compatibility
+    const resolvedConfig = resolveCategoryAndTemplate(
       validated.businessCategory,
       consumedToken.businessCategoryHint,
     );
 
-    // 5. Write tenant document
+    // 8. Write slug reservation
+    transaction.set(reservationRef, {
+      slug: validated.slug,
+      tenantId: validated.slug,
+      status: 'ACTIVE',
+      reservedBy: callerUid,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    // 9. Write tenant document (domain is null pending Phase 6 cutover)
     transaction.set(tenantRef, {
       slug: validated.slug,
-      domain: `${validated.slug}.shiftoryx.gr`,
+      domain: null,
       displayName: validated.displayName,
       status: 'ACTIVE',
-      businessCategory,
-      templateId: DEFAULT_TEMPLATE_ID,
-      templateVersion: DEFAULT_TEMPLATE_VERSION,
+      businessCategory: resolvedConfig.businessCategory,
+      templateId: resolvedConfig.templateId,
+      templateVersion: resolvedConfig.templateVersion,
       brandingOverrides: {},
-      customizationMode: DEFAULT_CUSTOMIZATION_MODE,
+      customizationMode: resolvedConfig.customizationMode,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       createdBy: callerUid,
     });
 
-    // 6. Write tenantMemberships/{uid}_{tenantId}
+    // 10. Write tenantMemberships/{uid}_{tenantId}
+    const membershipRef = db.doc(`tenantMemberships/${callerUid}_${validated.slug}`);
     transaction.set(membershipRef, {
       uid: callerUid,
       tenantId: validated.slug,
@@ -125,9 +146,8 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       email: callerEmail || null,
     });
 
-    // 7. Write/Update users/{uid}
-    const nextMemberships = {
-      ...existingMemberships,
+    // 11. Write/Update users/{uid}
+    const newMemberships = {
       [validated.slug]: {
         role: 'OWNER',
         status: 'ACTIVE',
@@ -136,7 +156,7 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
 
     if (userSnap.exists) {
       const updatePayload = {
-        memberships: nextMemberships,
+        memberships: newMemberships,
         updatedAt: FieldValue.serverTimestamp(),
       };
       if (callerEmail && !userSnap.data()?.email) {
@@ -148,13 +168,13 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
         uid: callerUid,
         email: callerEmail ? callerEmail.trim().toLowerCase() : null,
         status: 'ACTIVE',
-        memberships: nextMemberships,
+        memberships: newMemberships,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
 
-    // 8. Write default settings: tenants/{slug}/settings/scheduler
+    // 12. Write default settings: tenants/{slug}/settings/scheduler
     const settingsRef = db.doc(`tenants/${validated.slug}/settings/scheduler`);
     transaction.set(settingsRef, {
       generatorRules: {
@@ -169,7 +189,7 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // 9. Write default subscription: tenants/{slug}/subscription/current
+    // 13. Write default subscription: tenants/{slug}/subscription/current
     const trialEndsAtMs = Date.now() + 14 * 24 * 3600 * 1000;
     const subscriptionRef = db.doc(`tenants/${validated.slug}/subscription/current`);
     transaction.set(subscriptionRef, {
@@ -180,7 +200,7 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // 10. Write audit log: platformAuditLogs/{auditId}
+    // 14. Write audit log: platformAuditLogs/{auditId}
     const auditId = randomUUID();
     const auditRef = db.doc(`platformAuditLogs/${auditId}`);
     transaction.set(auditRef, {
@@ -189,7 +209,8 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       tokenId: consumedToken.tokenId,
       actorUid: callerUid,
       role: 'OWNER',
-      businessCategory,
+      businessCategory: resolvedConfig.businessCategory,
+      templateId: resolvedConfig.templateId,
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -198,7 +219,9 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       tenantId: validated.slug,
       role: 'OWNER',
       status: 'ACTIVE',
-      businessCategory,
+      businessCategory: resolvedConfig.businessCategory,
+      templateId: resolvedConfig.templateId,
+      templateVersion: resolvedConfig.templateVersion,
     };
   });
 }

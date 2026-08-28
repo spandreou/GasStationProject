@@ -31,9 +31,18 @@ export const VALID_BUSINESS_CATEGORIES = Object.freeze([
   'OTHER',
 ]);
 
-export const DEFAULT_BUSINESS_CATEGORY = 'FUEL_STATION';
-export const DEFAULT_TEMPLATE_ID = 'fuel-station-default';
-export const DEFAULT_TEMPLATE_VERSION = '1.0.0';
+export const CATEGORY_TEMPLATE_MAP = Object.freeze({
+  FUEL_STATION: { templateId: 'fuel-station-default', templateVersion: '1.0.0' },
+  CAFE: { templateId: 'cafe-default', templateVersion: '1.0.0' },
+  RESTAURANT: { templateId: 'restaurant-default', templateVersion: '1.0.0' },
+  HAIR_SALON: { templateId: 'hair-salon-default', templateVersion: '1.0.0' },
+  RETAIL: { templateId: 'retail-default', templateVersion: '1.0.0' },
+  OTHER: { templateId: 'generic-default', templateVersion: '1.0.0' },
+});
+
+export const DEFAULT_BUSINESS_CATEGORY = 'OTHER';
+export const DEFAULT_TEMPLATE_ID = CATEGORY_TEMPLATE_MAP.OTHER.templateId;
+export const DEFAULT_TEMPLATE_VERSION = CATEGORY_TEMPLATE_MAP.OTHER.templateVersion;
 export const DEFAULT_CUSTOMIZATION_MODE = 'STANDARD';
 
 export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
@@ -88,7 +97,9 @@ export function validateDisplayName(rawDisplayName) {
   return displayName;
 }
 
-export function validateBusinessCategory(rawCategory, tokenHint) {
+export function resolveCategoryAndTemplate(rawCategory, tokenHint) {
+  let category = DEFAULT_BUSINESS_CATEGORY;
+
   if (rawCategory !== undefined && rawCategory !== null) {
     if (typeof rawCategory !== 'string') {
       throw new Error('businessCategory must be a string if provided');
@@ -97,17 +108,22 @@ export function validateBusinessCategory(rawCategory, tokenHint) {
     if (!VALID_BUSINESS_CATEGORIES.includes(normalized)) {
       throw new Error(`businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`);
     }
-    return normalized;
-  }
-
-  if (tokenHint && typeof tokenHint === 'string') {
+    category = normalized;
+  } else if (tokenHint && typeof tokenHint === 'string') {
     const hintNormalized = tokenHint.trim().toUpperCase();
     if (VALID_BUSINESS_CATEGORIES.includes(hintNormalized)) {
-      return hintNormalized;
+      category = hintNormalized;
     }
   }
 
-  return DEFAULT_BUSINESS_CATEGORY;
+  const templateConfig = CATEGORY_TEMPLATE_MAP[category] || CATEGORY_TEMPLATE_MAP.OTHER;
+
+  return {
+    businessCategory: category,
+    templateId: templateConfig.templateId,
+    templateVersion: templateConfig.templateVersion,
+    customizationMode: DEFAULT_CUSTOMIZATION_MODE,
+  };
 }
 
 const ALLOWED_PROVISIONING_INPUT_KEYS = new Set([
@@ -161,12 +177,23 @@ export function validateProvisioningInput(rawInput) {
 
   const slug = validateTenantSlug(rawInput.slug);
   const displayName = validateDisplayName(rawInput.displayName);
-  const businessCategory = rawInput.businessCategory !== undefined ? validateBusinessCategory(rawInput.businessCategory) : undefined;
+
+  let rawCategory = undefined;
+  if (rawInput.businessCategory !== undefined && rawInput.businessCategory !== null) {
+    if (typeof rawInput.businessCategory !== 'string') {
+      throw new Error('businessCategory must be a string if provided');
+    }
+    const normalized = rawInput.businessCategory.trim().toUpperCase();
+    if (!VALID_BUSINESS_CATEGORIES.includes(normalized)) {
+      throw new Error(`businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`);
+    }
+    rawCategory = normalized;
+  }
 
   return {
     token,
     slug,
     displayName,
-    businessCategory,
+    businessCategory: rawCategory,
   };
 }

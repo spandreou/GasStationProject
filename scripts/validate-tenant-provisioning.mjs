@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import {
+  CATEGORY_TEMPLATE_MAP,
   DEFAULT_BUSINESS_CATEGORY,
   DEFAULT_CUSTOMIZATION_MODE,
   DEFAULT_TEMPLATE_ID,
   DEFAULT_TEMPLATE_VERSION,
   RESERVED_SLUGS,
   VALID_BUSINESS_CATEGORIES,
-  validateBusinessCategory,
+  resolveCategoryAndTemplate,
   validateDisplayName,
   validateProvisioningInput,
   validateTenantSlug,
@@ -60,27 +61,39 @@ assert.throws(() => validateDisplayName('Bad\nName'), /cannot contain control ch
 
 console.log('Display name validation tests passed.');
 
-// 3. Business Category Validation Tests
-assert.equal(DEFAULT_BUSINESS_CATEGORY, 'FUEL_STATION');
-assert.equal(DEFAULT_TEMPLATE_ID, 'fuel-station-default');
+// 3. Business Category & Template Resolution Tests
+assert.equal(DEFAULT_BUSINESS_CATEGORY, 'OTHER');
+assert.equal(DEFAULT_TEMPLATE_ID, 'generic-default');
 assert.equal(DEFAULT_TEMPLATE_VERSION, '1.0.0');
 assert.equal(DEFAULT_CUSTOMIZATION_MODE, 'STANDARD');
 
 for (const cat of VALID_BUSINESS_CATEGORIES) {
-  assert.equal(validateBusinessCategory(cat), cat);
-  assert.equal(validateBusinessCategory(cat.toLowerCase()), cat);
+  const resolved = resolveCategoryAndTemplate(cat);
+  assert.equal(resolved.businessCategory, cat);
+  assert.equal(resolved.templateId, CATEGORY_TEMPLATE_MAP[cat].templateId);
+  assert.equal(resolved.templateVersion, '1.0.0');
+  assert.equal(resolved.customizationMode, 'STANDARD');
 }
 
-// Fallback to token hint if category is undefined
-assert.equal(validateBusinessCategory(undefined, 'CAFE'), 'CAFE');
-assert.equal(validateBusinessCategory(undefined, 'invalid_hint'), 'FUEL_STATION');
-assert.equal(validateBusinessCategory(undefined, undefined), 'FUEL_STATION');
+// Fallback to token hint if category is omitted
+const resolvedWithHint = resolveCategoryAndTemplate(undefined, 'CAFE');
+assert.equal(resolvedWithHint.businessCategory, 'CAFE');
+assert.equal(resolvedWithHint.templateId, 'cafe-default');
+
+// Safe OTHER fallback if hint is invalid or omitted
+const resolvedDefault = resolveCategoryAndTemplate(undefined, undefined);
+assert.equal(resolvedDefault.businessCategory, 'OTHER');
+assert.equal(resolvedDefault.templateId, 'generic-default');
+
+const resolvedInvalidHint = resolveCategoryAndTemplate(undefined, 'INVALID_HINT');
+assert.equal(resolvedInvalidHint.businessCategory, 'OTHER');
+assert.equal(resolvedInvalidHint.templateId, 'generic-default');
 
 // Invalid category explicit value throws
-assert.throws(() => validateBusinessCategory('INVALID_CATEGORY'), /businessCategory must be one of:/);
-assert.throws(() => validateBusinessCategory(123), /businessCategory must be a string/);
+assert.throws(() => resolveCategoryAndTemplate('INVALID_CATEGORY'), /businessCategory must be one of:/);
+assert.throws(() => resolveCategoryAndTemplate(123), /businessCategory must be a string/);
 
-console.log('Business category validation tests passed.');
+console.log('Business category and template resolution tests passed.');
 
 // 4. Provisioning Input Validation (Strict Unknown & Forbidden Rejection)
 const validToken = 'stx_abcdef1234567890abcdef1234567890abcdef12345';

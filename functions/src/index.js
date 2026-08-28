@@ -407,7 +407,7 @@ export const provisionTenantFromRegistrationToken = onCall(
       });
     } catch (err) {
       if (err instanceof HttpsError) throw err;
-      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία αρχικοποίησης tenant.');
+      throw new HttpsError('internal', 'Αποτυχία αρχικοποίησης tenant.');
     }
   },
 );

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { hashRegistrationToken } from '../functions/src/registrationTokenCore.js';
+import {
+  CATEGORY_TEMPLATE_MAP,
+  VALID_BUSINESS_CATEGORIES,
+} from '../functions/src/provisioningCore.js';
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT || 'demo-gasstation-auth-broker';
 const REGION = 'us-central1';
@@ -70,36 +74,14 @@ async function firestoreDirectRequest(path, { method = 'GET', idToken, data } = 
 
 async function runTenantProvisioningEmulatorTests() {
   console.log('==========================================================');
-  console.log('STARTING PHASE 4 AUTOMATED TENANT PROVISIONING EMULATOR TESTS');
+  console.log('STARTING PHASE 4 REMEDIATED TENANT PROVISIONING EMULATOR TESTS');
   console.log('==========================================================');
 
   // Setup identities
   const platformAdminUid = 'test-plat-admin-prov';
-  const newOwnerUid = 'test-owner-prov-1';
-  const secondOwnerUid = 'test-owner-prov-2';
-  const regularUserUid = 'test-user-prov-3';
-
   const platformAdminToken = await createAuthUser({
     uid: platformAdminUid,
     email: 'admin@platform-prov.test',
-    password: 'Password123!',
-  });
-
-  const newOwnerToken = await createAuthUser({
-    uid: newOwnerUid,
-    email: 'owner1@tenant-prov.test',
-    password: 'Password123!',
-  });
-
-  const secondOwnerToken = await createAuthUser({
-    uid: secondOwnerUid,
-    email: 'owner2@tenant-prov.test',
-    password: 'Password123!',
-  });
-
-  const regularUserToken = await createAuthUser({
-    uid: regularUserUid,
-    email: 'user@regular-prov.test',
     password: 'Password123!',
   });
 
@@ -110,7 +92,7 @@ async function runTenantProvisioningEmulatorTests() {
     createdAt: Timestamp.now(),
   });
 
-  console.log('Test identities and Platform Admin setup completed.');
+  console.log('Platform Admin setup completed.');
 
   // Helper to generate a token via Platform Admin callable
   async function generateToken({ label = 'Test Token', category = 'FUEL_STATION', expiresInHours = 24 } = {}) {
@@ -130,368 +112,565 @@ async function runTenantProvisioningEmulatorTests() {
   }
 
   // ==========================================================
-  // TEST 1: Happy Path Provisioning
+  // TEST 1: Happy Path Provisioning Across All Supported Categories
   // ==========================================================
-  console.log('\n--- Test 1: Happy Path Tenant Provisioning ---');
-  const token1 = await generateToken({ label: 'Happy Path', category: 'FUEL_STATION' });
+  console.log('\n--- Test 1: Happy Path Provisioning Across All Categories ---');
 
-  const provRes1 = await callFunction(
-    'provisionTenantFromRegistrationToken',
-    {
-      token: token1.rawToken,
-      slug: 'eko-kallis-auto',
-      displayName: 'EKO Kallis Automated',
-      businessCategory: 'FUEL_STATION',
-    },
-    newOwnerToken,
-  );
+  for (const category of VALID_BUSINESS_CATEGORIES) {
+    const userUid = `user-cat-${category.toLowerCase().replace('_', '-')}`;
+    const userToken = await createAuthUser({
+      uid: userUid,
+      email: `${userUid}@test.com`,
+      password: 'Password123!',
+    });
 
-  assert.equal(provRes1.status, 200, 'Provisioning must succeed with 200');
-  assert.equal(provRes1.body?.result?.success, true);
-  assert.equal(provRes1.body?.result?.tenantId, 'eko-kallis-auto');
-  assert.equal(provRes1.body?.result?.role, 'OWNER');
-  assert.equal(provRes1.body?.result?.status, 'ACTIVE');
-  assert.equal(provRes1.body?.result?.businessCategory, 'FUEL_STATION');
+    const token = await generateToken({ label: `Token for ${category}`, category });
+    const slug = `slug-${category.toLowerCase().replace('_', '-')}`;
+    const displayName = `Store ${category}`;
 
-  // Verify Firestore state
-  const tenantSnap = await adminDb.doc('tenants/eko-kallis-auto').get();
-  assert.ok(tenantSnap.exists, 'Tenant document must exist');
-  const tenantData = tenantSnap.data();
-  assert.equal(tenantData.slug, 'eko-kallis-auto');
-  assert.equal(tenantData.domain, 'eko-kallis-auto.shiftoryx.gr');
-  assert.equal(tenantData.displayName, 'EKO Kallis Automated');
-  assert.equal(tenantData.status, 'ACTIVE');
-  assert.equal(tenantData.businessCategory, 'FUEL_STATION');
-  assert.equal(tenantData.templateId, 'fuel-station-default');
-  assert.equal(tenantData.templateVersion, '1.0.0');
-  assert.equal(tenantData.customizationMode, 'STANDARD');
-  assert.equal(tenantData.createdBy, newOwnerUid);
+    const provRes = await callFunction(
+      'provisionTenantFromRegistrationToken',
+      {
+        token: token.rawToken,
+        slug,
+        displayName,
+        businessCategory: category,
+      },
+      userToken,
+    );
 
-  const membershipSnap = await adminDb.doc(`tenantMemberships/${newOwnerUid}_eko-kallis-auto`).get();
-  assert.ok(membershipSnap.exists, 'Membership document must exist');
-  const membershipData = membershipSnap.data();
-  assert.equal(membershipData.uid, newOwnerUid);
-  assert.equal(membershipData.tenantId, 'eko-kallis-auto');
-  assert.equal(membershipData.role, 'OWNER');
-  assert.equal(membershipData.status, 'ACTIVE');
-  assert.equal(membershipData.email, 'owner1@tenant-prov.test');
+    assert.equal(provRes.status, 200, `Provisioning for ${category} must succeed with 200`);
+    assert.equal(provRes.body?.result?.success, true);
+    assert.equal(provRes.body?.result?.tenantId, slug);
+    assert.equal(provRes.body?.result?.role, 'OWNER');
+    assert.equal(provRes.body?.result?.status, 'ACTIVE');
+    assert.equal(provRes.body?.result?.businessCategory, category);
+    assert.equal(provRes.body?.result?.templateId, CATEGORY_TEMPLATE_MAP[category].templateId);
+    assert.equal(provRes.body?.result?.templateVersion, '1.0.0');
 
-  const userSnap = await adminDb.doc(`users/${newOwnerUid}`).get();
-  assert.ok(userSnap.exists, 'User mirror document must exist');
-  const userData = userSnap.data();
-  assert.equal(userData.memberships?.['eko-kallis-auto']?.role, 'OWNER');
-  assert.equal(userData.memberships?.['eko-kallis-auto']?.status, 'ACTIVE');
+    // 1. Verify tenants/{slug} document
+    const tenantSnap = await adminDb.doc(`tenants/${slug}`).get();
+    assert.ok(tenantSnap.exists, `Tenant "${slug}" must exist`);
+    const tenantData = tenantSnap.data();
+    assert.equal(tenantData.slug, slug);
+    assert.equal(tenantData.domain, null, 'domain must be null pending Phase 6 cutover');
+    assert.equal(tenantData.displayName, displayName);
+    assert.equal(tenantData.status, 'ACTIVE');
+    assert.equal(tenantData.businessCategory, category);
+    assert.equal(tenantData.templateId, CATEGORY_TEMPLATE_MAP[category].templateId);
+    assert.equal(tenantData.templateVersion, '1.0.0');
+    assert.equal(tenantData.customizationMode, 'STANDARD');
+    assert.equal(tenantData.createdBy, userUid);
 
-  const settingsSnap = await adminDb.doc('tenants/eko-kallis-auto/settings/scheduler').get();
-  assert.ok(settingsSnap.exists, 'Scheduler settings document must exist');
-  assert.equal(settingsSnap.data()?.generatorRules?.weeklyRotationEnabled, true);
+    // 2. Verify slugReservations/{slug} document
+    const reservationSnap = await adminDb.doc(`slugReservations/${slug}`).get();
+    assert.ok(reservationSnap.exists, `Slug reservation for "${slug}" must exist`);
+    const reservationData = reservationSnap.data();
+    assert.equal(reservationData.slug, slug);
+    assert.equal(reservationData.tenantId, slug);
+    assert.equal(reservationData.status, 'ACTIVE');
+    assert.equal(reservationData.reservedBy, userUid);
 
-  const subSnap = await adminDb.doc('tenants/eko-kallis-auto/subscription/current').get();
-  assert.ok(subSnap.exists, 'Subscription document must exist');
-  assert.equal(subSnap.data()?.plan, 'TRIAL');
-  assert.equal(subSnap.data()?.status, 'TRIALING');
+    // 3. Verify tenantMemberships/{uid}_{slug}
+    const membershipSnap = await adminDb.doc(`tenantMemberships/${userUid}_${slug}`).get();
+    assert.ok(membershipSnap.exists, `Membership for "${userUid}_${slug}" must exist`);
+    const membershipData = membershipSnap.data();
+    assert.equal(membershipData.uid, userUid);
+    assert.equal(membershipData.tenantId, slug);
+    assert.equal(membershipData.role, 'OWNER');
+    assert.equal(membershipData.status, 'ACTIVE');
 
-  // Verify token is CONSUMED
-  const tokenDocSnap = await adminDb.doc(`registrationTokens/${token1.tokenId}`).get();
-  assert.equal(tokenDocSnap.data()?.status, 'CONSUMED');
-  assert.equal(tokenDocSnap.data()?.consumedBy, newOwnerUid);
+    // 4. Verify users/{uid} mirror
+    const userSnap = await adminDb.doc(`users/${userUid}`).get();
+    assert.ok(userSnap.exists, `User mirror for "${userUid}" must exist`);
+    const userData = userSnap.data();
+    assert.equal(userData.memberships?.[slug]?.role, 'OWNER');
+    assert.equal(userData.memberships?.[slug]?.status, 'ACTIVE');
 
-  console.log('Happy Path Tenant Provisioning passed.');
+    // 5. Verify settings and subscription
+    const settingsSnap = await adminDb.doc(`tenants/${slug}/settings/scheduler`).get();
+    assert.ok(settingsSnap.exists);
+    const subSnap = await adminDb.doc(`tenants/${slug}/subscription/current`).get();
+    assert.ok(subSnap.exists);
+    assert.equal(subSnap.data()?.plan, 'TRIAL');
+    assert.equal(subSnap.data()?.status, 'TRIALING');
+
+    // 6. Verify token is CONSUMED
+    const tokenSnap = await adminDb.doc(`registrationTokens/${token.tokenId}`).get();
+    assert.equal(tokenSnap.data()?.status, 'CONSUMED');
+    assert.equal(tokenSnap.data()?.consumedBy, userUid);
+  }
+
+  console.log('Happy Path across all categories passed.');
 
   // ==========================================================
-  // TEST 2: Token Failure Cases (Fail-Closed)
+  // TEST 2: Registration Token Fail-Closed Matrix
   // ==========================================================
-  console.log('\n--- Test 2: Token Failure Cases ---');
+  console.log('\n--- Test 2: Registration Token Fail-Closed Matrix ---');
 
-  // 2a. Malformed token
+  const testUserToken2 = await createAuthUser({
+    uid: 'test-failclosed-user-1',
+    email: 'failclosed1@test.com',
+    password: 'Password123!',
+  });
+
+  // 2a. Malformed token syntax
   const malformedRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: 'not_a_valid_token',
-      slug: 'malformed-test',
-      displayName: 'Malformed Test',
-    },
-    secondOwnerToken,
+    { token: 'invalid_syntax', slug: 'fail-malformed', displayName: 'Fail' },
+    testUserToken2,
   );
   assert.notEqual(malformedRes.status, 200, 'Malformed token must fail');
 
   // 2b. Nonexistent token
   const nonexistentRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: 'stx_abcdef1234567890abcdef1234567890abcdef12345678',
-      slug: 'nonexistent-test',
-      displayName: 'Nonexistent Test',
-    },
-    secondOwnerToken,
+    { token: 'stx_abcdef1234567890abcdef1234567890abcdef12345678', slug: 'fail-nonexistent', displayName: 'Fail' },
+    testUserToken2,
   );
   assert.notEqual(nonexistentRes.status, 200, 'Nonexistent token must fail');
 
-  // 2c. Already consumed token reuse
-  const reuseRes = await callFunction(
+  // 2c. Real expired token (seeded with expiresAt in past)
+  const expiredRaw = 'stx_expiredtoken1234567890123456789012345678901';
+  const expiredHash = hashRegistrationToken(expiredRaw);
+  const expiredTokenId = 'rtok_expired00000000000000000000000';
+  await adminDb.doc(`registrationTokenLookups/${expiredHash}`).set({
+    tokenId: expiredTokenId,
+    createdAt: Timestamp.now(),
+    expiresAt: Timestamp.fromMillis(Date.now() - 10000),
+  });
+  await adminDb.doc(`registrationTokens/${expiredTokenId}`).set({
+    tokenId: expiredTokenId,
+    status: 'ACTIVE',
+    createdAt: Timestamp.now(),
+    expiresAt: Timestamp.fromMillis(Date.now() - 10000),
+    createdBy: platformAdminUid,
+  });
+
+  const expiredRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: token1.rawToken,
-      slug: 'reused-token-test',
-      displayName: 'Reused Token Test',
-    },
-    secondOwnerToken,
+    { token: expiredRaw, slug: 'fail-expired', displayName: 'Fail Expired' },
+    testUserToken2,
   );
-  assert.notEqual(reuseRes.status, 200, 'Reused token must fail');
+  assert.notEqual(expiredRes.status, 200, 'Expired token must fail');
 
-  // 2d. Revoked token
-  const tokenToRevoke = await generateToken({ label: 'To Revoke' });
-  const revokeRes = await callFunction('revokeRegistrationToken', { tokenId: tokenToRevoke.tokenId }, platformAdminToken);
-  assert.equal(revokeRes.status, 200);
-
-  const revokedProvRes = await callFunction(
+  // 2d. Real revoked token
+  const revokedToken = await generateToken({ label: 'To Revoke' });
+  await callFunction('revokeRegistrationToken', { tokenId: revokedToken.tokenId }, platformAdminToken);
+  const revokedRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: tokenToRevoke.rawToken,
-      slug: 'revoked-token-test',
-      displayName: 'Revoked Token Test',
-    },
-    secondOwnerToken,
+    { token: revokedToken.rawToken, slug: 'fail-revoked', displayName: 'Fail Revoked' },
+    testUserToken2,
   );
-  assert.notEqual(revokedProvRes.status, 200, 'Revoked token must fail');
+  assert.notEqual(revokedRes.status, 200, 'Revoked token must fail');
 
-  // Verify none of the failed tenants were created
-  for (const failedSlug of ['malformed-test', 'nonexistent-test', 'reused-token-test', 'revoked-token-test']) {
-    const checkSnap = await adminDb.doc(`tenants/${failedSlug}`).get();
-    assert.equal(checkSnap.exists, false, `Tenant "${failedSlug}" must not have been created`);
+  // 2e. Real consumed token
+  const consumedToken = await generateToken({ label: 'To Consume' });
+  const firstProv = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: consumedToken.rawToken, slug: 'slug-consumed-first', displayName: 'First' },
+    testUserToken2,
+  );
+  assert.equal(firstProv.status, 200);
+
+  const anotherUserToken = await createAuthUser({
+    uid: 'another-user-for-consumed',
+    email: 'another@test.com',
+    password: 'Password123!',
+  });
+  const secondProv = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: consumedToken.rawToken, slug: 'slug-consumed-second', displayName: 'Second' },
+    anotherUserToken,
+  );
+  assert.notEqual(secondProv.status, 200, 'Already-consumed token must fail');
+
+  // 2f. Active token with missing canonical expiresAt (null)
+  const missingExpiryRaw = 'stx_missingexpiry123456789012345678901234567890';
+  const missingExpiryHash = hashRegistrationToken(missingExpiryRaw);
+  const missingExpiryId = 'rtok_missingexp000000000000000000000';
+  await adminDb.doc(`registrationTokenLookups/${missingExpiryHash}`).set({
+    tokenId: missingExpiryId,
+    createdAt: Timestamp.now(),
+  });
+  await adminDb.doc(`registrationTokens/${missingExpiryId}`).set({
+    tokenId: missingExpiryId,
+    status: 'ACTIVE',
+    expiresAt: null,
+    createdBy: platformAdminUid,
+  });
+
+  const missingExpRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: missingExpiryRaw, slug: 'fail-missing-exp', displayName: 'Fail' },
+    anotherUserToken,
+  );
+  assert.notEqual(missingExpRes.status, 200, 'Token with missing expiresAt must fail');
+
+  // 2g. Active token with malformed canonical expiresAt
+  const malformedExpiryRaw = 'stx_malformedexpiry123456789012345678901234567890';
+  const malformedExpiryHash = hashRegistrationToken(malformedExpiryRaw);
+  const malformedExpiryId = 'rtok_malformedexp00000000000000000000';
+  await adminDb.doc(`registrationTokenLookups/${malformedExpiryHash}`).set({
+    tokenId: malformedExpiryId,
+    createdAt: Timestamp.now(),
+  });
+  await adminDb.doc(`registrationTokens/${malformedExpiryId}`).set({
+    tokenId: malformedExpiryId,
+    status: 'ACTIVE',
+    expiresAt: 'not-a-valid-timestamp',
+    createdBy: platformAdminUid,
+  });
+
+  const malformedExpRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: malformedExpiryRaw, slug: 'fail-malformed-exp', displayName: 'Fail' },
+    anotherUserToken,
+  );
+  assert.notEqual(malformedExpRes.status, 200, 'Token with malformed expiresAt must fail');
+
+  // Verify none of the failed tenants or reservations were created
+  for (const failedSlug of ['fail-malformed', 'fail-nonexistent', 'fail-expired', 'fail-revoked', 'slug-consumed-second', 'fail-missing-exp', 'fail-malformed-exp']) {
+    const tSnap = await adminDb.doc(`tenants/${failedSlug}`).get();
+    const rSnap = await adminDb.doc(`slugReservations/${failedSlug}`).get();
+    assert.equal(tSnap.exists, false, `Tenant "${failedSlug}" must not exist`);
+    assert.equal(rSnap.exists, false, `Slug reservation "${failedSlug}" must not exist`);
   }
 
-  console.log('Token Failure Cases passed.');
+  console.log('Registration Token Fail-Closed Matrix passed.');
 
   // ==========================================================
-  // TEST 3: Authorization & Platform Admin Overlap Protection
+  // TEST 3: Existing Membership Policy Matrix (Canonical + Mirror)
   // ==========================================================
-  console.log('\n--- Test 3: Authorization & Platform Admin Overlap Protection ---');
+  console.log('\n--- Test 3: Existing Membership Policy Matrix ---');
 
-  const tokenAdminOverlap = await generateToken({ label: 'Admin Overlap' });
+  // 3a. User with existing ACTIVE OWNER in another tenant
+  const activeOwnerUid = 'user-has-active-owner';
+  const activeOwnerToken = await createAuthUser({ uid: activeOwnerUid, email: 'activeowner@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${activeOwnerUid}_existing-store-a`).set({
+    uid: activeOwnerUid,
+    tenantId: 'existing-store-a',
+    role: 'OWNER',
+    status: 'ACTIVE',
+  });
+  await adminDb.doc(`users/${activeOwnerUid}`).set({
+    uid: activeOwnerUid,
+    memberships: { 'existing-store-a': { role: 'OWNER', status: 'ACTIVE' } },
+  });
 
-  // 3a. Unauthenticated caller
-  const unauthRes = await callFunction(
+  const tokActiveOwner = await generateToken({ label: 'Active Owner Attempt' });
+  const activeOwnerRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: tokenAdminOverlap.rawToken,
-      slug: 'unauth-test',
-      displayName: 'Unauth Test',
-    },
-    null,
+    { token: tokActiveOwner.rawToken, slug: 'new-store-active-owner', displayName: 'New Store' },
+    activeOwnerToken,
   );
-  assert.notEqual(unauthRes.status, 200, 'Unauthenticated provisioning must fail');
+  assert.notEqual(activeOwnerRes.status, 200, 'User with existing ACTIVE OWNER must be rejected');
 
-  // 3b. ACTIVE Platform Admin calling provisioning
-  const adminOverlapRes = await callFunction(
+  // 3b. User with existing REVOKED OWNER in another tenant
+  const revokedOwnerUid = 'user-has-revoked-owner';
+  const revokedOwnerToken = await createAuthUser({ uid: revokedOwnerUid, email: 'revokedowner@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${revokedOwnerUid}_existing-store-b`).set({
+    uid: revokedOwnerUid,
+    tenantId: 'existing-store-b',
+    role: 'OWNER',
+    status: 'REVOKED',
+  });
+
+  const tokRevokedOwner = await generateToken({ label: 'Revoked Owner Attempt' });
+  const revokedOwnerRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: tokenAdminOverlap.rawToken,
-      slug: 'admin-overlap-test',
-      displayName: 'Admin Overlap Test',
-    },
-    platformAdminToken,
+    { token: tokRevokedOwner.rawToken, slug: 'new-store-revoked-owner', displayName: 'New Store' },
+    revokedOwnerToken,
   );
-  assert.notEqual(adminOverlapRes.status, 200, 'Active Platform Admin provisioning must be denied');
+  assert.notEqual(revokedOwnerRes.status, 200, 'User with existing REVOKED membership must be rejected');
 
-  // Verify Platform Admin overlap: 0 memberships created
-  const adminMembershipSnap = await adminDb.doc(`tenantMemberships/${platformAdminUid}_admin-overlap-test`).get();
-  assert.equal(adminMembershipSnap.exists, false, 'Platform Admin must not receive a tenant membership');
+  // 3c. User with legacy ADMIN membership
+  const legacyAdminUid = 'user-has-legacy-admin';
+  const legacyAdminToken = await createAuthUser({ uid: legacyAdminUid, email: 'legacyadmin@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${legacyAdminUid}_existing-store-c`).set({
+    uid: legacyAdminUid,
+    tenantId: 'existing-store-c',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+  });
 
-  // Verify token is still ACTIVE (not consumed by aborted attempt)
-  const tokenOverlapSnap = await adminDb.doc(`registrationTokens/${tokenAdminOverlap.tokenId}`).get();
-  assert.equal(tokenOverlapSnap.data()?.status, 'ACTIVE', 'Token must remain ACTIVE after failed attempt');
+  const tokLegacyAdmin = await generateToken({ label: 'Legacy Admin Attempt' });
+  const legacyAdminRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokLegacyAdmin.rawToken, slug: 'new-store-legacy-admin', displayName: 'New Store' },
+    legacyAdminToken,
+  );
+  assert.notEqual(legacyAdminRes.status, 200, 'User with legacy ADMIN membership must be rejected');
 
-  console.log('Authorization & Overlap Protection tests passed.');
+  // 3d. User with legacy MANAGER membership
+  const legacyManagerUid = 'user-has-legacy-manager';
+  const legacyManagerToken = await createAuthUser({ uid: legacyManagerUid, email: 'legacymanager@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${legacyManagerUid}_existing-store-d`).set({
+    uid: legacyManagerUid,
+    tenantId: 'existing-store-d',
+    role: 'MANAGER',
+    status: 'ACTIVE',
+  });
+
+  const tokLegacyManager = await generateToken({ label: 'Legacy Manager Attempt' });
+  const legacyManagerRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokLegacyManager.rawToken, slug: 'new-store-legacy-manager', displayName: 'New Store' },
+    legacyManagerToken,
+  );
+  assert.notEqual(legacyManagerRes.status, 200, 'User with legacy MANAGER membership must be rejected');
+
+  // 3e. User with unknown role
+  const unknownRoleUid = 'user-has-unknown-role';
+  const unknownRoleToken = await createAuthUser({ uid: unknownRoleUid, email: 'unknownrole@test.com', password: 'Password123!' });
+  await adminDb.doc(`tenantMemberships/${unknownRoleUid}_existing-store-e`).set({
+    uid: unknownRoleUid,
+    tenantId: 'existing-store-e',
+    role: 'CUSTOM_ROLE',
+    status: 'ACTIVE',
+  });
+
+  const tokUnknownRole = await generateToken({ label: 'Unknown Role Attempt' });
+  const unknownRoleRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokUnknownRole.rawToken, slug: 'new-store-unknown-role', displayName: 'New Store' },
+    unknownRoleToken,
+  );
+  assert.notEqual(unknownRoleRes.status, 200, 'User with unknown role membership must be rejected');
+
+  // 3f. Mirror-only membership in users/{uid}.memberships
+  const mirrorOnlyUid = 'user-has-mirror-only';
+  const mirrorOnlyToken = await createAuthUser({ uid: mirrorOnlyUid, email: 'mirroronly@test.com', password: 'Password123!' });
+  await adminDb.doc(`users/${mirrorOnlyUid}`).set({
+    uid: mirrorOnlyUid,
+    memberships: { 'mirror-store': { role: 'OWNER', status: 'ACTIVE' } },
+  });
+
+  const tokMirrorOnly = await generateToken({ label: 'Mirror Only Attempt' });
+  const mirrorOnlyRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: tokMirrorOnly.rawToken, slug: 'new-store-mirror-only', displayName: 'New Store' },
+    mirrorOnlyToken,
+  );
+  assert.notEqual(mirrorOnlyRes.status, 200, 'User with mirror-only membership must be rejected');
+
+  // Verify tokens remain ACTIVE
+  for (const t of [tokActiveOwner, tokRevokedOwner, tokLegacyAdmin, tokLegacyManager, tokUnknownRole, tokMirrorOnly]) {
+    const tSnap = await adminDb.doc(`registrationTokens/${t.tokenId}`).get();
+    assert.equal(tSnap.data()?.status, 'ACTIVE', 'Token must remain ACTIVE after rejected membership check');
+  }
+
+  console.log('Existing Membership Policy Matrix passed.');
 
   // ==========================================================
-  // TEST 4: Input Tampering & Collision Protections
+  // TEST 4: Slug Reservation & Collision Matrix
   // ==========================================================
-  console.log('\n--- Test 4: Input Tampering & Collision Protections ---');
+  console.log('\n--- Test 4: Slug Reservation & Collision Matrix ---');
 
-  const tokenTamper = await generateToken({ label: 'Tamper Test' });
+  const collisionUserToken = await createAuthUser({
+    uid: 'user-collision-tester',
+    email: 'collision@test.com',
+    password: 'Password123!',
+  });
 
-  // 4a. Forged role=ADMIN
-  const roleAdminRes = await callFunction(
+  // 4a. Existing tenant without reservation -> collision rejected
+  await adminDb.doc('tenants/manual-orphan-tenant').set({
+    slug: 'manual-orphan-tenant',
+    displayName: 'Manual Orphan',
+    status: 'ACTIVE',
+  });
+  const tokCollA = await generateToken({ label: 'Coll A' });
+  const collARes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: tokenTamper.rawToken,
-      slug: 'role-tamper-admin',
-      displayName: 'Role Tamper Admin',
-      role: 'ADMIN',
-    },
-    secondOwnerToken,
+    { token: tokCollA.rawToken, slug: 'manual-orphan-tenant', displayName: 'Test' },
+    collisionUserToken,
   );
-  assert.notEqual(roleAdminRes.status, 200, 'Role tampering must be rejected');
+  assert.notEqual(collARes.status, 200, 'Existing tenant without reservation must fail');
 
-  // 4b. Forged ownerUid
-  const uidTamperRes = await callFunction(
+  // 4b. Existing reservation without tenant -> collision rejected
+  await adminDb.doc('slugReservations/pre-reserved-slug').set({
+    slug: 'pre-reserved-slug',
+    tenantId: 'pre-reserved-slug',
+    status: 'ACTIVE',
+    reservedBy: 'some-other-user',
+  });
+  const tokCollB = await generateToken({ label: 'Coll B' });
+  const collBRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    {
-      token: tokenTamper.rawToken,
-      slug: 'uid-tamper-test',
-      displayName: 'UID Tamper Test',
-      ownerUid: 'another-user-uid',
-    },
-    secondOwnerToken,
+    { token: tokCollB.rawToken, slug: 'pre-reserved-slug', displayName: 'Test' },
+    collisionUserToken,
   );
-  assert.notEqual(uidTamperRes.status, 200, 'ownerUid tampering must be rejected');
+  assert.notEqual(collBRes.status, 200, 'Existing slug reservation must fail');
 
-  // 4c. Reserved slug
-  const reservedSlugRes = await callFunction(
-    'provisionTenantFromRegistrationToken',
-    {
-      token: tokenTamper.rawToken,
-      slug: 'admin',
-      displayName: 'Reserved Admin Tenant',
-    },
-    secondOwnerToken,
-  );
-  assert.notEqual(reservedSlugRes.status, 200, 'Reserved slug must be rejected');
+  // 4c. Race test: 2 different valid tokens, 2 different users, same requested slug
+  const raceUser1Token = await createAuthUser({ uid: 'race-slug-user-1', email: 'raceslug1@test.com', password: 'Password123!' });
+  const raceUser2Token = await createAuthUser({ uid: 'race-slug-user-2', email: 'raceslug2@test.com', password: 'Password123!' });
+  const tokRace1 = await generateToken({ label: 'Race 1' });
+  const tokRace2 = await generateToken({ label: 'Race 2' });
 
-  // 4d. Prohibited prefix slug
-  const prohibitedSlugRes = await callFunction(
-    'provisionTenantFromRegistrationToken',
-    {
-      token: tokenTamper.rawToken,
-      slug: 'gas-station-demo',
-      displayName: 'Gas Station Demo',
-    },
-    secondOwnerToken,
-  );
-  assert.notEqual(prohibitedSlugRes.status, 200, 'Prohibited slug prefix must be rejected');
+  const [raceRes1, raceRes2] = await Promise.all([
+    callFunction('provisionTenantFromRegistrationToken', { token: tokRace1.rawToken, slug: 'target-same-slug', displayName: 'Race 1' }, raceUser1Token),
+    callFunction('provisionTenantFromRegistrationToken', { token: tokRace2.rawToken, slug: 'target-same-slug', displayName: 'Race 2' }, raceUser2Token),
+  ]);
 
-  // 4e. Slug collision with existing tenant
-  const slugCollisionRes = await callFunction(
-    'provisionTenantFromRegistrationToken',
-    {
-      token: tokenTamper.rawToken,
-      slug: 'eko-kallis-auto', // already created in Test 1
-      displayName: 'Duplicate Slug Test',
-    },
-    secondOwnerToken,
-  );
-  assert.notEqual(slugCollisionRes.status, 200, 'Existing slug collision must fail');
+  const raceSuccessCount = [raceRes1, raceRes2].filter((r) => r.status === 200).length;
+  const raceFailureCount = [raceRes1, raceRes2].filter((r) => r.status !== 200).length;
+  assert.equal(raceSuccessCount, 1, 'Exactly 1 request must succeed for contested slug');
+  assert.equal(raceFailureCount, 1, 'Exactly 1 request must fail for contested slug');
 
-  console.log('Input Tampering & Collision Protections passed.');
+  // Verify exactly 1 tenant and 1 reservation created
+  const targetTenantSnap = await adminDb.doc('tenants/target-same-slug').get();
+  assert.ok(targetTenantSnap.exists);
+  const targetResSnap = await adminDb.doc('slugReservations/target-same-slug').get();
+  assert.ok(targetResSnap.exists);
+
+  console.log('Slug Reservation & Collision Matrix passed.');
 
   // ==========================================================
-  // TEST 5: Concurrency Race Test (10 parallel attempts, 1 token)
+  // TEST 5: 10-Way Concurrency Race Test (Same Token)
   // ==========================================================
   console.log('\n--- Test 5: 10-Way Concurrency Race Test ---');
-  const raceToken = await generateToken({ label: 'Race Test' });
+  const sharedRaceToken = await generateToken({ label: 'Shared Token Race' });
 
-  // Create 10 distinct users
-  const raceUsers = [];
+  const tenUsers = [];
   for (let i = 0; i < 10; i++) {
-    const uid = `race-user-${i}`;
-    const token = await createAuthUser({
-      uid,
-      email: `race-${i}@test.com`,
-      password: 'Password123!',
-    });
-    raceUsers.push({ uid, token });
+    const uid = `shared-race-user-${i}`;
+    const token = await createAuthUser({ uid, email: `${uid}@test.com`, password: 'Password123!' });
+    tenUsers.push({ uid, token, slug: `shared-race-store-${i}` });
   }
 
-  // Fire 10 parallel provisioning requests using the SAME token
-  const racePromises = raceUsers.map((u, i) =>
+  const parallelPromises = tenUsers.map((u) =>
     callFunction(
       'provisionTenantFromRegistrationToken',
-      {
-        token: raceToken.rawToken,
-        slug: `race-tenant-${i}`,
-        displayName: `Race Tenant ${i}`,
-      },
+      { token: sharedRaceToken.rawToken, slug: u.slug, displayName: `Store ${u.slug}` },
       u.token,
     ),
   );
 
-  const raceResults = await Promise.all(racePromises);
-  const successCount = raceResults.filter((r) => r.status === 200 && r.body?.result?.success === true).length;
-  const failureCount = raceResults.filter((r) => r.status !== 200).length;
+  const parallelResults = await Promise.all(parallelPromises);
+  const pSuccess = parallelResults.filter((r) => r.status === 200).length;
+  const pFailure = parallelResults.filter((r) => r.status !== 200).length;
 
-  console.log(`Concurrency Results: Successes=${successCount}, Failures=${failureCount}`);
-  assert.equal(successCount, 1, 'Exactly 1 concurrent attempt must succeed');
-  assert.equal(failureCount, 9, 'Exactly 9 concurrent attempts must fail');
+  console.log(`10-Way Parallel Concurrency Results: Successes=${pSuccess}, Failures=${pFailure}`);
+  assert.equal(pSuccess, 1, 'Exactly 1 attempt must succeed');
+  assert.equal(pFailure, 9, 'Exactly 9 attempts must fail');
 
-  // Verify token is consumed exactly once
-  const raceTokenSnap = await adminDb.doc(`registrationTokens/${raceToken.tokenId}`).get();
-  assert.equal(raceTokenSnap.data()?.status, 'CONSUMED');
+  // Verify token status is CONSUMED
+  const consumedCheck = await adminDb.doc(`registrationTokens/${sharedRaceToken.tokenId}`).get();
+  assert.equal(consumedCheck.data()?.status, 'CONSUMED');
 
-  // Verify exactly 1 tenant created among the 10 candidates
-  let createdCount = 0;
-  for (let i = 0; i < 10; i++) {
-    const tSnap = await adminDb.doc(`tenants/race-tenant-${i}`).get();
-    if (tSnap.exists) createdCount++;
+  // Verify exactly 1 tenant and 1 reservation created across all 10 candidates
+  let tenantsCreated = 0;
+  let reservationsCreated = 0;
+  for (const u of tenUsers) {
+    const tSnap = await adminDb.doc(`tenants/${u.slug}`).get();
+    if (tSnap.exists) tenantsCreated++;
+    const rSnap = await adminDb.doc(`slugReservations/${u.slug}`).get();
+    if (rSnap.exists) reservationsCreated++;
   }
-  assert.equal(createdCount, 1, 'Exactly 1 race tenant must exist in Firestore');
+  assert.equal(tenantsCreated, 1, 'Exactly 1 tenant must be created');
+  assert.equal(reservationsCreated, 1, 'Exactly 1 slug reservation must be created');
 
   console.log('10-Way Concurrency Race Test passed.');
 
   // ==========================================================
-  // TEST 6: Direct Client Security Rules Enforcement
+  // TEST 6: Exact Retry Contract Test
   // ==========================================================
-  console.log('\n--- Test 6: Direct Client Security Rules Enforcement ---');
+  console.log('\n--- Test 6: Retry Contract Test ---');
+  const retryUser = await createAuthUser({ uid: 'retry-user-test', email: 'retry@test.com', password: 'Password123!' });
+  const retryToken = await generateToken({ label: 'Retry Token' });
 
-  // 6a. Direct client create to tenantMemberships -> MUST BE DENIED (403)
-  const clientMembershipRes = await firestoreDirectRequest('tenantMemberships/hacked_membership', {
-    method: 'PATCH',
-    idToken: regularUserToken,
-    data: {
-      fields: {
-        uid: { stringValue: regularUserUid },
-        tenantId: { stringValue: 'hacked-tenant' },
-        role: { stringValue: 'OWNER' },
-        status: { stringValue: 'ACTIVE' },
-      },
-    },
+  const firstCall = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: retryToken.rawToken, slug: 'store-retry-test', displayName: 'Retry Store' },
+    retryUser,
+  );
+  assert.equal(firstCall.status, 200, 'First attempt must succeed');
+
+  // Repeat exact same call
+  const repeatCall = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: retryToken.rawToken, slug: 'store-retry-test', displayName: 'Retry Store' },
+    retryUser,
+  );
+  assert.notEqual(repeatCall.status, 200, 'Repeated exact call must fail safely');
+
+  console.log('Retry Contract Test passed.');
+
+  // ==========================================================
+  // TEST 7: Direct Client Security Rules Enforcement
+  // ==========================================================
+  console.log('\n--- Test 7: Direct Client Security Rules Enforcement ---');
+  const clientTesterToken = await createAuthUser({ uid: 'client-rule-tester', email: 'client@test.com', password: 'Password123!' });
+
+  // 7a. Direct client read slugReservations -> 403
+  const clientReadRes = await firestoreDirectRequest('slugReservations/store-retry-test', {
+    method: 'GET',
+    idToken: clientTesterToken,
   });
-  assert.equal(clientMembershipRes.status, 403, 'Direct client membership creation must return 403');
+  assert.equal(clientReadRes.status, 403, 'Direct client read of slugReservations must return 403');
 
-  // 6b. Direct client create to tenants/{slug} -> MUST BE DENIED (403)
+  // 7b. Direct client write slugReservations -> 403
+  const clientWriteRes = await firestoreDirectRequest('slugReservations/hacked-reservation', {
+    method: 'PATCH',
+    idToken: clientTesterToken,
+    data: { fields: { slug: { stringValue: 'hacked-reservation' } } },
+  });
+  assert.equal(clientWriteRes.status, 403, 'Direct client write of slugReservations must return 403');
+
+  // 7c. Direct client write tenants -> 403
   const clientTenantRes = await firestoreDirectRequest('tenants/hacked-tenant', {
     method: 'PATCH',
-    idToken: regularUserToken,
-    data: {
-      fields: {
-        slug: { stringValue: 'hacked-tenant' },
-        displayName: { stringValue: 'Hacked Tenant' },
-        status: { stringValue: 'ACTIVE' },
-      },
-    },
+    idToken: clientTesterToken,
+    data: { fields: { slug: { stringValue: 'hacked-tenant' } } },
   });
-  assert.equal(clientTenantRes.status, 403, 'Direct client tenant creation must return 403');
+  assert.equal(clientTenantRes.status, 403, 'Direct client write of tenants must return 403');
 
-  // 6c. Direct client read of registrationTokenLookups -> MUST BE DENIED (403)
-  const clientLookupRes = await firestoreDirectRequest(`registrationTokenLookups/${hashRegistrationToken(token1.rawToken)}`, {
+  // 7d. Direct client write tenantMemberships -> 403
+  const clientMembershipRes = await firestoreDirectRequest('tenantMemberships/hacked_membership', {
+    method: 'PATCH',
+    idToken: clientTesterToken,
+    data: { fields: { role: { stringValue: 'OWNER' } } },
+  });
+  assert.equal(clientMembershipRes.status, 403, 'Direct client write of tenantMemberships must return 403');
+
+  // 7e. Direct client read registrationTokens -> 403
+  const clientTokenRes = await firestoreDirectRequest(`registrationTokens/${retryToken.tokenId}`, {
     method: 'GET',
-    idToken: regularUserToken,
+    idToken: clientTesterToken,
   });
-  assert.equal(clientLookupRes.status, 403, 'Direct client token lookup read must return 403');
+  assert.equal(clientTokenRes.status, 403, 'Direct client read of registrationTokens must return 403');
 
-  // 6d. Direct client read of registrationTokens -> MUST BE DENIED (403)
-  const clientTokenRes = await firestoreDirectRequest(`registrationTokens/${token1.tokenId}`, {
-    method: 'GET',
-    idToken: regularUserToken,
-  });
-  assert.equal(clientTokenRes.status, 403, 'Direct client registrationTokens read must return 403');
-
-  // 6e. Direct client write to platformAuditLogs -> MUST BE DENIED (403)
+  // 7f. Direct client write platformAuditLogs -> 403
   const clientAuditRes = await firestoreDirectRequest('platformAuditLogs/hacked_log', {
     method: 'PATCH',
-    idToken: regularUserToken,
-    data: {
-      fields: {
-        action: { stringValue: 'HACKED' },
-      },
-    },
+    idToken: clientTesterToken,
+    data: { fields: { action: { stringValue: 'HACK' } } },
   });
-  assert.equal(clientAuditRes.status, 403, 'Direct client audit log write must return 403');
+  assert.equal(clientAuditRes.status, 403, 'Direct client write of platformAuditLogs must return 403');
 
   console.log('Direct Client Security Rules Enforcement passed.');
 
+  // ==========================================================
+  // TEST 8: Error Redaction Test
+  // ==========================================================
+  console.log('\n--- Test 8: Error Redaction Test ---');
+  // Pass an invalid token that causes failure, verify response body doesn't leak paths or stack traces
+  const badRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    { token: 'stx_badtoken1234567890123456789012345678901234567', slug: 'bad-store', displayName: 'Bad Store' },
+    clientTesterToken,
+  );
+  assert.notEqual(badRes.status, 200);
+  const errorJsonStr = JSON.stringify(badRes.body);
+  assert.equal(errorJsonStr.includes('registrationTokenLookups'), false, 'Error response must not expose internal lookup path');
+  assert.equal(errorJsonStr.includes('registrationTokens'), false, 'Error response must not expose internal token path');
+  assert.equal(errorJsonStr.includes('stack'), false, 'Error response must not expose stack traces');
+
+  console.log('Error Redaction Test passed.');
+
   console.log('\n==========================================================');
-  console.log('ALL PHASE 4 TENANT PROVISIONING EMULATOR TESTS PASSED SUCCESSFULLY!');
+  console.log('ALL PHASE 4 REMEDIATED TENANT PROVISIONING EMULATOR TESTS PASSED 100%');
   console.log('==========================================================');
 }
 

@@ -177,7 +177,7 @@ export default function LoginPage() {
           </button>
 
           <a
-            href="mailto:support@homelabshare.gr?subject=GasStation%20Shift%20Manager%20Support"
+            href="mailto:support@homelabshare.gr?subject=ShiftOryx%20Support"
             className="block rounded-2xl border border-slate-200 px-3 py-3 text-center text-sm font-black text-slate-700 hover:border-slate-300 hover:bg-slate-50"
           >
             Contact Support

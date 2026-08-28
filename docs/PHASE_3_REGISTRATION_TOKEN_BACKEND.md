@@ -1,10 +1,13 @@
 # ShiftOryx — Phase 3: Registration Token Backend
 
-**Status:** FINAL_IMPLEMENTATION_READY_FOR_MERGE_REVIEW  
-**Version:** 1.2.0 (Security Integrity Hardened)  
+**Status:** CLOSED  
+**Version:** 1.3.0 (Production Deployed)  
 **Phase Target:** Phase 3 Registration Token Backend  
 **Security Boundary:** Server-Side Cloud Functions & Firestore Rules  
-**Production Deployment:** STOPPED (Pre-deployment emulator verification stage)
+**Production Deployment:** COMPLETE (Deployed to gasstationproject-9dd89 on 2026-08-28)  
+**Deploy Source SHA:** `410f0aaf380062d699e86a2b19b2e0cd2036f42e`  
+**Active Firestore Ruleset:** `projects/gasstationproject-9dd89/rulesets/51bf31c1-87a3-47f8-964a-aea3c7e41bf0`  
+**Active Cloud Functions (7):** `cleanupAuthTickets`, `createAuthTicket`, `exchangeAuthTicket`, `generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`, `validateRegistrationToken` (Node.js 22, Gen 2, us-central1)
 
 ---
 

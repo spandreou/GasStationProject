@@ -47,6 +47,7 @@ The detailed audit contains 39 classified areas:
 - A short-lived Firebase auth-ticket broker foundation exists on Node.js 22 (Gen 2) with hashed tickets, exact-origin checks, transactional one-time consumption and custom-token exchange for `OWNER` only.
 - `platformAdmins/{uid}` is strictly decoupled from tenant ownership: active platform admins have 0 tenant memberships and cannot access tenant private data.
 - Production data remediation complete: BP Kallis pilot OWNER established (`IlyYsuAS3mYZ5CK8lYtp5NhIJBU2`), zero overlap with platform admin, zero legacy `ADMIN`/`MANAGER` memberships.
+- Phase 3 Registration Token Backend is fully implemented, verified, and deployed to production (`gasstationproject-9dd89`): high-entropy 256-bit tokens, opaque management IDs (`rtok_...`), secret SHA-256 lookup hash (`registrationTokenLookups`), zero plaintext token persistence, platform-admin-only management (`generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`), public rate-limited validation (`validateRegistrationToken`), atomic consumption primitive for tenant provisioning, fail-closed canonical expiry, and strict client deny-all Firestore rules (active ruleset: `51bf31c1-87a3-47f8-964a-aea3c7e41bf0`, 7 active Cloud Functions on Node.js 22).
 
 ## Partial Or Risky Capabilities
 

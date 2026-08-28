@@ -15,6 +15,7 @@ const EXPECTED_EXPORTS = [
   'exchangeAuthTicket',
   'generateRegistrationToken',
   'listRegistrationTokens',
+  'provisionTenantFromRegistrationToken',
   'revokeRegistrationToken',
   'validateRegistrationToken',
 ];

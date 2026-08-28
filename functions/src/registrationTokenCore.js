@@ -4,6 +4,7 @@ export const REGISTRATION_TOKEN_PREFIX = 'stx_';
 export const MANAGEMENT_TOKEN_ID_PREFIX = 'rtok_';
 export const TOKEN_FORMAT_REGEX = /^stx_[a-zA-Z0-9_-]{43,64}$/;
 export const MANAGEMENT_TOKEN_ID_REGEX = /^rtok_[a-f0-9]{32}$/;
+export const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F]/;
 
 export const ALLOWED_BUSINESS_CATEGORIES = Object.freeze([
   'FUEL_STATION',
@@ -28,6 +29,7 @@ export const MAX_TTL_HOURS = 720; // 30 days
 export const MAX_LABEL_LENGTH = 100;
 export const MAX_LIST_LIMIT = 100;
 export const DEFAULT_LIST_LIMIT = 25;
+export const MAX_CONSUMED_BY_LENGTH = 128;
 
 export function generateRawRegistrationToken() {
   const entropy = randomBytes(32).toString('base64url');
@@ -75,6 +77,7 @@ export function hashRegistrationToken(token) {
 export function extractExpiresAtMs(tokenData) {
   if (!tokenData || typeof tokenData !== 'object') return null;
 
+  // Canonical expiresAt source only (No expiresAtMs fallback!)
   if (tokenData.expiresAt) {
     if (typeof tokenData.expiresAt.toMillis === 'function') {
       const ms = tokenData.expiresAt.toMillis();
@@ -89,12 +92,6 @@ export function extractExpiresAtMs(tokenData) {
       const ms = tokenData.expiresAt.getTime();
       return Number.isInteger(ms) && ms > 0 ? ms : null;
     }
-  }
-
-  if (typeof tokenData.expiresAtMs === 'number') {
-    return Number.isInteger(tokenData.expiresAtMs) && tokenData.expiresAtMs > 0
-      ? tokenData.expiresAtMs
-      : null;
   }
 
   return null;
@@ -135,20 +132,21 @@ function isPlainObject(val) {
 }
 
 export function validateTokenGenerationInput(input) {
-  if (!isPlainObject(input)) {
+  if (input !== undefined && input !== null && !isPlainObject(input)) {
     throw new Error('invalid-input-object');
   }
 
+  const safeInput = input || {};
   const allowedKeys = new Set(['expiresInHours', 'label', 'businessCategoryHint']);
-  for (const key of Object.keys(input)) {
+  for (const key of Object.keys(safeInput)) {
     if (!allowedKeys.has(key)) {
       throw new Error(`unexpected-input-field-${key}`);
     }
   }
 
   let expiresInHours = DEFAULT_TTL_HOURS;
-  if (input.expiresInHours !== undefined && input.expiresInHours !== null) {
-    const parsedHours = Number(input.expiresInHours);
+  if (safeInput.expiresInHours !== undefined && safeInput.expiresInHours !== null) {
+    const parsedHours = Number(safeInput.expiresInHours);
     if (!Number.isInteger(parsedHours) || parsedHours < MIN_TTL_HOURS || parsedHours > MAX_TTL_HOURS) {
       throw new Error(`invalid-expires-in-hours-must-be-integer-between-${MIN_TTL_HOURS}-and-${MAX_TTL_HOURS}`);
     }
@@ -156,11 +154,11 @@ export function validateTokenGenerationInput(input) {
   }
 
   let label = null;
-  if (input.label !== undefined && input.label !== null) {
-    if (typeof input.label !== 'string') {
+  if (safeInput.label !== undefined && safeInput.label !== null) {
+    if (typeof safeInput.label !== 'string') {
       throw new Error('invalid-label-must-be-string');
     }
-    const cleanLabel = input.label.trim();
+    const cleanLabel = safeInput.label.trim();
     if (cleanLabel.length > MAX_LABEL_LENGTH) {
       throw new Error(`invalid-label-exceeds-max-length-${MAX_LABEL_LENGTH}`);
     }
@@ -168,11 +166,11 @@ export function validateTokenGenerationInput(input) {
   }
 
   let businessCategoryHint = null;
-  if (input.businessCategoryHint !== undefined && input.businessCategoryHint !== null) {
-    if (typeof input.businessCategoryHint !== 'string') {
+  if (safeInput.businessCategoryHint !== undefined && safeInput.businessCategoryHint !== null) {
+    if (typeof safeInput.businessCategoryHint !== 'string') {
       throw new Error('invalid-business-category-hint-must-be-string');
     }
-    const cleanCategory = input.businessCategoryHint.trim().toUpperCase();
+    const cleanCategory = safeInput.businessCategoryHint.trim().toUpperCase();
     if (!ALLOWED_BUSINESS_CATEGORIES.includes(cleanCategory)) {
       throw new Error(`invalid-business-category-hint-must-be-one-of-${ALLOWED_BUSINESS_CATEGORIES.join(',')}`);
     }
@@ -213,11 +211,11 @@ export function validateTokenListInput(input) {
     if (typeof safeInput.startAfterCursor !== 'string') {
       throw new Error('invalid-cursor-must-be-string');
     }
-    const cleanCursor = safeInput.startAfterCursor.trim();
-    if (cleanCursor.length > 100) {
-      throw new Error('invalid-cursor-length');
+    const formatCheck = validateManagementTokenIdFormat(safeInput.startAfterCursor);
+    if (!formatCheck.valid) {
+      throw new Error('invalid-cursor-format-must-match-management-id');
     }
-    startAfterCursor = cleanCursor || null;
+    startAfterCursor = formatCheck.tokenId;
   }
 
   return { limit, startAfterCursor };
@@ -241,4 +239,21 @@ export function validateTokenRevokeInput(input) {
   }
 
   return { tokenId: formatCheck.tokenId };
+}
+
+export function validateConsumedByActor(consumedBy) {
+  if (typeof consumedBy !== 'string') {
+    throw new Error('invalid-consumed-by-must-be-string');
+  }
+  const clean = consumedBy.trim();
+  if (!clean) {
+    throw new Error('invalid-consumed-by-empty');
+  }
+  if (clean.length > MAX_CONSUMED_BY_LENGTH) {
+    throw new Error(`invalid-consumed-by-length-exceeds-${MAX_CONSUMED_BY_LENGTH}`);
+  }
+  if (CONTROL_CHARS_REGEX.test(clean)) {
+    throw new Error('invalid-consumed-by-contains-control-characters');
+  }
+  return clean;
 }

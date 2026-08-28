@@ -7,6 +7,7 @@ import {
   generateManagementTokenId,
   generateRawRegistrationToken,
   hashRegistrationToken,
+  validateConsumedByActor,
   validateRegistrationTokenFormat,
   validateTokenGenerationInput,
   validateTokenListInput,
@@ -71,12 +72,12 @@ export async function checkGlobalValidationRateLimit(db, nowMs = Date.now()) {
   });
 }
 
-export async function generateTokenService(db, { adminUid, expiresInHours, label, businessCategoryHint }) {
-  const validatedInput = validateTokenGenerationInput({
-    expiresInHours,
-    label,
-    businessCategoryHint,
-  });
+export async function generateTokenService(db, { adminUid, input }) {
+  if (!adminUid || typeof adminUid !== 'string') {
+    throw new HttpsError('unauthenticated', 'Απαιτείται ταυτοποίηση διαχειριστή.');
+  }
+
+  const validatedInput = validateTokenGenerationInput(input);
 
   const rawToken = generateRawRegistrationToken();
   const tokenHash = hashRegistrationToken(rawToken);
@@ -91,14 +92,12 @@ export async function generateTokenService(db, { adminUid, expiresInHours, label
   const auditRef = db.doc(`platformAuditLogs/${auditId}`);
 
   await db.runTransaction(async (transaction) => {
-    // 1. Create main management document
+    // 1. Create main management document (canonical expiresAt Timestamp only)
     transaction.set(tokenRef, {
       tokenId,
       status: 'ACTIVE',
       createdAt: FieldValue.serverTimestamp(),
-      createdAtMs: nowMs,
       expiresAt: Timestamp.fromMillis(expiresAtMs),
-      expiresAtMs,
       revokedAt: null,
       revokedBy: null,
       consumedAt: null,
@@ -135,16 +134,17 @@ export async function generateTokenService(db, { adminUid, expiresInHours, label
   };
 }
 
-export async function listTokensService(db, { limit, startAfterCursor }) {
-  const validated = validateTokenListInput({ limit, startAfterCursor });
+export async function listTokensService(db, { input }) {
+  const validated = validateTokenListInput(input);
 
   let query = db.collection('registrationTokens').orderBy('createdAt', 'desc').limit(validated.limit);
 
   if (validated.startAfterCursor) {
     const cursorDoc = await db.doc(`registrationTokens/${validated.startAfterCursor}`).get();
-    if (cursorDoc.exists) {
-      query = query.startAfter(cursorDoc);
+    if (!cursorDoc.exists) {
+      throw new HttpsError('invalid-argument', 'Invalid pagination cursor: token does not exist.');
     }
+    query = query.startAfter(cursorDoc);
   }
 
   const snapshot = await query.get();
@@ -157,8 +157,8 @@ export async function listTokensService(db, { limit, startAfterCursor }) {
     return {
       tokenId: docSnap.id,
       status,
-      createdAt: data.createdAt?.toMillis?.() || data.createdAtMs || null,
-      expiresAt: data.expiresAt?.toMillis?.() || data.expiresAtMs || null,
+      createdAt: data.createdAt?.toMillis?.() || null,
+      expiresAt: extractExpiresAtMs(data),
       revokedAt: data.revokedAt?.toMillis?.() || null,
       consumedAt: data.consumedAt?.toMillis?.() || null,
       label: data.label || null,
@@ -178,8 +178,12 @@ export async function listTokensService(db, { limit, startAfterCursor }) {
   };
 }
 
-export async function revokeTokenService(db, { adminUid, tokenId }) {
-  const validated = validateTokenRevokeInput({ tokenId });
+export async function revokeTokenService(db, { adminUid, input }) {
+  if (!adminUid || typeof adminUid !== 'string') {
+    throw new HttpsError('unauthenticated', 'Απαιτείται ταυτοποίηση διαχειριστή.');
+  }
+
+  const validated = validateTokenRevokeInput(input);
   const tokenRef = db.doc(`registrationTokens/${validated.tokenId}`);
   const auditId = randomUUID();
   const auditRef = db.doc(`platformAuditLogs/${auditId}`);
@@ -275,6 +279,8 @@ export async function validateTokenService(db, { rawToken }) {
 }
 
 export async function consumeRegistrationToken(transaction, { db, rawToken, consumedBy }) {
+  const cleanConsumedBy = validateConsumedByActor(consumedBy);
+
   const validation = validateRegistrationTokenFormat(rawToken);
   if (!validation.valid) {
     throw new Error('registration-token-invalid-format');
@@ -316,8 +322,6 @@ export async function consumeRegistrationToken(transaction, { db, rawToken, cons
   if (effectiveStatus !== 'ACTIVE') {
     throw new Error('registration-token-not-active');
   }
-
-  const cleanConsumedBy = String(consumedBy || 'system').trim();
 
   // Atomically update token to CONSUMED
   transaction.update(tokenRef, {

@@ -315,7 +315,7 @@ export const generateRegistrationToken = onCall(
     try {
       return await generateTokenService(db, {
         adminUid: uid,
-        ...(request.data || {}),
+        input: request.data,
       });
     } catch (err) {
       if (err instanceof HttpsError) throw err;
@@ -334,10 +334,12 @@ export const listRegistrationTokens = onCall(
     await assertActivePlatformAdmin(db, uid);
 
     try {
-      return await listTokensService(db, request.data || {});
+      return await listTokensService(db, {
+        input: request.data,
+      });
     } catch (err) {
       if (err instanceof HttpsError) throw err;
-      throw new HttpsError('internal', 'Αποτυχία ανάκτησης registration tokens.');
+      throw new HttpsError('invalid-argument', err.message || 'Αποτυχία ανάκτησης registration tokens.');
     }
   },
 );
@@ -354,7 +356,7 @@ export const revokeRegistrationToken = onCall(
     try {
       return await revokeTokenService(db, {
         adminUid: uid,
-        ...(request.data || {}),
+        input: request.data,
       });
     } catch (err) {
       if (err instanceof HttpsError) throw err;

@@ -1,7 +1,7 @@
 # ShiftOryx — Phase 3: Registration Token Backend
 
-**Status:** IMPLEMENTATION_READY_FOR_HUMAN_REVIEW  
-**Version:** 1.1.0 (Hardened Architecture)  
+**Status:** FINAL_IMPLEMENTATION_READY_FOR_MERGE_REVIEW  
+**Version:** 1.2.0 (Security Integrity Hardened)  
 **Phase Target:** Phase 3 Registration Token Backend  
 **Security Boundary:** Server-Side Cloud Functions & Firestore Rules  
 **Production Deployment:** STOPPED (Pre-deployment emulator verification stage)
@@ -10,31 +10,38 @@
 
 ## 1. Executive Summary
 
-Phase 3 implements the secure backend infrastructure for ShiftOryx Registration Tokens. Registration tokens provide a cryptographically secure, administrative mechanism to invite new tenant owners and provision initial business workspaces without exposing open self-registration endpoints.
+Phase 3 implements the secure backend infrastructure for ShiftOryx Registration Tokens. Registration tokens provide a cryptographically secure, platform-administrative mechanism to invite prospective tenant owners and provision initial business workspaces without exposing open self-registration endpoints.
 
 The implementation strictly satisfies all Phase 3 architectural, cryptographic, authorization, and isolation mandates:
-1. **High-Entropy Token Cryptography:** 256 bits of cryptographic entropy per token, prefixed with `stx_` and encoded using URL-safe Base64.
+1. **High-Entropy Token Cryptography:** 256 bits of cryptographic entropy per token (`crypto.randomBytes(32)`), prefixed with `stx_` and encoded using URL-safe Base64.
 2. **Identifier Separation (Opaque Management ID vs. Secret Lookup Hash):**
    - **Management Identifier (`tokenId`):** Opaque, non-secret random identifier formatted as `rtok_` + 32 hex chars (`crypto.randomBytes(16)`). Used exclusively in administrative APIs, UI listings, and audit trails.
    - **Secret Lookup Hash (`tokenHash`):** SHA-256 digest of the raw token. Stored strictly in an internal server-only collection (`registrationTokenLookups/{tokenHash}`). `tokenHash` is **never** exposed to clients, admin listings, public validators, or audit logs.
 3. **Zero Plaintext Token Persistence:** Raw tokens are returned exactly once to the generating platform administrator upon creation. No raw token is ever stored in Firestore.
-4. **Platform Admin Exclusivity:** Token generation, listing, and revocation are restricted exclusively to authenticated platform administrators with `status: ACTIVE` in `platformAdmins/{uid}`. Tenant `OWNER`s and unauthenticated users cannot manage tokens.
-5. **Fail-Closed Lifecycle & Status Derivation:**
+4. **Immutable Authenticated Actor Integrity:**
+   - Administrative actor identity (`adminUid`, `actorUid`, `createdBy`, `revokedBy`) is strictly derived from `request.auth.uid`.
+   - Caller-supplied request payloads cannot supply or override actor identities; unexpected fields are strictly rejected.
+5. **Strict Management Cursor Pagination:**
+   - Pagination cursor `startAfterCursor` must strictly match the management identifier format (`^rtok_[a-f0-9]{32}$`).
+   - Nonexistent cursor tokens return deterministic `invalid-argument` errors to prevent silent pagination restarts.
+6. **Canonical Single-Source Expiry & Fail-Closed Status:**
+   - Authoritative expiry state is stored solely in `expiresAt` (Firestore Timestamp).
+   - No secondary numeric fallback field (`expiresAtMs`) is stored or relied upon to bypass malformed canonical expiry.
    - Missing, null, or malformed `expiresAt` timestamps strictly fail closed as `INVALID` (never `ACTIVE`).
-   - Dynamic evaluation strictly verifies `expiresAt > serverNow` for `ACTIVE` derivation.
-6. **Minimal Public Validation & Generic Rejection:**
+7. **Minimal Public Validation & Generic Rejection:**
    - Successful validation returns exclusively `{ valid: true, expiresAt, businessCategoryHint }`.
    - Administrative fields (`label`, `tokenId`, `tokenHash`, `createdBy`, `revokedBy`, `consumedBy`) are strictly omitted.
    - Any invalid, malformed, expired, revoked, or consumed token returns a generic `{ valid: false }`.
-7. **Safe Global Bounded Rate Limiting:**
-   - Replaced spoofable IP-based headers (`X-Forwarded-For`) with a server-controlled, bounded global rolling window limiter.
+8. **Safe Global Bounded Rate Limiting:**
+   - Server-controlled, bounded global rolling window limiter (60 requests per minute).
    - Stored in a single stable Firestore document (`rateLimits/registration_token_public_validation`) with transactional resets.
    - Zero document proliferation. No automatic Firestore TTL policy dependency claimed.
-8. **Restricted Transactional Consumption Primitive:**
+   - *Residual Availability Risk:* An attacker can temporarily exhaust the global validation budget (availability limitation), but cannot spoof client identities or bypass token validation security.
+9. **Restricted Transactional Consumption Primitive & Actor Bounds:**
    - Implemented `consumeRegistrationToken` for Phase 4 automated tenant provisioning.
-   - Atomically updates token status to `CONSUMED` with `consumedBy` and `consumedAt`.
-   - Arbitrary caller payloads are prohibited to prevent PII or untrusted data leakage into token or audit records.
-9. **Complete Server-Only Firestore Rules:** Collections `registrationTokens`, `registrationTokenLookups`, `platformAuditLogs`, and `rateLimits` are completely blocked from direct client read/write access (`allow read, write: if false;`).
+   - Requires valid `consumedBy` actor identifier (string, 1 to 128 characters, no ASCII control characters).
+   - Arbitrary caller payloads and metadata objects are strictly prohibited.
+10. **Complete Server-Only Firestore Rules:** Collections `registrationTokens`, `registrationTokenLookups`, `platformAuditLogs`, and `rateLimits` are completely blocked from direct client read/write access (`allow read, write: if false;`).
 
 ---
 
@@ -75,7 +82,7 @@ The implementation strictly satisfies all Phase 3 architectural, cryptographic, 
       └─────────┘
 ```
 
-- **ACTIVE:** Token is valid, has a valid finite integer `expiresAtMs > serverNow`, not revoked, and not consumed.
+- **ACTIVE:** Token is valid, has canonical `expiresAt > serverNow`, not revoked, and not consumed.
 - **EXPIRED / INVALID:** Timestamp exceeded or `expiresAt` is missing/malformed. Evaluated fail-closed at runtime.
 - **REVOKED:** Explicitly revoked by a platform administrator using the opaque `tokenId` via `revokeRegistrationToken`.
 - **CONSUMED:** Atomically consumed during tenant provisioning in a Firestore transaction.
@@ -89,7 +96,7 @@ The implementation strictly satisfies all Phase 3 architectural, cryptographic, 
 | **Anonymous / Public** | ❌ Denied (401) | ❌ Denied (401) | ❌ Denied (401) | ✅ Allowed (Rate-limited, generic response) | ❌ Denied (403 Rules) |
 | **Tenant OWNER** | ❌ Denied (403) | ❌ Denied (403) | ❌ Denied (403) | ✅ Allowed (Rate-limited, generic response) | ❌ Denied (403 Rules) |
 | **Inactive Platform Admin** | ❌ Denied (403) | ❌ Denied (403) | ❌ Denied (403) | ✅ Allowed (Rate-limited, generic response) | ❌ Denied (403 Rules) |
-| **Active Platform Admin** | ✅ Allowed (200) | ✅ Allowed (200, safe metadata) | ✅ Allowed (200, opaque `tokenId`) | ✅ Allowed (200) | ❌ Denied (403 Rules, Cloud Functions only) |
+| **Active Platform Admin** | ✅ Allowed (200, trusted actor) | ✅ Allowed (200, safe metadata) | ✅ Allowed (200, opaque `tokenId`) | ✅ Allowed (200) | ❌ Denied (403 Rules, Cloud Functions only) |
 
 ---
 
@@ -101,13 +108,15 @@ The implementation strictly satisfies all Phase 3 architectural, cryptographic, 
   - `expiresInHours` (optional number, 1 to 720, default 168 / 7 days).
   - `label` (optional string, max 100 characters).
   - `businessCategoryHint` (optional enum: `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, `OTHER`).
-  - *Strict Validation:* Unexpected request fields are rejected.
+  - *Strict Validation:* Unexpected request fields (including `adminUid`, `actorUid`, `createdBy`, `tokenId`, `tokenHash`) are strictly rejected.
 - **Output:** `{ success: true, tokenId: string, token: string, expiresAt: number }`.
 - **Security Guarantee:** `tokenHash` is never returned. `tokenId` is the opaque `rtok_...` identifier.
 
 ### `listRegistrationTokens` (Callable)
 - **Auth:** Active Platform Admin.
-- **Input Parameters:** `{ limit?: number, startAfterCursor?: string }`.
+- **Input Parameters:**
+  - `limit` (optional number, 1 to 100, default 25).
+  - `startAfterCursor` (optional string, must match `/^rtok_[a-f0-9]{32}$/`).
 - **Output:** `{ success: true, tokens: Array<SafeTokenMetadata>, nextCursor: string|null }`.
 - **Security Guarantee:** `tokenHash`, lookup hashes, and raw tokens are excluded.
 
@@ -135,11 +144,11 @@ The consumption helper is exported from `functions/src/registrationTokenService.
 import { consumeRegistrationToken } from './registrationTokenService.js';
 
 await db.runTransaction(async (transaction) => {
-  // 1. Consume token atomically using rawToken
+  // 1. Consume token atomically using rawToken and bounded actor identifier
   const result = await consumeRegistrationToken(transaction, {
     db,
     rawToken,
-    consumedBy: newOwnerUid,
+    consumedBy: newOwnerUid, // Validated: 1-128 chars, non-empty, no control chars
   });
 
   // result contains { tokenId, status: 'CONSUMED', businessCategoryHint }
@@ -155,8 +164,8 @@ If the token is invalid, expired, revoked, or already consumed, `consumeRegistra
 
 | Suite / Test Target | Command | Result |
 | :--- | :--- | :--- |
-| **Token Core Cryptography** | `npm run qa:registration-tokens` | ✅ 100% Passed (Unit tests for fail-closed expiry, separation, strict input validation) |
-| **Functions Discovery Benchmark** | `node scripts/validate-functions-discovery.mjs` | ✅ 100% Passed (407ms, threshold < 3000ms) |
+| **Token Core Cryptography** | `npm run qa:registration-tokens` | ✅ 100% Passed (Actor integrity, strict cursor, canonical expiry, actor bounds) |
+| **Functions Discovery Benchmark** | `node scripts/validate-functions-discovery.mjs` | ✅ 100% Passed (~650ms, threshold < 3000ms) |
 | **Client Production Build** | `npm run build` | ✅ 100% Passed (0 errors) |
 | **Scheduler QA** | `npm run qa:scheduler` | ✅ 100% Passed |
 | **Scheduler Engine Stress QA** | `npm run qa:scheduler-engine` | ✅ 100% Passed |
@@ -173,5 +182,5 @@ If the token is invalid, expired, revoked, or already consumed, `consumeRegistra
 | **Owner Role Inventory Emulator** | `npm run test:owner-role-inventory:emulator` | ✅ 100% Passed |
 | **Data Migration Script Emulator** | `npm run test:migration:emulator` | ✅ 100% Passed |
 | **Tenant Provisioning CLI Emulator** | `npm run test:provision-tenant:emulator` | ✅ 100% Passed |
-| **Registration Token Emulator Integration** | `npm run test:registration-tokens:emulator` | ✅ 100% Passed (9 stages: separation, fail-closed, 10-way concurrency, rate limit bound, rules) |
+| **Registration Token Emulator Integration** | `npm run test:registration-tokens:emulator` | ✅ 100% Passed (9 stages: actor integrity, strict cursor, fail-closed expiry, 10-way concurrency, rules) |
 | **Security Hardening Scans** | `npm run security:hardening && npm run security:integrity` | ✅ 100% Passed (0 high/critical CVEs) |

@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { hashRegistrationToken } from '../functions/src/registrationTokenCore.js';
-import {
-  CATEGORY_TEMPLATE_MAP,
-  VALID_BUSINESS_CATEGORIES,
-} from '../functions/src/provisioningCore.js';
+import { VALID_BUSINESS_CATEGORIES } from '../functions/src/provisioningCore.js';
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT || 'demo-gasstation-auth-broker';
 const REGION = 'us-central1';
@@ -74,7 +71,7 @@ async function firestoreDirectRequest(path, { method = 'GET', idToken, data } = 
 
 async function runTenantProvisioningEmulatorTests() {
   console.log('==========================================================');
-  console.log('STARTING PHASE 4 REMEDIATED TENANT PROVISIONING EMULATOR TESTS');
+  console.log('STARTING PHASE 4 FINAL ARCHITECTURE CLEANUP EMULATOR TESTS');
   console.log('==========================================================');
 
   // Setup identities
@@ -118,9 +115,10 @@ async function runTenantProvisioningEmulatorTests() {
 
   for (const category of VALID_BUSINESS_CATEGORIES) {
     const userUid = `user-cat-${category.toLowerCase().replace('_', '-')}`;
+    const userEmail = `${userUid}@test.com`;
     const userToken = await createAuthUser({
       uid: userUid,
-      email: `${userUid}@test.com`,
+      email: userEmail,
       password: 'Password123!',
     });
 
@@ -145,8 +143,9 @@ async function runTenantProvisioningEmulatorTests() {
     assert.equal(provRes.body?.result?.role, 'OWNER');
     assert.equal(provRes.body?.result?.status, 'ACTIVE');
     assert.equal(provRes.body?.result?.businessCategory, category);
-    assert.equal(provRes.body?.result?.templateId, CATEGORY_TEMPLATE_MAP[category].templateId);
-    assert.equal(provRes.body?.result?.templateVersion, '1.0.0');
+    // Explicitly assert synthetic template fields are NOT returned
+    assert.equal('templateId' in provRes.body.result, false, 'Callable response must not return synthetic templateId');
+    assert.equal('templateVersion' in provRes.body.result, false, 'Callable response must not return synthetic templateVersion');
 
     // 1. Verify tenants/{slug} document
     const tenantSnap = await adminDb.doc(`tenants/${slug}`).get();
@@ -157,8 +156,9 @@ async function runTenantProvisioningEmulatorTests() {
     assert.equal(tenantData.displayName, displayName);
     assert.equal(tenantData.status, 'ACTIVE');
     assert.equal(tenantData.businessCategory, category);
-    assert.equal(tenantData.templateId, CATEGORY_TEMPLATE_MAP[category].templateId);
-    assert.equal(tenantData.templateVersion, '1.0.0');
+    // Explicitly assert synthetic template IDs are NOT persisted
+    assert.equal('templateId' in tenantData, false, 'Tenant doc must not persist synthetic templateId');
+    assert.equal('templateVersion' in tenantData, false, 'Tenant doc must not persist synthetic templateVersion');
     assert.equal(tenantData.customizationMode, 'STANDARD');
     assert.equal(tenantData.createdBy, userUid);
 
@@ -171,7 +171,7 @@ async function runTenantProvisioningEmulatorTests() {
     assert.equal(reservationData.status, 'ACTIVE');
     assert.equal(reservationData.reservedBy, userUid);
 
-    // 3. Verify tenantMemberships/{uid}_{slug}
+    // 3. Verify tenantMemberships/{uid}_{slug} (PII email must be absent)
     const membershipSnap = await adminDb.doc(`tenantMemberships/${userUid}_${slug}`).get();
     assert.ok(membershipSnap.exists, `Membership for "${userUid}_${slug}" must exist`);
     const membershipData = membershipSnap.data();
@@ -179,13 +179,15 @@ async function runTenantProvisioningEmulatorTests() {
     assert.equal(membershipData.tenantId, slug);
     assert.equal(membershipData.role, 'OWNER');
     assert.equal(membershipData.status, 'ACTIVE');
+    assert.equal('email' in membershipData, false, 'tenantMemberships must not contain email PII');
 
-    // 4. Verify users/{uid} mirror
+    // 4. Verify users/{uid} mirror & normalized email from Auth token
     const userSnap = await adminDb.doc(`users/${userUid}`).get();
     assert.ok(userSnap.exists, `User mirror for "${userUid}" must exist`);
     const userData = userSnap.data();
     assert.equal(userData.memberships?.[slug]?.role, 'OWNER');
     assert.equal(userData.memberships?.[slug]?.status, 'ACTIVE');
+    assert.equal(userData.email, userEmail.toLowerCase(), 'users/{uid} stores normalized Auth token email');
 
     // 5. Verify settings and subscription
     const settingsSnap = await adminDb.doc(`tenants/${slug}/settings/scheduler`).get();
@@ -199,9 +201,17 @@ async function runTenantProvisioningEmulatorTests() {
     const tokenSnap = await adminDb.doc(`registrationTokens/${token.tokenId}`).get();
     assert.equal(tokenSnap.data()?.status, 'CONSUMED');
     assert.equal(tokenSnap.data()?.consumedBy, userUid);
+
+    // 7. Verify platformAuditLogs
+    const auditQuery = await adminDb.collection('platformAuditLogs').where('tenantId', '==', slug).get();
+    assert.equal(auditQuery.empty, false);
+    const auditData = auditQuery.docs[0].data();
+    assert.equal(auditData.action, 'TENANT_PROVISIONED');
+    assert.equal(auditData.businessCategory, category);
+    assert.equal('templateId' in auditData, false, 'Audit log must not contain templateId');
   }
 
-  console.log('Happy Path across all categories passed.');
+  console.log('Happy Path across all categories passed (No synthetic template IDs, No membership email PII).');
 
   // ==========================================================
   // TEST 2: Registration Token Fail-Closed Matrix
@@ -670,7 +680,7 @@ async function runTenantProvisioningEmulatorTests() {
   console.log('Error Redaction Test passed.');
 
   console.log('\n==========================================================');
-  console.log('ALL PHASE 4 REMEDIATED TENANT PROVISIONING EMULATOR TESTS PASSED 100%');
+  console.log('ALL PHASE 4 FINAL ARCHITECTURE CLEANUP EMULATOR TESTS PASSED 100%');
   console.log('==========================================================');
 }
 

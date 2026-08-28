@@ -31,18 +31,7 @@ export const VALID_BUSINESS_CATEGORIES = Object.freeze([
   'OTHER',
 ]);
 
-export const CATEGORY_TEMPLATE_MAP = Object.freeze({
-  FUEL_STATION: { templateId: 'fuel-station-default', templateVersion: '1.0.0' },
-  CAFE: { templateId: 'cafe-default', templateVersion: '1.0.0' },
-  RESTAURANT: { templateId: 'restaurant-default', templateVersion: '1.0.0' },
-  HAIR_SALON: { templateId: 'hair-salon-default', templateVersion: '1.0.0' },
-  RETAIL: { templateId: 'retail-default', templateVersion: '1.0.0' },
-  OTHER: { templateId: 'generic-default', templateVersion: '1.0.0' },
-});
-
 export const DEFAULT_BUSINESS_CATEGORY = 'OTHER';
-export const DEFAULT_TEMPLATE_ID = CATEGORY_TEMPLATE_MAP.OTHER.templateId;
-export const DEFAULT_TEMPLATE_VERSION = CATEGORY_TEMPLATE_MAP.OTHER.templateVersion;
 export const DEFAULT_CUSTOMIZATION_MODE = 'STANDARD';
 
 export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
@@ -97,9 +86,7 @@ export function validateDisplayName(rawDisplayName) {
   return displayName;
 }
 
-export function resolveCategoryAndTemplate(rawCategory, tokenHint) {
-  let category = DEFAULT_BUSINESS_CATEGORY;
-
+export function resolveBusinessCategory(rawCategory, tokenHint) {
   if (rawCategory !== undefined && rawCategory !== null) {
     if (typeof rawCategory !== 'string') {
       throw new Error('businessCategory must be a string if provided');
@@ -108,22 +95,17 @@ export function resolveCategoryAndTemplate(rawCategory, tokenHint) {
     if (!VALID_BUSINESS_CATEGORIES.includes(normalized)) {
       throw new Error(`businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`);
     }
-    category = normalized;
-  } else if (tokenHint && typeof tokenHint === 'string') {
+    return normalized;
+  }
+
+  if (tokenHint && typeof tokenHint === 'string') {
     const hintNormalized = tokenHint.trim().toUpperCase();
     if (VALID_BUSINESS_CATEGORIES.includes(hintNormalized)) {
-      category = hintNormalized;
+      return hintNormalized;
     }
   }
 
-  const templateConfig = CATEGORY_TEMPLATE_MAP[category] || CATEGORY_TEMPLATE_MAP.OTHER;
-
-  return {
-    businessCategory: category,
-    templateId: templateConfig.templateId,
-    templateVersion: templateConfig.templateVersion,
-    customizationMode: DEFAULT_CUSTOMIZATION_MODE,
-  };
+  return DEFAULT_BUSINESS_CATEGORY;
 }
 
 const ALLOWED_PROVISIONING_INPUT_KEYS = new Set([
@@ -148,6 +130,7 @@ const FORBIDDEN_INPUT_KEYS = new Set([
   'templateVersion',
   'brandingOverrides',
   'customizationMode',
+  'email',
 ]);
 
 export function validateProvisioningInput(rawInput) {

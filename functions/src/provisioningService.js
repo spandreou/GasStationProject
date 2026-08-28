@@ -3,7 +3,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { consumeRegistrationToken } from './registrationTokenService.js';
 import {
-  resolveCategoryAndTemplate,
+  DEFAULT_CUSTOMIZATION_MODE,
+  resolveBusinessCategory,
   validateProvisioningInput,
 } from './provisioningCore.js';
 
@@ -103,8 +104,8 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       throw new HttpsError('internal', 'Αποτυχία αρχικοποίησης tenant.');
     }
 
-    // 7. Resolve category and template compatibility
-    const resolvedConfig = resolveCategoryAndTemplate(
+    // 7. Resolve business category precedence (valid client category -> token hint -> OTHER)
+    const businessCategory = resolveBusinessCategory(
       validated.businessCategory,
       consumedToken.businessCategoryHint,
     );
@@ -118,23 +119,21 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    // 9. Write tenant document (domain is null pending Phase 6 cutover)
+    // 9. Write tenant document (domain is null pending Phase 6 cutover; template runtime deferred)
     transaction.set(tenantRef, {
       slug: validated.slug,
       domain: null,
       displayName: validated.displayName,
       status: 'ACTIVE',
-      businessCategory: resolvedConfig.businessCategory,
-      templateId: resolvedConfig.templateId,
-      templateVersion: resolvedConfig.templateVersion,
+      businessCategory,
       brandingOverrides: {},
-      customizationMode: resolvedConfig.customizationMode,
+      customizationMode: DEFAULT_CUSTOMIZATION_MODE,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       createdBy: callerUid,
     });
 
-    // 10. Write tenantMemberships/{uid}_{tenantId}
+    // 10. Write tenantMemberships/{uid}_{tenantId} (authorization only, PII email removed)
     const membershipRef = db.doc(`tenantMemberships/${callerUid}_${validated.slug}`);
     transaction.set(membershipRef, {
       uid: callerUid,
@@ -143,10 +142,9 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       status: 'ACTIVE',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-      email: callerEmail || null,
     });
 
-    // 11. Write/Update users/{uid}
+    // 11. Write/Update users/{uid} (user profile retains normalized auth token email if available)
     const newMemberships = {
       [validated.slug]: {
         role: 'OWNER',
@@ -154,19 +152,23 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       },
     };
 
+    const normalizedEmail = callerEmail && typeof callerEmail === 'string'
+      ? callerEmail.trim().toLowerCase()
+      : null;
+
     if (userSnap.exists) {
       const updatePayload = {
         memberships: newMemberships,
         updatedAt: FieldValue.serverTimestamp(),
       };
-      if (callerEmail && !userSnap.data()?.email) {
-        updatePayload.email = callerEmail.trim().toLowerCase();
+      if (normalizedEmail && !userSnap.data()?.email) {
+        updatePayload.email = normalizedEmail;
       }
       transaction.update(userRef, updatePayload);
     } else {
       transaction.set(userRef, {
         uid: callerUid,
-        email: callerEmail ? callerEmail.trim().toLowerCase() : null,
+        email: normalizedEmail,
         status: 'ACTIVE',
         memberships: newMemberships,
         createdAt: FieldValue.serverTimestamp(),
@@ -209,8 +211,7 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       tokenId: consumedToken.tokenId,
       actorUid: callerUid,
       role: 'OWNER',
-      businessCategory: resolvedConfig.businessCategory,
-      templateId: resolvedConfig.templateId,
+      businessCategory,
       createdAt: FieldValue.serverTimestamp(),
     });
 
@@ -219,9 +220,7 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
       tenantId: validated.slug,
       role: 'OWNER',
       status: 'ACTIVE',
-      businessCategory: resolvedConfig.businessCategory,
-      templateId: resolvedConfig.templateId,
-      templateVersion: resolvedConfig.templateVersion,
+      businessCategory,
     };
   });
 }

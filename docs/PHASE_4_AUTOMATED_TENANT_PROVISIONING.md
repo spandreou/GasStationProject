@@ -1,7 +1,7 @@
 # ShiftOryx — Phase 4: Automated Tenant Provisioning
 
 **Status:** IMPLEMENTATION_READY_FOR_HUMAN_REVIEW  
-**Version:** 1.1.0 (Remediated)  
+**Version:** 1.2.0 (Final Architecture Alignment)  
 **Phase Target:** Phase 4 Automated Tenant Provisioning  
 **Security Boundary:** Server-Side Cloud Functions (`functions/src/provisioningService.js`) & Atomic Firestore Transactions  
 **Production Deployment:** NOT PERFORMED (Emulator-validated only)  
@@ -26,7 +26,7 @@ PHASE4_AUTH_MODEL = AUTHENTICATED_USER_CLAIMS_VALID_REGISTRATION_TOKEN
 ```
 - **Trust Boundary:** The user signs up and authenticates directly through standard Firebase Auth client SDKs before invoking provisioning.
 - **Server Password Handling:** Zero passwords or raw authentication credentials ever pass through custom Cloud Functions or logs.
-- **Actor Integrity:** The provisioning service derives the prospective tenant owner's identity strictly from `request.auth.uid`. Request payload fields attempting to specify `ownerUid`, `adminUid`, `actorUid`, or `createdBy` are rejected.
+- **Actor Integrity:** The provisioning service derives the prospective tenant owner's identity strictly from `request.auth.uid`. Request payload fields attempting to specify `ownerUid`, `adminUid`, `actorUid`, `createdBy`, or client-supplied `email` are rejected.
 - **Atomicity Confined to Firestore:** Because user authentication is established prior to calling provisioning, the entire tenant creation, slug reservation, membership assignment, scheduler initialization, trial subscription creation, token consumption, and audit logging execute within **one single ACID Firestore transaction** (`AUTH_FIRESTORE_ATOMICITY = AUTH_PREEXISTS_FIRESTORE_PROVISIONING_ATOMIC_ONLY`).
 
 ### 2.2 Role & Existing Membership Policy
@@ -43,7 +43,16 @@ PHASE4_AUTH_MODEL = AUTHENTICATED_USER_CLAIMS_VALID_REGISTRATION_TOKEN
   - Primary source of truth: `tenantMemberships/{uid}_{tenantId}` (`role: 'OWNER'`, `status: 'ACTIVE'`).
   - Synchronized compatibility mirror: `users/{uid}.memberships[tenantId]` (`role: 'OWNER'`, `status: 'ACTIVE'`).
 
-### 2.3 Slug Reservation Architecture (`slugReservations/{slug}`)
+### 2.3 Membership PII Minimization
+```text
+MEMBERSHIP_EMAIL_REMOVED = YES
+MEMBERSHIP_EMAIL_PRESENT = NO
+```
+- Canonical `tenantMemberships/{uid}_{tenantId}` documents contain only authorization-essential fields: `uid`, `tenantId`, `role: 'OWNER'`, `status: 'ACTIVE'`, `createdAt`, `updatedAt`.
+- No PII (`email`) is duplicated into membership records.
+- User profile in `users/{uid}` stores the normalized email derived securely from `request.auth.token.email` (never from client input).
+
+### 2.4 Slug Reservation Architecture (`slugReservations/{slug}`)
 - Slugs are reserved atomically inside the transaction at `slugReservations/{slug}`:
   ```json
   {
@@ -56,7 +65,7 @@ PHASE4_AUTH_MODEL = AUTHENTICATED_USER_CLAIMS_VALID_REGISTRATION_TOKEN
   ```
 - Pre-condition check reads both `tenants/{slug}` and `slugReservations/{slug}`; if either exists, provisioning aborts with `already-exists` without corrupting state or consuming tokens.
 
-### 2.4 Domain Metadata Boundary
+### 2.5 Domain Metadata Boundary
 ```text
 DOMAIN_METADATA_MODEL = DOMAIN_PENDING_PHASE6_CUTOVER (domain: null)
 ```
@@ -64,22 +73,21 @@ DOMAIN_METADATA_MODEL = DOMAIN_PENDING_PHASE6_CUTOVER (domain: null)
 - Phase 4 does NOT hardcode operational `.shiftoryx.gr` domains on tenant documents.
 - `tenants/{slug}.domain` is set to `null` to avoid asserting unconfigured production routing prior to Phase 6.
 
-### 2.5 Business Category & Template Resolution
-- Provisioning supports all approved business categories with matching default template assignments:
-  - `FUEL_STATION` -> `fuel-station-default` (v1.0.0)
-  - `CAFE` -> `cafe-default` (v1.0.0)
-  - `RESTAURANT` -> `restaurant-default` (v1.0.0)
-  - `HAIR_SALON` -> `hair-salon-default` (v1.0.0)
-  - `RETAIL` -> `retail-default` (v1.0.0)
-  - `OTHER` -> `generic-default` (v1.0.0)
-- Fallback policy: When business category is omitted by caller, the token's `businessCategoryHint` is applied if valid; otherwise defaults safely to `OTHER` -> `generic-default`.
+### 2.6 Business Category Precedence & Template Runtime Deferral
+```text
+BUSINESS_CATEGORY_PRECEDENCE = CLIENT_VALID_CATEGORY_THEN_TOKEN_HINT_THEN_OTHER
+TEMPLATE_RUNTIME_ASSIGNMENT = DEFERRED_TO_LATER_APPROVED_TEMPLATE_RUNTIME
+```
+- Provisioning validates and persists `businessCategory` metadata (`FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, `OTHER`), defaulting safely to `OTHER`.
+- **No Synthetic Template IDs:** Synthetic template assignment (`fuel-station-default`, `generic-default`, etc.) has been eliminated. The tenant document, callable response, and audit log do NOT persist synthetic `templateId` or `templateVersion`.
+- Template catalog, versioned template assignments, and branding runtime are formally deferred to Phase 9.
 
-### 2.6 Store Model Clarification
+### 2.7 Store Model Clarification
 - `CANONICAL_STORE_COLLECTION = NONE_IN_PHASE4`
 - `INITIAL_STORE_REQUIRED = NO`
 - Scheduler settings (`tenants/{tenantId}/settings/scheduler`) is a tenant-level scheduler configuration subcollection, not a store entity. Dedicated multi-store collections belong to Phase 8.
 
-### 2.7 Known Phase 7 Subscription Entitlement Residual
+### 2.8 Known Phase 7 Subscription Entitlement Residual
 - `TRIAL_DOCUMENT_CREATED_SERVER_SIDE = YES` (`tenants/{tenantId}/subscription/current` initialized with plan `TRIAL`, status `TRIALING`, 14-day duration).
 - `TRIAL_ENTITLEMENT_ENFORCEMENT = NOT_YET_IMPLEMENTED_PHASE7` (Server-side entitlement enforcement and locking Firestore rules for subscriptions belong to Phase 7).
 - `CURRENT_OWNER_SUBSCRIPTION_WRITE_RESIDUAL = DOCUMENTED`.
@@ -99,7 +107,7 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
     - Validate slug format (3-64 chars, regex, no reserved/gas/shiftoryx names)
     - Validate display name (1-100 chars, no control chars)
     - Validate business category (FUEL_STATION, CAFE, RESTAURANT, HAIR_SALON, RETAIL, OTHER)
-    - Reject all unknown/forbidden fields (role, status, uid overrides)
+    - Reject all unknown/forbidden fields (role, status, uid overrides, email)
                 │
                 ▼
 [2. Atomic Firestore Transaction Boundary (Read Phase)]
@@ -115,13 +123,13 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
     │
     ▼ [Write Phase]
     ├─► Write slugReservations/{slug} ──────────► [status: 'ACTIVE', reservedBy: uid]
-    ├─► Write tenants/{slug} ───────────────────► [domain: null, status: 'ACTIVE', businessCategory, templateId]
-    ├─► Write tenantMemberships/{uid}_{slug} ───► [role: 'OWNER', status: 'ACTIVE', email]
-    ├─► Write/Update users/{uid} ───────────────► [memberships: { [slug]: { role: 'OWNER', status: 'ACTIVE' } }]
+    ├─► Write tenants/{slug} ───────────────────► [domain: null, status: 'ACTIVE', businessCategory]
+    ├─► Write tenantMemberships/{uid}_{slug} ───► [role: 'OWNER', status: 'ACTIVE'] (No email PII)
+    ├─► Write/Update users/{uid} ───────────────► [memberships: { [slug]: { role: 'OWNER', status: 'ACTIVE' } }, email: auth.token.email]
     ├─► Write tenants/{slug}/settings/scheduler ─► [generatorRules: default rules, specialDaysByDate: {}]
     ├─► Write tenants/{slug}/subscription/current► [plan: 'TRIAL', status: 'TRIALING', trialEndsAt: now + 14d]
     ├─► Update registrationTokens/{tokenId} ────► [status: 'CONSUMED', consumedBy: uid]
-    └─► Write platformAuditLogs/{id} ───────────► [action: 'TENANT_PROVISIONED', tenantId: slug, tokenId]
+    └─► Write platformAuditLogs/{id} ───────────► [action: 'TENANT_PROVISIONED', tenantId: slug, tokenId, businessCategory]
 ```
 
 ---
@@ -147,11 +155,11 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
 - Reserved slugs blocked (`admin`, `gas`, `shiftoryx`, `portal`, `api`, `auth`, `status`, `stores`, etc.).
 - Prohibited slug prefixes and suffixes blocked (`gas-*`, `*-gas`, `shiftoryx-*`, `*-shiftoryx`).
 - Display name bounds and control character rejection.
-- Business category allowlist and template resolution verification.
-- Strict allowlist input validation rejecting all forged actor, role, or status properties.
+- Business category allowlist and precedence resolution verification (`CLIENT -> TOKEN_HINT -> OTHER`).
+- Strict allowlist input validation rejecting all forbidden fields (`role`, `status`, `uid`, `email`, `templateId`).
 
 ### 5.2 Emulator Integration Suite (`npm run test:tenant-provisioning:emulator`)
-- **Test 1: Happy Path Across All Categories:** Verified complete creation of tenant, slug reservation, `OWNER` membership, user mirror, scheduler settings, trial subscription, token consumption (`status: 'CONSUMED'`), and audit log for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, and `OTHER`.
+- **Test 1: Happy Path Across All Categories:** Verified complete creation of tenant, slug reservation, `OWNER` membership, user mirror, scheduler settings, trial subscription, token consumption (`status: 'CONSUMED'`), and audit log for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, and `OTHER`. Explicitly verified `templateId`, `templateVersion`, and membership `email` are absent.
 - **Test 2: Real Registration Token Fail-Closed Matrix:** Verified that malformed syntax, nonexistent token, expired token (past `expiresAt`), revoked token, already-consumed token, active token with missing canonical `expiresAt`, and active token with malformed canonical `expiresAt` abort transactions with 0 residual documents.
 - **Test 3: Existing Membership Policy Matrix:** Verified fail-closed rejection when caller has active `OWNER`, revoked `OWNER`, legacy `ADMIN`, legacy `MANAGER`, unknown role, or mirror-only membership.
 - **Test 4: Slug Reservation & Collision Matrix:** Verified collision rejection for existing tenant without reservation, existing reservation without tenant, and contested slug race between two valid tokens.
@@ -160,23 +168,10 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
 - **Test 7: Direct Client Rules Enforcement:** Confirmed direct client reads/writes to `slugReservations`, `tenants`, `tenantMemberships`, and `platformAuditLogs` return HTTP 403.
 - **Test 8: Error Redaction Test:** Confirmed error responses return clean sanitized error codes without leaking internal document paths, lookup hashes, or stack traces.
 
-### 5.3 Full Local Regression Suite
-All repository QA suites passed without errors:
-- `npm run build` (Vite production bundle OK)
-- `npm run qa:scheduler` & `npm run qa:scheduler-engine`
-- `npm run qa:repositories`
-- `npm run qa:public-readonly`
-- `npm run qa:tenant-authorization`
-- `npm run qa:auth-broker`
-- `npm run qa:export-security`
-- `npm run qa:saas-foundation`
-- `npm run qa:registration-tokens`
-- `npm run qa:tenant-provisioning`
-- `node scripts/validate-functions-discovery.mjs` (8 exports, discovery OK)
-
 ---
 
 ## 6. Residual Risks & Next Steps
 
 1. **Production Deployment:** Phase 4 backend is implemented and validated in the emulator suite. No production deployment has been executed.
 2. **Upcoming Phase 5:** Phase 5 will implement the root portal user interface (`/register`, `/login`, `/stores`) that connects the browser client to the `provisionTenantFromRegistrationToken` backend callable.
+3. **Upcoming Phase 9:** Phase 9 will implement the centrally managed template catalog, versioned template runtime, and preview/migration system.

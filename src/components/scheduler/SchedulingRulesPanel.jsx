@@ -13,10 +13,10 @@ const DAY_OFF_OPTIONS = [
 ];
 
 const ROLE_OPTIONS = [
-  { value: 'core1', label: 'Core 1' },
-  { value: 'core2', label: 'Core 2' },
-  { value: 'intermediate', label: 'Intermediate / Coverage' },
-  { value: 'custom', label: 'General / Custom' },
+  { value: 'core1', label: 'Core 1 (Βασικός 1)' },
+  { value: 'core2', label: 'Core 2 (Βασικός 2)' },
+  { value: 'intermediate', label: 'Intermediate / Coverage (Ενδιάμεσος / Κάλυψη)' },
+  { value: 'custom', label: 'Extra / Substitute (Αναπληρωτής / Κάλυψη Αδειών)' },
 ];
 
 const SHIFT_PREFERENCE_OPTIONS = [

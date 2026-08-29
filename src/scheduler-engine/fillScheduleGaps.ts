@@ -55,7 +55,7 @@ function canFillGap(params: {
 }
 
 function candidatePriority(employee: EmployeeScheduleConfig): number {
-  if (EXTRA_ROLES.includes(employee.scheduleRole)) return 0;
+  if (employee.scheduleRole.startsWith('EXTRA')) return 0;
   if (employee.scheduleRole === 'FLEX_A' || employee.scheduleRole === 'FLEX_B') return 1;
   return 2;
 }

@@ -18,6 +18,8 @@ import {
 import {
   generateEngineMonthSchedule,
   generateEngineWeekSchedule,
+  validateSchedulerEmployeeCapacity,
+  validateSchedulerRoleConfiguration,
 } from '../utils/schedulerEngineAdapter';
 import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, SHIFT_TYPES } from '../utils/analytics';
@@ -2528,6 +2530,12 @@ export const useSchedulerStore = create((set, get) => ({
   generateMagicWeek: async () => {
     if (!requireAdmin(get, set)) return;
 
+    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+    if (!roleValidation.valid) {
+      set({ warningMessage: roleValidation.message });
+      return;
+    }
+
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);
     const weekExistingShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
@@ -2618,6 +2626,12 @@ export const useSchedulerStore = create((set, get) => ({
     if (!requireAdmin(get, set)) return false;
     if (typeof year !== 'number' || typeof month !== 'number') {
       set({ warningMessage: 'Μη έγκυρα στοιχεία μήνα για αυτόματη δημιουργία.' });
+      return false;
+    }
+
+    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+    if (!roleValidation.valid) {
+      set({ warningMessage: roleValidation.message });
       return false;
     }
 

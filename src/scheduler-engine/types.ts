@@ -1,10 +1,6 @@
-export type ScheduleRole =
-  | 'CORE_A'
-  | 'CORE_B'
-  | 'FLEX_A'
-  | 'FLEX_B'
-  | 'EXTRA_A'
-  | 'EXTRA_B';
+export type BaseScheduleRole = 'CORE_A' | 'CORE_B' | 'FLEX_A' | 'FLEX_B';
+export type ExtraScheduleRole = 'EXTRA_A' | 'EXTRA_B';
+export type ScheduleRole = BaseScheduleRole | ExtraScheduleRole;
 
 export type Weekday =
   | 'MONDAY'

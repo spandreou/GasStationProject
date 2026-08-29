@@ -11,30 +11,64 @@ export function resolveScheduleRoles(employees: EmployeeScheduleConfig[]): Resol
   );
   const warnings: ScheduleWarning[] = [];
   const roles: Partial<Record<ScheduleRole, EmployeeScheduleConfig>> = {};
+  const baseEmployees: EmployeeScheduleConfig[] = [];
+  const extras: EmployeeScheduleConfig[] = [];
 
-  for (const role of [...REQUIRED_BASE_ROLES, ...EXTRA_ROLES]) {
+  for (const role of REQUIRED_BASE_ROLES) {
     const matches = enabledEmployees.filter((employee) => employee.scheduleRole === role);
     if (matches.length === 1) {
       roles[role] = matches[0];
-    }
-    if (REQUIRED_BASE_ROLES.includes(role) && matches.length !== 1) {
+      baseEmployees.push(matches[0]);
+    } else if (matches.length === 0) {
       warnings.push(
         warning(
           `role-${role}`,
-          matches.length === 0 ? 'MISSING_REQUIRED_ROLE' : 'DUPLICATE_REQUIRED_ROLE',
+          'MISSING_REQUIRED_ROLE',
           `Ο ρόλος ${role} πρέπει να έχει ακριβώς έναν ενεργό εργαζόμενο.`,
         ),
       );
+    } else {
+      roles[role] = matches[0];
+      baseEmployees.push(matches[0]);
+      warnings.push(
+        warning(
+          `role-${role}`,
+          'DUPLICATE_REQUIRED_ROLE',
+          `Ο ρόλος ${role} έχει πάνω από έναν εργαζόμενο.`,
+        ),
+      );
     }
-    if (EXTRA_ROLES.includes(role) && matches.length > 1) {
-      warnings.push(warning(`role-${role}`, 'DUPLICATE_EXTRA_ROLE', `Ο προαιρετικός ρόλος ${role} έχει πάνω από έναν εργαζόμενο.`));
+  }
+
+  for (const role of EXTRA_ROLES) {
+    const match = enabledEmployees.find((employee) => employee.scheduleRole === role);
+    if (match) {
+      roles[role] = match;
+    }
+  }
+
+  for (const employee of enabledEmployees) {
+    if (!baseEmployees.some((b) => b.employeeId === employee.employeeId)) {
+      extras.push(employee);
+    }
+  }
+
+  const otherActive = employees.filter(
+    (employee) => employee.isEnabled !== false && employee.participatesInWeeklyRotation === false,
+  );
+  for (const employee of otherActive) {
+    if (
+      !extras.some((e) => e.employeeId === employee.employeeId) &&
+      !baseEmployees.some((b) => b.employeeId === employee.employeeId)
+    ) {
+      extras.push(employee);
     }
   }
 
   return {
     roles,
-    extras: EXTRA_ROLES.map((role) => roles[role]).filter(Boolean) as EmployeeScheduleConfig[],
-    baseEmployees: REQUIRED_BASE_ROLES.map((role) => roles[role]).filter(Boolean) as EmployeeScheduleConfig[],
+    extras,
+    baseEmployees,
     warnings,
   };
 }

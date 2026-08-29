@@ -4,7 +4,9 @@ export type ScheduleRole =
   | 'FLEX_A'
   | 'FLEX_B'
   | 'EXTRA_A'
-  | 'EXTRA_B';
+  | 'EXTRA_B'
+  | `EXTRA_${string}`
+  | string;
 
 export type Weekday =
   | 'MONDAY'
@@ -119,7 +121,7 @@ export type ScheduleWarning = {
 };
 
 export type ResolvedScheduleRoles = {
-  roles: Partial<Record<ScheduleRole, EmployeeScheduleConfig>>;
+  roles: Partial<Record<string, EmployeeScheduleConfig>>;
   extras: EmployeeScheduleConfig[];
   baseEmployees: EmployeeScheduleConfig[];
   warnings: ScheduleWarning[];

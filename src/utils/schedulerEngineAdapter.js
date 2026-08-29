@@ -59,23 +59,58 @@ function resolveEngineRoleMap(employees) {
   const sorted = [...employees].sort(stableEmployeeSort);
   const roleById = new Map();
 
+  // 1. Explicit core roles
   sorted.forEach((employee) => {
-    const explicit = mapExplicitRole(getEmployeeRoleToken(employee));
-    if (explicit) roleById.set(employee.id, explicit);
+    const token = getEmployeeRoleToken(employee);
+    if (token === 'CORE_A' || token === 'CORE1' || token === 'CORE_1' || token === 'COREA') {
+      if (![...roleById.values()].includes('CORE_A')) roleById.set(employee.id, 'CORE_A');
+    } else if (token === 'CORE_B' || token === 'CORE2' || token === 'CORE_2' || token === 'COREB') {
+      if (![...roleById.values()].includes('CORE_B')) roleById.set(employee.id, 'CORE_B');
+    }
   });
 
-  const assignFirst = (role, predicate) => {
+  // 2. Explicit flex / intermediate roles
+  sorted.forEach((employee) => {
+    if (roleById.has(employee.id)) return;
+    const token = getEmployeeRoleToken(employee);
+    if (token === 'FLEX_A' || token === 'FLEX1' || token === 'FLEX_1') {
+      if (![...roleById.values()].includes('FLEX_A')) roleById.set(employee.id, 'FLEX_A');
+    } else if (token === 'FLEX_B' || token === 'FLEX2' || token === 'FLEX_2') {
+      if (![...roleById.values()].includes('FLEX_B')) roleById.set(employee.id, 'FLEX_B');
+    }
+  });
+
+  // 3. Assign first available for legacy aliases
+  const assignSlot = (role, predicate) => {
     if ([...roleById.values()].includes(role)) return;
     const employee = sorted.find((item) => !roleById.has(item.id) && predicate(getEmployeeRoleToken(item), item));
     if (employee) roleById.set(employee.id, role);
   };
 
-  assignFirst('CORE_A', (token) => token === 'CORE');
-  assignFirst('CORE_B', (token) => token === 'CORE');
-  assignFirst('FLEX_A', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
-  assignFirst('FLEX_B', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
-  assignFirst('EXTRA_A', (token) => token === 'CUSTOM' || token === 'GENERAL' || token === '');
-  assignFirst('EXTRA_B', (token) => token === 'CUSTOM' || token === 'GENERAL' || token === '');
+  assignSlot('CORE_A', (token) => token === 'CORE');
+  assignSlot('CORE_B', (token) => token === 'CORE');
+  assignSlot('FLEX_A', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
+  assignSlot('FLEX_B', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
+
+  assignSlot('CORE_A', (_token, item) => item?.participatesInRotation !== false);
+  assignSlot('CORE_B', (_token, item) => item?.participatesInRotation !== false);
+  assignSlot('FLEX_A', (_token, item) => item?.participatesInRotation !== false);
+  assignSlot('FLEX_B', (_token, item) => item?.participatesInRotation !== false);
+
+  assignSlot('CORE_A', () => true);
+  assignSlot('CORE_B', () => true);
+  assignSlot('FLEX_A', () => true);
+  assignSlot('FLEX_B', () => true);
+
+  // 4. Assign dynamic EXTRA roles for ALL remaining employees
+  let extraIndex = 1;
+  sorted.forEach((employee) => {
+    if (!roleById.has(employee.id)) {
+      const extraLetter = extraIndex <= 26 ? String.fromCharCode(64 + extraIndex) : `${extraIndex}`;
+      roleById.set(employee.id, `EXTRA_${extraLetter}`);
+      extraIndex++;
+    }
+  });
 
   return roleById;
 }
@@ -107,7 +142,9 @@ function toEngineRules(rules = {}) {
 }
 
 function toEngineEmployee(employee, scheduleRole, rules = {}) {
-  const fixedDayOff = toEngineWeekday(rules.fixedDaysOff?.[employee.id] ?? employee.fixedDayOff);
+  const rawFixedDayOff = rules.fixedDaysOff?.[employee.id] ?? employee.fixedDayOff;
+  const fixedDayOff = toEngineWeekday(rawFixedDayOff);
+  const isExtra = typeof scheduleRole === 'string' && scheduleRole.startsWith('EXTRA');
   return {
     employeeId: employee.id,
     fullName: employee.fullName || employee.id,
@@ -118,7 +155,7 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
     participatesInWeeklyRotation: employee.participatesInRotation !== false,
     participatesInSundayRotation: employee.participatesInSundayRotation !== false,
     weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
-    extraMode: employee.extraMode || (scheduleRole.startsWith('EXTRA') ? 'SUBSTITUTE_ONLY' : undefined),
+    extraMode: employee.extraMode || (isExtra ? 'SUBSTITUTE_ONLY' : undefined),
     activeFrom: employee.activeFrom || undefined,
     activeTo: employee.activeTo || undefined,
     canCoverLeaves: employee.canCoverLeaves !== false,
@@ -132,9 +169,10 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
 function toEngineEmployees(employees = [], rules = {}) {
   const activeEmployees = (employees || []).filter((employee) => employee?.isActive !== false && employee?.id);
   const roleById = resolveEngineRoleMap(activeEmployees);
-  return activeEmployees
-    .filter((employee) => roleById.has(employee.id))
-    .map((employee) => toEngineEmployee(employee, roleById.get(employee.id), rules));
+  return activeEmployees.map((employee) => {
+    const scheduleRole = roleById.get(employee.id) || 'EXTRA_A';
+    return toEngineEmployee(employee, scheduleRole, rules);
+  });
 }
 
 function toEngineAbsence(shift) {
@@ -201,6 +239,7 @@ function toAppShift(shift) {
     shiftType: APP_SHIFT_TYPES[shift.shiftType] || 'custom',
     customLabel: shift.shiftType === 'SUNDAY_12H' ? 'Κυριακή' : '',
     notes: `Auto-generated scheduler engine (${shift.source})`,
+    source: shift.source,
     isHoliday: false,
     isSpecialDay: false,
     specialDayLabel: '',

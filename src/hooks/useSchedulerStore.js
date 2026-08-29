@@ -1431,11 +1431,12 @@ export const useSchedulerStore = create((set, get) => ({
         after: createdEmployee,
       });
       const publicEmployeesUpdated = await get().refreshPublicEmployeesSnapshot([...get().employees, createdEmployee].filter(Boolean));
-      set({
+      set((state) => ({
+        employees: [...state.employees.filter((e) => e.id !== createdEmployee?.id), createdEmployee].filter(Boolean),
         warningMessage: publicEmployeesUpdated
           ? 'Ο υπάλληλος προστέθηκε.'
           : 'Ο υπάλληλος προστέθηκε, αλλά η δημόσια λίστα δεν ενημερώθηκε.',
-      });
+      }));
       return true;
     } catch (error) {
       set({ warningMessage: error?.message || 'Αποτυχία προσθήκης υπαλλήλου.' });

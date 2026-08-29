@@ -150,7 +150,7 @@ function getScheduleWorkLabel(shiftList = []) {
   };
 }
 
-function buildScheduleRows({ days, employees, shifts }) {
+export function buildScheduleRows({ days, employees, shifts, absences = [] }) {
   const shiftMap = new Map();
   (shifts || []).forEach((shift) => {
     const key = `${shift.date}__${shift.employeeId}`;
@@ -163,18 +163,39 @@ function buildScheduleRows({ days, employees, shifts }) {
   const normalizedEmployees = [...(employees || [])].sort((a, b) =>
     (a.fullName || '').localeCompare(b.fullName || '', 'el'),
   );
+  const absenceMap = buildAbsenceMap(absences);
 
   const rows = [];
   (days || []).forEach((day) => {
     const dateLabel = formatDateGreek(day);
     normalizedEmployees.forEach((employee) => {
-      const key = `${day}__${employee.id}`;
-      const dayShifts = shiftMap.get(key) || [];
-      const { schedule, workRest } = getScheduleWorkLabel(dayShifts);
+      const absence = getActiveAbsenceForDay(absenceMap, day, employee.id);
+      const rawWorkShifts = getEmployeeDayWorkShifts(shiftMap, day, employee.id);
+      const workShifts = absence
+        ? rawWorkShifts.filter((shift) => !absenceAffectsExportShift(absence, shift))
+        : rawWorkShifts;
+      const hasAnyWorkInPeriod = (days || []).some(
+        (d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0,
+      );
+      const hasAnyAbsenceInPeriod = (days || []).some((d) =>
+        Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)),
+      );
+
+      let workRest = '-';
+      let schedule = '-';
+      if (workShifts.length > 0) {
+        schedule = workShifts.map((item) => formatShiftTime(item.startTime, item.endTime)).join(' | ');
+        workRest = 'ΕΡΓ';
+      } else if (absence) {
+        workRest = getAbsenceExportCode(absence);
+      } else if (hasAnyWorkInPeriod || hasAnyAbsenceInPeriod || employee.participatesInRotation === false) {
+        workRest = 'ΑΝ';
+      }
+
       rows.push({
         date: dateLabel,
         afm: employee.afm?.trim() || '-',
-        fullName: employee.fullName || '\u0386\u03B3\u03BD\u03C9\u03C3\u03C4\u03BF\u03C2 \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03C2',
+        fullName: employee.fullName || 'Άγνωστος υπάλληλος',
         schedule,
         workRest,
       });
@@ -252,6 +273,35 @@ function buildAbsenceMap(absences = []) {
   return map;
 }
 
+export function validateExportScheduleState({ days = [], employees = [], shifts = [], absences = [] } = {}) {
+  const activeParticipating = (employees || []).filter(
+    (employee) => employee?.isActive !== false && employee?.participatesInRotation !== false,
+  );
+  const shiftMap = new Map();
+  (shifts || []).forEach((shift) => {
+    const key = `${shift.date}__${shift.employeeId}`;
+    if (!shiftMap.has(key)) shiftMap.set(key, []);
+    shiftMap.get(key).push(shift);
+  });
+  const absenceMap = buildAbsenceMap(absences);
+
+  const unassignedEmployees = activeParticipating.filter((employee) => {
+    const hasWork = (days || []).some((d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0);
+    const hasAbsence = (days || []).some((d) => Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)));
+    return !hasWork && !hasAbsence;
+  });
+
+  return {
+    valid: unassignedEmployees.length === 0,
+    unassignedEmployees,
+    unassignedCount: unassignedEmployees.length,
+    warning:
+      unassignedEmployees.length > 0
+        ? `Προσοχή: ${unassignedEmployees.length} ενεργοί εργαζόμενοι δεν έχουν καταγεγραμμένη βάρδια ή άδεια στην περίοδο.`
+        : '',
+  };
+}
+
 export function buildGroupedScheduleRows({ days, employees, shifts, absences = [] }) {
   const shiftMap = new Map();
   (shifts || []).forEach((shift) => {
@@ -307,9 +357,19 @@ export function buildGroupedScheduleRows({ days, employees, shifts, absences = [
         )
         .join('\n'),
       workRest: orderedEmployees
-        .map(({ absence, workShifts }) => {
+        .map(({ employee, absence, workShifts }) => {
           if (workShifts.length) return 'ΕΡΓ';
-          return getAbsenceExportCode(absence) || 'ΑΝ';
+          if (absence) return getAbsenceExportCode(absence);
+          const hasAnyWorkInPeriod = (days || []).some(
+            (d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0,
+          );
+          const hasAnyAbsenceInPeriod = (days || []).some((d) =>
+            Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)),
+          );
+          if (hasAnyWorkInPeriod || hasAnyAbsenceInPeriod || employee.participatesInRotation === false) {
+            return 'ΑΝ';
+          }
+          return '-';
         })
         .join('\n'),
     };

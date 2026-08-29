@@ -15,7 +15,9 @@ const SUNDAY_ROLE_ORDER: Record<string, number> = {
 };
 
 function sundayRotationRank(employee: EmployeeScheduleConfig): number {
-  return SUNDAY_ROLE_ORDER[employee.scheduleRole] ?? 99;
+  if (employee.scheduleRole in SUNDAY_ROLE_ORDER) return SUNDAY_ROLE_ORDER[employee.scheduleRole];
+  if (employee.scheduleRole.startsWith('EXTRA')) return 6;
+  return 99;
 }
 
 function sundayOrdinal(date: string): number {
@@ -27,7 +29,7 @@ function isSundayRotationMember(employee: EmployeeScheduleConfig, date: string):
   if (!employee.participatesInSundayRotation) return false;
   if (employee.isEnabled === false) return false;
   if (employee.canWorkSunday === false) return false;
-  if (employee.scheduleRole.startsWith('EXTRA') && employee.extraMode !== 'ACTIVE_SEASONAL') return false;
+  if (employee.scheduleRole.startsWith('EXTRA') && employee.extraMode === 'DISABLED') return false;
   if (employee.activeFrom && date < employee.activeFrom) return false;
   if (employee.activeTo && date > employee.activeTo) return false;
   return true;

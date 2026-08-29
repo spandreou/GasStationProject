@@ -2,6 +2,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   confirmPasswordReset,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
@@ -10,12 +11,14 @@ import {
   signOut,
   verifyPasswordResetCode,
 } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import {
   adminEmail,
   auth,
+  db,
   isDemoMode,
   isFirebaseConfigured,
-} from './config';
+} from './config.js';
 
 function normalizeEmail(value) {
   return String(value || '')
@@ -68,6 +71,15 @@ export async function signInAdmin({ email, password, rememberDevice = true }) {
   const normalizedEmail = normalizeEmail(email);
   await setPersistence(auth, rememberDevice ? browserLocalPersistence : browserSessionPersistence);
   const credentials = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+  return credentials.user;
+}
+
+export async function createUserAccount({ email, password }) {
+  assertAdminAuthConfigured();
+
+  const normalizedEmail = normalizeEmail(email);
+  await setPersistence(auth, browserLocalPersistence);
+  const credentials = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
   return credentials.user;
 }
 
@@ -124,3 +136,18 @@ export async function confirmAdminPasswordReset({ oobCode, newPassword }) {
 
   await confirmPasswordReset(auth, oobCode, newPassword);
 }
+
+export async function isPlatformAdmin(uid) {
+  if (!uid || typeof uid !== 'string') return false;
+  if (!isFirebaseConfigured || !db) return false;
+
+  try {
+    const snap = await getDoc(doc(db, 'platformAdmins', uid.trim()));
+    if (!snap.exists()) return false;
+    const data = snap.data() || {};
+    return data.status === 'ACTIVE';
+  } catch {
+    return false;
+  }
+}
+

@@ -21,10 +21,12 @@ const PUBLIC_TENANT_ROUTES = new Set([
   '/',
   '/app',
   '/login',
+  '/register',
   '/forgot-password',
   '/reset-password',
   '/request-token',
   '/select-tenant',
+  '/stores',
 ]);
 
 function isPublicTenantRoute(routePath = '') {
@@ -32,7 +34,7 @@ function isPublicTenantRoute(routePath = '') {
 }
 
 function isTenantAuthRoute(routePath = '') {
-  return ['/login', '/forgot-password', '/reset-password', '/select-tenant'].includes(routePath);
+  return ['/login', '/register', '/forgot-password', '/reset-password', '/select-tenant', '/stores'].includes(routePath);
 }
 
 function TenantGateMessage({ title, message }) {

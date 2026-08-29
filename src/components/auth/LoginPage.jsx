@@ -5,9 +5,9 @@ import {
   getReturnToParam,
   resolveAuthorizedReturnTo,
   resolveCentralTenantDestination,
-  TENANT_ACCESS_MESSAGES,
 } from '../../services/tenantAccessService';
 import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
+import { determinePostLoginDestination } from '../../utils/portalHelpers';
 import AuthPageShell from './AuthPageShell';
 
 const MAX_EMAIL_LENGTH = 254;
@@ -35,47 +35,66 @@ export default function LoginPage() {
       return;
     }
 
-    if (returnTo) {
-      const returnDestination = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
-      if (returnDestination.allowed && returnDestination.url) {
-        if (isAuthBrokerEnabled && hostContext.mode === 'central') {
-          const redirectUrl = await createTenantAuthTicketRedirect({
-            returnTo: returnDestination.url,
-            tenantId: returnDestination.access?.tenant?.id,
-          });
-          window.location.assign(redirectUrl);
-          return;
-        }
-
-        window.location.assign(returnDestination.url);
-        return;
-      }
+    let isPlatformAdmin = false;
+    try {
+      isPlatformAdmin = await authRepository.isPlatformAdmin(user.uid);
+    } catch {
+      // Fail-closed/safe: continue normal tenant resolution
     }
 
-    const destination = await resolveCentralTenantDestination(user.uid);
-    if (destination.type === 'redirect' && destination.url) {
+    let authorizedReturnTo = null;
+    if (returnTo) {
+      authorizedReturnTo = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
+    }
+
+    const centralDestination = await resolveCentralTenantDestination(user.uid);
+
+    const decision = determinePostLoginDestination({
+      isPlatformAdmin,
+      authorizedReturnTo,
+      centralDestination,
+    });
+
+    if (decision.type === 'admin') {
+      window.location.assign(decision.url);
+      return;
+    }
+
+    if (decision.type === 'authorizedReturnTo') {
       if (isAuthBrokerEnabled && hostContext.mode === 'central') {
         const redirectUrl = await createTenantAuthTicketRedirect({
-          returnTo: destination.url,
-          tenantId: destination.tenant?.id,
+          returnTo: decision.url,
+          tenantId: decision.tenantId,
         });
         window.location.assign(redirectUrl);
         return;
       }
-
-      window.location.assign(destination.url);
+      window.location.assign(decision.url);
       return;
     }
 
-    if (destination.type === 'select') {
+    if (decision.type === 'tenant') {
+      if (isAuthBrokerEnabled && hostContext.mode === 'central') {
+        const redirectUrl = await createTenantAuthTicketRedirect({
+          returnTo: decision.url,
+          tenantId: decision.tenantId,
+        });
+        window.location.assign(redirectUrl);
+        return;
+      }
+      window.location.assign(decision.url);
+      return;
+    }
+
+    if (decision.type === 'select') {
       const selectUrl = new URL('/select-tenant', window.location.origin);
       if (returnTo) selectUrl.searchParams.set('returnTo', returnTo);
       window.location.assign(selectUrl.toString());
       return;
     }
 
-    setStatus('error');
-    setMessage(destination.message || TENANT_ACCESS_MESSAGES.noAccess);
+    // Zero memberships -> guidance on /stores
+    window.location.assign(decision.url);
   }
 
   async function handleSubmit(event) {
@@ -115,7 +134,10 @@ export default function LoginPage() {
   return (
     <AuthPageShell
       title="Sign in"
-      subtitle="Manage all your fuel stations from one platform."
+      subtitle="ShiftOryx Central Authentication Portal"
+      footerText="Έχετε Registration Token;"
+      footerLinkText="Εγγραφή & Ενεργοποίηση"
+      footerLinkHref="/register"
     >
       <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-900">
         {modeLabel}

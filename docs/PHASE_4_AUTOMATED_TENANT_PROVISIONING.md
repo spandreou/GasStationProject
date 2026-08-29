@@ -1,11 +1,11 @@
 # ShiftOryx — Phase 4: Automated Tenant Provisioning
 
-**Status:** PREPRODUCTION_CONTRACT_HARDENED  
-**Version:** 1.4.0 (Master Roadmap Alignment & Pre-Merge Hardening)  
+**Status:** FULLY_CLOSED_AND_DEPLOYED  
+**Version:** 1.5.0 (Production Deployment & Runtime Closure)  
 **Phase Target:** Phase 4 Automated Tenant Provisioning  
 **Security Boundary:** Server-Side Cloud Functions (`functions/src/provisioningService.js`) & Atomic Firestore Transactions  
-**Production Deployment:** NOT PERFORMED (Emulator-validated only)  
-**Base Source SHA:** `497a57cf1e5ffc1e5fb313d66678ef2fb77d7f02`  
+**Production Deployment:** DEPLOYED_AND_VERIFIED (`gasstationproject-9dd89`, `us-central1`, `nodejs22`, Gen2 callable)  
+**Base Source SHA:** `414ba0be7b11d9947f648be86d3d0869d9f779fe`  
 **Expected Functions Exports (8):** `cleanupAuthTickets`, `createAuthTicket`, `exchangeAuthTicket`, `generateRegistrationToken`, `listRegistrationTokens`, `provisionTenantFromRegistrationToken`, `revokeRegistrationToken`, `validateRegistrationToken`
 
 ---
@@ -213,10 +213,10 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
 
 ---
 
-## 6. Residual Risks & Next Steps
-
-1. **Production Deployment:** Phase 4 backend is corrected, hardened, and emulator-validated. No production deployment has been executed (`PHASE4_PRODUCTION_RUNTIME = NOT_DEPLOYED`). `provisionTenantFromRegistrationToken` is currently absent from Firebase production until separate human-approved deployment.
-2. **Phase 5 Root Portal UI:** Phase 5 will implement the root portal user interface (`/register`, `/login`, `/stores`) that connects the browser client to the `provisionTenantFromRegistrationToken` backend callable (currently in separate Draft PR #38).
+## 6. Production Closure & Next Steps
+ 
+1. **Production Deployment & Verification:** Phase 4 backend is fully deployed to Firebase production (`gasstationproject-9dd89`, `us-central1`, `nodejs22`). Exactly 8 Cloud Functions are active, with `provisionTenantFromRegistrationToken` verified ACTIVE and the existing 7 functions preserved intact. No Firestore rules, storage rules, or hosting changes were required. Zero production business-data mutations (tokens, tenants, memberships, auth) were executed during deployment verification (`PHASE4_PRODUCTION_RUNTIME = DEPLOYED_AND_VERIFIED`, `PHASE_4_STATUS = FULLY_CLOSED`).
+2. **Phase 5 Root Portal UI:** Phase 5 will implement the root portal user interface (`/register`, `/login`, `/stores`) that connects the browser client to the deployed `provisionTenantFromRegistrationToken` backend callable (currently in separate Draft PR #38 awaiting remediation).
 3. **Deferred Roadmap Capabilities:**
    - **Phase 6:** Wildcard ShiftOryx domain routing and SSL provisioning.
    - **Phase 7:** Server-side subscription entitlement enforcement, daily usage tracking, and planning horizon restrictions.

@@ -55,63 +55,137 @@ function stableEmployeeSort(a, b) {
   );
 }
 
+export function validateSchedulerEmployeeCapacity(employees = []) {
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  if (activeEmployees.length < 4) {
+    return {
+      valid: false,
+      count: activeEmployees.length,
+      message: 'Το αυτόματο πρόγραμμα χρειάζεται τουλάχιστον 4 ενεργούς εργαζομένους.',
+    };
+  }
+  if (activeEmployees.length > 6) {
+    return {
+      valid: false,
+      count: activeEmployees.length,
+      message: 'Το αυτόματο πρόγραμμα υποστηρίζει έως 6 ενεργούς εργαζομένους.',
+    };
+  }
+  return {
+    valid: true,
+    count: activeEmployees.length,
+    message: '',
+  };
+}
+
 function resolveEngineRoleMap(employees) {
   const sorted = [...employees].sort(stableEmployeeSort);
   const roleById = new Map();
+  const assignedRoles = new Set();
 
-  // 1. Explicit core roles
-  sorted.forEach((employee) => {
-    const token = getEmployeeRoleToken(employee);
-    if (token === 'CORE_A' || token === 'CORE1' || token === 'CORE_1' || token === 'COREA') {
-      if (![...roleById.values()].includes('CORE_A')) roleById.set(employee.id, 'CORE_A');
-    } else if (token === 'CORE_B' || token === 'CORE2' || token === 'CORE_2' || token === 'COREB') {
-      if (![...roleById.values()].includes('CORE_B')) roleById.set(employee.id, 'CORE_B');
-    }
-  });
-
-  // 2. Explicit flex / intermediate roles
-  sorted.forEach((employee) => {
-    if (roleById.has(employee.id)) return;
-    const token = getEmployeeRoleToken(employee);
-    if (token === 'FLEX_A' || token === 'FLEX1' || token === 'FLEX_1') {
-      if (![...roleById.values()].includes('FLEX_A')) roleById.set(employee.id, 'FLEX_A');
-    } else if (token === 'FLEX_B' || token === 'FLEX2' || token === 'FLEX_2') {
-      if (![...roleById.values()].includes('FLEX_B')) roleById.set(employee.id, 'FLEX_B');
-    }
-  });
-
-  // 3. Assign first available for legacy aliases
-  const assignSlot = (role, predicate) => {
-    if ([...roleById.values()].includes(role)) return;
-    const employee = sorted.find((item) => !roleById.has(item.id) && predicate(getEmployeeRoleToken(item), item));
-    if (employee) roleById.set(employee.id, role);
+  const isExplicitCustom = (emp) => {
+    const token = getEmployeeRoleToken(emp);
+    return token === 'CUSTOM' || token === 'EXTRA' || token === 'SUBSTITUTE';
   };
 
-  assignSlot('CORE_A', (token) => token === 'CORE');
-  assignSlot('CORE_B', (token) => token === 'CORE');
-  assignSlot('FLEX_A', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
-  assignSlot('FLEX_B', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
+  const isExplicitCore1 = (emp) => {
+    const token = getEmployeeRoleToken(emp);
+    return token === 'CORE_A' || token === 'CORE1' || token === 'CORE_1' || token === 'COREA';
+  };
 
-  assignSlot('CORE_A', (_token, item) => item?.participatesInRotation !== false);
-  assignSlot('CORE_B', (_token, item) => item?.participatesInRotation !== false);
-  assignSlot('FLEX_A', (_token, item) => item?.participatesInRotation !== false);
-  assignSlot('FLEX_B', (_token, item) => item?.participatesInRotation !== false);
+  const isExplicitCore2 = (emp) => {
+    const token = getEmployeeRoleToken(emp);
+    return token === 'CORE_B' || token === 'CORE2' || token === 'CORE_2' || token === 'COREB';
+  };
 
-  assignSlot('CORE_A', () => true);
-  assignSlot('CORE_B', () => true);
-  assignSlot('FLEX_A', () => true);
-  assignSlot('FLEX_B', () => true);
+  const isExplicitIntermediate = (emp) => {
+    const token = getEmployeeRoleToken(emp);
+    return (
+      token === 'INTERMEDIATE' ||
+      token === 'COVERAGE' ||
+      token === 'FLEX_A' ||
+      token === 'FLEX_B' ||
+      token === 'FLEX1' ||
+      token === 'FLEX2'
+    );
+  };
 
-  // 4. Assign EXTRA_A and EXTRA_B for remaining extra employees
-  assignSlot('EXTRA_A', () => true);
-  assignSlot('EXTRA_B', () => true);
-
-  // Bounded fallback for any additional employee beyond 6
+  // 1. Explicit Core 1 (maps to CORE_A)
   sorted.forEach((employee) => {
-    if (!roleById.has(employee.id)) {
-      roleById.set(employee.id, 'EXTRA_B');
+    if (isExplicitCore1(employee)) {
+      if (!assignedRoles.has('CORE_A')) {
+        roleById.set(employee.id, 'CORE_A');
+        assignedRoles.add('CORE_A');
+      }
     }
   });
+
+  // 2. Explicit Core 2 (maps to CORE_B)
+  sorted.forEach((employee) => {
+    if (roleById.has(employee.id)) return;
+    if (isExplicitCore2(employee)) {
+      if (!assignedRoles.has('CORE_B')) {
+        roleById.set(employee.id, 'CORE_B');
+        assignedRoles.add('CORE_B');
+      }
+    }
+  });
+
+  // 3. Explicit Intermediate (maps to FLEX_A, then FLEX_B)
+  sorted.forEach((employee) => {
+    if (roleById.has(employee.id)) return;
+    if (isExplicitIntermediate(employee)) {
+      if (!assignedRoles.has('FLEX_A')) {
+        roleById.set(employee.id, 'FLEX_A');
+        assignedRoles.add('FLEX_A');
+      } else if (!assignedRoles.has('FLEX_B')) {
+        roleById.set(employee.id, 'FLEX_B');
+        assignedRoles.add('FLEX_B');
+      }
+    }
+  });
+
+  // 4. Explicit Custom / Extra (maps ONLY to EXTRA_A, then EXTRA_B, NEVER base slots)
+  sorted.forEach((employee) => {
+    if (roleById.has(employee.id)) return;
+    if (isExplicitCustom(employee)) {
+      if (!assignedRoles.has('EXTRA_A')) {
+        roleById.set(employee.id, 'EXTRA_A');
+        assignedRoles.add('EXTRA_A');
+      } else if (!assignedRoles.has('EXTRA_B')) {
+        roleById.set(employee.id, 'EXTRA_B');
+        assignedRoles.add('EXTRA_B');
+      }
+    }
+  });
+
+  // 5. Legacy / unconfigured fallback ONLY for employees without explicit modern role
+  const unassignedLegacy = sorted.filter(
+    (emp) =>
+      !roleById.has(emp.id) &&
+      !isExplicitCustom(emp) &&
+      !isExplicitCore1(emp) &&
+      !isExplicitCore2(emp) &&
+      !isExplicitIntermediate(emp),
+  );
+
+  const baseSlots = ['CORE_A', 'CORE_B', 'FLEX_A', 'FLEX_B'];
+  for (const slot of baseSlots) {
+    if (!assignedRoles.has(slot) && unassignedLegacy.length > 0) {
+      const nextEmp = unassignedLegacy.shift();
+      roleById.set(nextEmp.id, slot);
+      assignedRoles.add(slot);
+    }
+  }
+
+  const extraSlots = ['EXTRA_A', 'EXTRA_B'];
+  for (const slot of extraSlots) {
+    if (!assignedRoles.has(slot) && unassignedLegacy.length > 0) {
+      const nextEmp = unassignedLegacy.shift();
+      roleById.set(nextEmp.id, slot);
+      assignedRoles.add(slot);
+    }
+  }
 
   return roleById;
 }
@@ -299,6 +373,20 @@ export async function generateEngineWeekSchedule({
     throw new Error('Μη έγκυρες ημέρες εβδομάδας για scheduler engine.');
   }
 
+  const capacity = validateSchedulerEmployeeCapacity(employees);
+  if (!capacity.valid) {
+    return {
+      shifts: [],
+      warnings: [capacity.message],
+      meta: {
+        engine: 'scheduler-engine',
+        valid: false,
+        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: [] },
+        dayPlans: [],
+      },
+    };
+  }
+
   const engineEmployees = toEngineEmployees(employees, rules);
   const engineAbsences = [
     ...toEngineAbsences(allShifts, weekDays),
@@ -333,6 +421,33 @@ export function generateEngineMonthSchedule({
   rules = {},
 }) {
   const monthDays = getMonthDays(year, month);
+  const capacity = validateSchedulerEmployeeCapacity(employees);
+  if (!capacity.valid) {
+    return {
+      shifts: [],
+      warnings: [capacity.message],
+      unresolvedGaps: [],
+      validation: {
+        valid: false,
+        violations: [
+          {
+            id: 'capacity-violation',
+            code: 'UNSUPPORTED_CAPACITY',
+            message: capacity.message,
+            severity: 'error',
+          },
+        ],
+      },
+      meta: {
+        monthDays,
+        engine: 'scheduler-engine',
+        valid: false,
+        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: [] },
+        dayPlans: [],
+      },
+    };
+  }
+
   const engineEmployees = toEngineEmployees(employees, rules);
   const engineAbsences = [
     ...toEngineAbsences([...allShifts, ...existingMonthShifts], monthDays),

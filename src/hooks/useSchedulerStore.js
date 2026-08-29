@@ -18,6 +18,7 @@ import {
 import {
   generateEngineMonthSchedule,
   generateEngineWeekSchedule,
+  validateSchedulerEmployeeCapacity,
 } from '../utils/schedulerEngineAdapter';
 import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, SHIFT_TYPES } from '../utils/analytics';
@@ -1431,12 +1432,11 @@ export const useSchedulerStore = create((set, get) => ({
         after: createdEmployee,
       });
       const publicEmployeesUpdated = await get().refreshPublicEmployeesSnapshot([...get().employees, createdEmployee].filter(Boolean));
-      set((state) => ({
-        employees: [...state.employees.filter((e) => e.id !== createdEmployee?.id), createdEmployee].filter(Boolean),
+      set({
         warningMessage: publicEmployeesUpdated
           ? 'Ο υπάλληλος προστέθηκε.'
           : 'Ο υπάλληλος προστέθηκε, αλλά η δημόσια λίστα δεν ενημερώθηκε.',
-      }));
+      });
       return true;
     } catch (error) {
       set({ warningMessage: error?.message || 'Αποτυχία προσθήκης υπαλλήλου.' });
@@ -2529,6 +2529,12 @@ export const useSchedulerStore = create((set, get) => ({
   generateMagicWeek: async () => {
     if (!requireAdmin(get, set)) return;
 
+    const capacity = validateSchedulerEmployeeCapacity(get().employees);
+    if (!capacity.valid) {
+      set({ warningMessage: capacity.message });
+      return;
+    }
+
     const weekDays = getWeekDays(get().weekStart);
     const weekSet = new Set(weekDays);
     const weekExistingShifts = get().shifts.filter((shift) => weekSet.has(shift.date));
@@ -2619,6 +2625,12 @@ export const useSchedulerStore = create((set, get) => ({
     if (!requireAdmin(get, set)) return false;
     if (typeof year !== 'number' || typeof month !== 'number') {
       set({ warningMessage: 'Μη έγκυρα στοιχεία μήνα για αυτόματη δημιουργία.' });
+      return false;
+    }
+
+    const capacity = validateSchedulerEmployeeCapacity(get().employees);
+    if (!capacity.valid) {
+      set({ warningMessage: capacity.message });
       return false;
     }
 

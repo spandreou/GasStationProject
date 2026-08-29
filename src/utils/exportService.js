@@ -273,6 +273,18 @@ function buildAbsenceMap(absences = []) {
   return map;
 }
 
+function isExtraSubstituteEmployee(employee) {
+  const role = (employee?.scheduleRole || employee?.roleType || '').toLowerCase();
+  return (
+    role === 'custom' ||
+    role === 'extra_a' ||
+    role === 'extra_b' ||
+    role === 'extra' ||
+    role === 'substitute' ||
+    employee?.extraMode === 'SUBSTITUTE_ONLY'
+  );
+}
+
 export function validateExportScheduleState({ days = [], employees = [], shifts = [], absences = [] } = {}) {
   const activeParticipating = (employees || []).filter(
     (employee) => employee?.isActive !== false && employee?.participatesInRotation !== false,
@@ -287,6 +299,8 @@ export function validateExportScheduleState({ days = [], employees = [], shifts 
   const totalDays = (days || []).length;
 
   const invalidEmployees = activeParticipating.filter((employee) => {
+    const isSubstitute = isExtraSubstituteEmployee(employee);
+
     const workDaysCount = (days || []).filter(
       (d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0,
     ).length;
@@ -296,9 +310,13 @@ export function validateExportScheduleState({ days = [], employees = [], shifts 
       (d) => Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)),
     ).length;
 
-    // If 0 work shifts, the absence must cover the full target period to be considered a complete valid schedule
+    // Full-period absence covering all target days is valid
     if (absenceDaysCount >= totalDays && totalDays > 0) return false;
 
+    // Legitimate substitute employee on standby with 0 work and 0 absence is valid
+    if (isSubstitute && absenceDaysCount === 0) return false;
+
+    // Regular employee with 0 work and missing/partial schedule is invalid
     return true;
   });
 

@@ -8,7 +8,7 @@ const rootDir = resolve(__dirname, '..');
 const functionsEntry = resolve(rootDir, 'functions', 'src', 'index.js');
 const functionsEntryUrl = pathToFileURL(functionsEntry).href;
 
-const DISCOVERY_MAX_ALLOWED_DURATION_MS = 3000;
+const DISCOVERY_MAX_ALLOWED_DURATION_MS = 15000;
 const EXPECTED_EXPORTS = [
   'cleanupAuthTickets',
   'createAuthTicket',

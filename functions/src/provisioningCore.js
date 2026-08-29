@@ -33,9 +33,25 @@ export const VALID_BUSINESS_CATEGORIES = Object.freeze([
 
 export const DEFAULT_BUSINESS_CATEGORY = 'OTHER';
 export const DEFAULT_CUSTOMIZATION_MODE = 'STANDARD';
+export const TRIAL_DURATION_DAYS = 7;
 
-export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
+export const SLUG_MIN_LENGTH = 3;
+export const SLUG_MAX_LENGTH = 40;
+export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 export const TOKEN_FORMAT_REGEX = /^stx_[a-zA-Z0-9_-]{43,64}$/;
+
+export const PROVISIONING_ERROR_REASONS = Object.freeze({
+  PLATFORM_ADMIN_OVERLAP: 'platform-admin-overlap',
+  EXISTING_MEMBERSHIP: 'existing-membership',
+  TENANT_SLUG_TAKEN: 'tenant-slug-taken',
+  REGISTRATION_TOKEN_EXPIRED: 'registration-token-expired',
+  REGISTRATION_TOKEN_REVOKED: 'registration-token-revoked',
+  REGISTRATION_TOKEN_CONSUMED: 'registration-token-consumed',
+  REGISTRATION_TOKEN_INVALID: 'registration-token-invalid',
+  PROVISIONING_INTERNAL: 'provisioning-internal',
+  INVALID_ARGUMENT: 'invalid-argument',
+  UNAUTHENTICATED: 'unauthenticated',
+});
 
 export function validateTenantSlug(rawSlug) {
   if (typeof rawSlug !== 'string') {
@@ -44,8 +60,8 @@ export function validateTenantSlug(rawSlug) {
 
   const slug = rawSlug.trim().toLowerCase();
 
-  if (slug.length < 3 || slug.length > 64) {
-    throw new Error('slug length must be between 3 and 64 characters');
+  if (slug.length < SLUG_MIN_LENGTH || slug.length > SLUG_MAX_LENGTH) {
+    throw new Error(`slug length must be between ${SLUG_MIN_LENGTH} and ${SLUG_MAX_LENGTH} characters`);
   }
 
   if (!SLUG_REGEX.test(slug)) {

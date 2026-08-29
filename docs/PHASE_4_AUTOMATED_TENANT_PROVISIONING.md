@@ -1,11 +1,11 @@
 # ShiftOryx — Phase 4: Automated Tenant Provisioning
 
-**Status:** IMPLEMENTATION_READY_FOR_HUMAN_REVIEW  
-**Version:** 1.2.0 (Final Architecture Alignment)  
+**Status:** PREPRODUCTION_CONTRACT_CORRECTED  
+**Version:** 1.3.0 (Master Roadmap Alignment: 7-Day Trial, 3-40 Slug, Structured Error Reasons)  
 **Phase Target:** Phase 4 Automated Tenant Provisioning  
 **Security Boundary:** Server-Side Cloud Functions (`functions/src/provisioningService.js`) & Atomic Firestore Transactions  
 **Production Deployment:** NOT PERFORMED (Emulator-validated only)  
-**Base Source SHA:** `b48206f0e3689498761f59eb0faa32f8bce9f438`  
+**Base Source SHA:** `497a57cf1e5ffc1e5fb313d66678ef2fb77d7f02`  
 **Expected Functions Exports (8):** `cleanupAuthTickets`, `createAuthTicket`, `exchangeAuthTicket`, `generateRegistrationToken`, `listRegistrationTokens`, `provisionTenantFromRegistrationToken`, `revokeRegistrationToken`, `validateRegistrationToken`
 
 ---
@@ -55,7 +55,14 @@ MEMBERSHIP_EMAIL_PRESENT = NO
 - No PII (`email`) is duplicated into membership records.
 - User profile in `users/{uid}` stores the normalized email derived securely from `request.auth.token.email` (never from client input).
 
-### 2.4 Slug Reservation Architecture (`slugReservations/{slug}`)
+### 2.4 Slug Contract & Reservation Architecture (`slugReservations/{slug}`)
+```text
+SLUG_MIN_LENGTH = 3
+SLUG_MAX_LENGTH = 40
+SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/
+```
+- Slugs must be between 3 and 40 characters, lowercase alphanumeric and hyphens, without leading/trailing hyphens.
+- Reserved platform slugs (`admin`, `gas`, `shiftoryx`, `portal`, `api`, `auth`, `status`, `stores`, etc.) and prohibited prefixes/suffixes (`gas-*`, `*-gas`, `shiftoryx-*`, `*-shiftoryx`) are rejected.
 - Slugs are reserved atomically inside the transaction at `slugReservations/{slug}`:
   ```json
   {
@@ -66,7 +73,7 @@ MEMBERSHIP_EMAIL_PRESENT = NO
     "createdAt": "serverTimestamp"
   }
   ```
-- Pre-condition check reads both `tenants/{slug}` and `slugReservations/{slug}`; if either exists, provisioning aborts with `already-exists` without corrupting state or consuming tokens.
+- Pre-condition check reads both `tenants/{slug}` and `slugReservations/{slug}`; if either exists, provisioning aborts with `already-exists` (reason: `tenant-slug-taken`) without corrupting state or consuming tokens.
 
 ### 2.5 Domain Metadata Boundary
 ```text
@@ -85,15 +92,32 @@ TEMPLATE_RUNTIME_ASSIGNMENT = DEFERRED_TO_LATER_APPROVED_TEMPLATE_RUNTIME
 - **No Synthetic Template IDs:** Synthetic template assignment (`fuel-station-default`, `generic-default`, etc.) has been eliminated. The tenant document, callable response, and audit log do NOT persist synthetic `templateId` or `templateVersion`.
 - Template catalog, versioned template assignments, and branding runtime are formally deferred to Phase 9.
 
-### 2.7 Store Model Clarification
-- `CANONICAL_STORE_COLLECTION = NONE_IN_PHASE4`
-- `INITIAL_STORE_REQUIRED = NO`
-- Scheduler settings (`tenants/{tenantId}/settings/scheduler`) is a tenant-level scheduler configuration subcollection, not a store entity. Dedicated multi-store collections belong to Phase 8.
+### 2.7 Safe Structured Error Reasons Contract
+```typescript
+export const PROVISIONING_ERROR_REASONS = {
+  PLATFORM_ADMIN_OVERLAP: 'platform-admin-overlap',
+  EXISTING_MEMBERSHIP: 'existing-membership',
+  TENANT_SLUG_TAKEN: 'tenant-slug-taken',
+  REGISTRATION_TOKEN_EXPIRED: 'registration-token-expired',
+  REGISTRATION_TOKEN_REVOKED: 'registration-token-revoked',
+  REGISTRATION_TOKEN_CONSUMED: 'registration-token-consumed',
+  REGISTRATION_TOKEN_INVALID: 'registration-token-invalid',
+  PROVISIONING_INTERNAL: 'provisioning-internal',
+  INVALID_ARGUMENT: 'invalid-argument',
+  UNAUTHENTICATED: 'unauthenticated',
+};
+```
+- Callable responses deliver clean machine-readable `reason` tokens inside `error.details`.
+- Zero exposure of internal Firestore collection paths, token hashes, or stack traces.
 
-### 2.8 Known Phase 7 Subscription Entitlement Residual
-- `TRIAL_DOCUMENT_CREATED_SERVER_SIDE = YES` (`tenants/{tenantId}/subscription/current` initialized with plan `TRIAL`, status `TRIALING`, 14-day duration).
-- `TRIAL_ENTITLEMENT_ENFORCEMENT = NOT_YET_IMPLEMENTED_PHASE7` (Server-side entitlement enforcement and locking Firestore rules for subscriptions belong to Phase 7).
-- `CURRENT_OWNER_SUBSCRIPTION_WRITE_RESIDUAL = DOCUMENTED`.
+### 2.8 Subscription Trial Duration (7 Days)
+```text
+TRIAL_DOCUMENT_CREATED_SERVER_SIDE = YES
+TRIAL_DURATION_DAYS = 7
+TRIAL_ENTITLEMENT_ENFORCEMENT = NOT_YET_IMPLEMENTED_PHASE7
+```
+- `tenants/{tenantId}/subscription/current` is initialized with plan `TRIAL`, status `TRIALING`, and `trialEndsAt = now + 7 days`.
+- Server-side entitlement enforcement and locking Firestore rules for subscriptions belong to Phase 7.
 
 ---
 
@@ -107,18 +131,18 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
                 ▼
 [1. Strict Input Validation (provisioningCore.js)]
     - Validate token syntax (stx_...)
-    - Validate slug format (3-64 chars, regex, no reserved/gas/shiftoryx names)
+    - Validate slug format (3-40 chars, regex, no reserved/gas/shiftoryx names)
     - Validate display name (1-100 chars, no control chars)
     - Validate business category (FUEL_STATION, CAFE, RESTAURANT, HAIR_SALON, RETAIL, OTHER)
     - Reject all unknown/forbidden fields (role, status, uid overrides, email)
                 │
                 ▼
 [2. Atomic Firestore Transaction Boundary (Read Phase)]
-    ├─► Read platformAdmins/{uid} ──────────────► [If ACTIVE: ABORT with permission-denied]
-    ├─► Read tenantMemberships where uid==uid ──► [If ANY exists: ABORT with failed-precondition]
-    ├─► Read users/{uid} ───────────────────────► [If memberships exist: ABORT with failed-precondition]
-    ├─► Read tenants/{slug} ────────────────────► [If EXISTS: ABORT with already-exists]
-    ├─► Read slugReservations/{slug} ───────────► [If EXISTS: ABORT with already-exists]
+    ├─► Read platformAdmins/{uid} ──────────────► [If ACTIVE: ABORT with permission-denied (platform-admin-overlap)]
+    ├─► Read tenantMemberships where uid==uid ──► [If ANY exists: ABORT with failed-precondition (existing-membership)]
+    ├─► Read users/{uid} ───────────────────────► [If memberships exist: ABORT with failed-precondition (existing-membership)]
+    ├─► Read tenants/{slug} ────────────────────► [If EXISTS: ABORT with already-exists (tenant-slug-taken)]
+    ├─► Read slugReservations/{slug} ───────────► [If EXISTS: ABORT with already-exists (tenant-slug-taken)]
     ├─► Consume Registration Token (Phase 3 consumeRegistrationToken)
     │     ├─► Hash raw token -> read registrationTokenLookups/{hash}
     │     ├─► Read registrationTokens/{tokenId}
@@ -130,7 +154,7 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
     ├─► Write tenantMemberships/{uid}_{slug} ───► [role: 'OWNER', status: 'ACTIVE'] (No email PII)
     ├─► Write/Update users/{uid} ───────────────► [memberships: { [slug]: { role: 'OWNER', status: 'ACTIVE' } }, email: auth.token.email]
     ├─► Write tenants/{slug}/settings/scheduler ─► [generatorRules: default rules, specialDaysByDate: {}]
-    ├─► Write tenants/{slug}/subscription/current► [plan: 'TRIAL', status: 'TRIALING', trialEndsAt: now + 14d]
+    ├─► Write tenants/{slug}/subscription/current► [plan: 'TRIAL', status: 'TRIALING', trialEndsAt: now + 7d]
     ├─► Update registrationTokens/{tokenId} ────► [status: 'CONSUMED', consumedBy: uid]
     └─► Write platformAuditLogs/{id} ───────────► [action: 'TENANT_PROVISIONED', tenantId: slug, tokenId, businessCategory]
 ```
@@ -154,27 +178,22 @@ The entire state mutation occurs within a single atomic Firestore transaction (`
 ## 5. Verification & Test Evidence
 
 ### 5.1 Unit & Core Tests (`npm run qa:tenant-provisioning`)
-- Strict slug syntax and length checking (`3-64` chars).
+- Strict slug syntax and length checking (`3-40` chars). Length 2, 41, 64 rejected. Length 3, 40 accepted.
 - Reserved slugs blocked (`admin`, `gas`, `shiftoryx`, `portal`, `api`, `auth`, `status`, `stores`, etc.).
 - Prohibited slug prefixes and suffixes blocked (`gas-*`, `*-gas`, `shiftoryx-*`, `*-shiftoryx`).
 - Display name bounds and control character rejection.
 - Business category allowlist and precedence resolution verification (`CLIENT -> TOKEN_HINT -> OTHER`).
+- 7-day trial duration constant verification (`TRIAL_DURATION_DAYS = 7`).
+- Structured error reasons vocabulary verification (`PROVISIONING_ERROR_REASONS`).
 - Strict allowlist input validation rejecting all forbidden fields (`role`, `status`, `uid`, `email`, `templateId`).
 
 ### 5.2 Emulator Integration Suite (`npm run test:tenant-provisioning:emulator`)
-- **Test 1: Happy Path Across All Categories:** Verified complete creation of tenant, slug reservation, `OWNER` membership, user mirror, scheduler settings, trial subscription, token consumption (`status: 'CONSUMED'`), and audit log for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, and `OTHER`. Explicitly verified `templateId`, `templateVersion`, and membership `email` are absent.
-- **Test 2: Real Registration Token Fail-Closed Matrix:** Verified that malformed syntax, nonexistent token, expired token (past `expiresAt`), revoked token, already-consumed token, active token with missing canonical `expiresAt`, and active token with malformed canonical `expiresAt` abort transactions with 0 residual documents.
-- **Test 3: Existing Membership Policy Matrix:** Verified fail-closed rejection when caller has active `OWNER`, revoked `OWNER`, legacy `ADMIN`, legacy `MANAGER`, unknown role, or mirror-only membership.
-- **Test 4: Slug Reservation & Collision Matrix:** Verified collision rejection for existing tenant without reservation, existing reservation without tenant, and contested slug race between two valid tokens.
-- **Test 5: 10-Way Concurrency Race Test:** 10 simultaneous parallel provisioning requests using the same token yielded exactly 1 success and 9 failures, producing exactly 1 tenant, 1 slug reservation, and 1 consumed token.
-- **Test 6: Retry Contract Test:** Repeated identical call after successful provisioning returns deterministic error without duplicating state.
+- **Test 1: Happy Path Across All Categories (7-Day Trial):** Verified complete creation of tenant, slug reservation, `OWNER` membership, user mirror, scheduler settings, 7-day trial subscription (`trialEndsAt ≈ now + 7d`), token consumption (`status: 'CONSUMED'`), and audit log for `FUEL_STATION`, `CAFE`, `RESTAURANT`, `HAIR_SALON`, `RETAIL`, and `OTHER`.
+- **Test 2: Real Registration Token Fail-Closed Matrix & Error Reasons:** Verified malformed syntax (`invalid-argument`), nonexistent token (`registration-token-invalid`), expired token (`registration-token-expired`), revoked token (`registration-token-revoked`), already-consumed token (`registration-token-consumed`), active token with missing/malformed `expiresAt` (`registration-token-invalid`).
+- **Test 3: Existing Membership & Platform Admin Matrix:** Verified fail-closed rejection when caller is Platform Admin (`platform-admin-overlap`), has active `OWNER` (`existing-membership`), revoked `OWNER` (`existing-membership`), legacy `ADMIN`/`MANAGER` (`existing-membership`), unknown role (`existing-membership`), or mirror-only membership (`existing-membership`).
+- **Test 4: Slug Reservation & Collision Matrix:** Verified collision rejection for existing tenant without reservation (`tenant-slug-taken`), existing reservation without tenant (`tenant-slug-taken`), and contested slug race between two valid tokens (`tenant-slug-taken`).
+- **Test 4b: 41-Character Slug Rejection in Emulator:** Verified that a 41-character slug is rejected by the callable backend with `invalid-argument`, leaving the token `ACTIVE` and creating 0 residual documents.
+- **Test 5: 10-Way Concurrency Race Test:** 10 simultaneous parallel provisioning requests using the same token yielded exactly 1 success and 9 failures (with reason `registration-token-consumed`), producing exactly 1 tenant, 1 slug reservation, and 1 consumed token.
+- **Test 6: Retry Contract Test:** Repeated identical call after successful provisioning returns deterministic error (`existing-membership`) without duplicating state.
 - **Test 7: Direct Client Rules Enforcement:** Confirmed direct client reads/writes to `slugReservations`, `tenants`, `tenantMemberships`, and `platformAuditLogs` return HTTP 403.
-- **Test 8: Error Redaction Test:** Confirmed error responses return clean sanitized error codes without leaking internal document paths, lookup hashes, or stack traces.
-
----
-
-## 6. Residual Risks & Next Steps
-
-1. **Production Deployment:** Phase 4 backend is implemented and validated in the emulator suite. No production deployment has been executed.
-2. **Upcoming Phase 5:** Phase 5 will implement the root portal user interface (`/register`, `/login`, `/stores`) that connects the browser client to the `provisionTenantFromRegistrationToken` backend callable.
-3. **Upcoming Phase 9:** Phase 9 will implement the centrally managed template catalog, versioned template runtime, and preview/migration system.
+- **Test 8: Error Redaction Test:** Confirmed error responses return clean sanitized error codes and reasons without leaking internal document paths, lookup hashes, platform admin paths, or stack traces.

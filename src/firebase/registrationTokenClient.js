@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions, isFirebaseConfigured } from './config';
+import { buildProvisioningPayload } from '../utils/portalHelpers';
 
 const SAFE_CALLABLE_ERROR = 'Η ενέργεια δεν ήταν δυνατό να ολοκληρωθεί. Δοκίμασε ξανά.';
 
@@ -37,7 +38,7 @@ export async function validateTokenClient(token) {
     return {
       valid: false,
       reason: errorCode,
-      message: err.message || SAFE_CALLABLE_ERROR,
+      message: SAFE_CALLABLE_ERROR,
     };
   }
 }
@@ -52,14 +53,9 @@ export async function validateTokenClient(token) {
  * @param {string} [params.businessCategory]
  * @returns {Promise<{success: boolean, tenantId: string, slug: string, displayName: string, businessCategory: string}>}
  */
-export async function provisionTenantClient({ token, slug, displayName, businessCategory }) {
+export async function provisionTenantClient(input) {
   assertFirebaseReady();
-  const payload = {
-    token: String(token || '').trim(),
-    slug: String(slug || '').trim().toLowerCase(),
-    displayName: String(displayName || '').trim(),
-    businessCategory: businessCategory ? String(businessCategory).trim().toUpperCase() : 'OTHER',
-  };
+  const payload = buildProvisioningPayload(input);
 
   try {
     const provisionFn = httpsCallable(functions, 'provisionTenantFromRegistrationToken');
@@ -74,10 +70,11 @@ export async function provisionTenantClient({ token, slug, displayName, business
     };
   } catch (err) {
     const errorDetails = err?.details || {};
-    const message = err.message || SAFE_CALLABLE_ERROR;
-    const error = new Error(message);
+    const error = new Error(SAFE_CALLABLE_ERROR);
     error.code = err.code || 'internal';
     error.details = errorDetails;
+    error.reason = errorDetails.reason || null;
     throw error;
   }
 }
+

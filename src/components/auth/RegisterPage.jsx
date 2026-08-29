@@ -4,18 +4,19 @@ import { validateTokenClient, provisionTenantClient } from '../../firebase/regis
 import { createTenantAuthTicketRedirect } from '../../firebase/authBrokerService';
 import { resolveCentralTenantDestination } from '../../services/tenantAccessService';
 import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
+import {
+  BUSINESS_CATEGORY_OPTIONS,
+  DEFAULT_BUSINESS_CATEGORY,
+  generateSlugFromDisplayName,
+  normalizeRegistrationError,
+  resolveBusinessCategory,
+  SLUG_MAX_LENGTH,
+  SLUG_MIN_LENGTH,
+  TRIAL_DURATION_DAYS,
+  validatePortalSlug,
+} from '../../utils/portalHelpers';
 import AuthPageShell from './AuthPageShell';
 
-const BUSINESS_CATEGORIES = [
-  { id: 'FUEL_STATION', label: 'Πρατήριο Καυσίμων' },
-  { id: 'CAFE', label: 'Καφέ / Bistro' },
-  { id: 'RESTAURANT', label: 'Εστιατόριο / Εστίαση' },
-  { id: 'HAIR_SALON', label: 'Κομμωτήριο / Barber' },
-  { id: 'RETAIL', label: 'Λιανικό Εμπόριο / Κατάστημα' },
-  { id: 'OTHER', label: 'Άλλη Επιχείρηση' },
-];
-
-const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 const isAuthBrokerEnabled = String(import.meta.env.VITE_ENABLE_AUTH_BROKER || '').trim().toLowerCase() === 'true';
 
 export default function RegisterPage() {
@@ -36,7 +37,7 @@ export default function RegisterPage() {
   // Business Fields
   const [displayName, setDisplayName] = useState('');
   const [slug, setSlug] = useState('');
-  const [businessCategory, setBusinessCategory] = useState('FUEL_STATION');
+  const [businessCategory, setBusinessCategory] = useState(DEFAULT_BUSINESS_CATEGORY);
 
   // UI state
   const [status, setStatus] = useState('idle'); // 'idle' | 'loading' | 'error'
@@ -81,8 +82,8 @@ export default function RegisterPage() {
       }
 
       setTokenInfo(res);
-      if (res.businessCategoryHint && BUSINESS_CATEGORIES.some((c) => c.id === res.businessCategoryHint)) {
-        setBusinessCategory(res.businessCategoryHint);
+      if (res.businessCategoryHint) {
+        setBusinessCategory(resolveBusinessCategory(res.businessCategoryHint));
       }
 
       setStatus('idle');
@@ -149,12 +150,8 @@ export default function RegisterPage() {
   function handleDisplayNameChange(val) {
     setDisplayName(val);
     if (!slug) {
-      const generated = val
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 63);
-      if (generated.length >= 3) {
+      const generated = generateSlugFromDisplayName(val);
+      if (generated.length >= SLUG_MIN_LENGTH) {
         setSlug(generated);
       }
     }
@@ -166,17 +163,15 @@ export default function RegisterPage() {
     setErrorMessage('');
 
     const normName = displayName.trim();
-    const normSlug = slug.trim().toLowerCase();
+    const slugValidation = validatePortalSlug(slug);
 
     if (!normName || normName.length < 2) {
       setErrorMessage('Παρακαλώ εισάγετε μια έγκυρη επωνυμία καταστήματος (τουλάχιστον 2 χαρακτήρες).');
       return;
     }
 
-    if (!SLUG_REGEX.test(normSlug)) {
-      setErrorMessage(
-        'Το αναγνωριστικό (slug) πρέπει να περιέχει μόνο πεζά λατινικά γράμματα, αριθμούς και παύλες (3-63 χαρακτήρες, χωρίς παύλα στην αρχή ή στο τέλος).',
-      );
+    if (!slugValidation.valid) {
+      setErrorMessage(slugValidation.error || 'Μη έγκυρο αναγνωριστικό URL.');
       return;
     }
 
@@ -186,7 +181,7 @@ export default function RegisterPage() {
     try {
       const result = await provisionTenantClient({
         token,
-        slug: normSlug,
+        slug: slugValidation.slug,
         displayName: normName,
         businessCategory,
       });
@@ -198,16 +193,8 @@ export default function RegisterPage() {
     } catch (err) {
       setStatus('error');
       setStep(3);
-      const errMsg = err?.message || '';
-      if (errMsg.includes('συσχετισμό') || err?.details?.code === 'USER_ALREADY_HAS_MEMBERSHIP') {
-        setErrorMessage('Ο λογαριασμός σας έχει ήδη συσχετισμένο κατάστημα/tenant.');
-      } else if (errMsg.includes('χρησιμοποιείται') || err?.details?.code === 'SLUG_ALREADY_EXISTS') {
-        setErrorMessage(`Το αναγνωριστικό "${normSlug}" χρησιμοποιείται ήδη. Επιλέξτε διαφορετικό slug.`);
-      } else if (errMsg.includes('Platform Administrator') || err?.details?.code === 'PLATFORM_ADMIN_CANNOT_OWN_TENANT') {
-        setErrorMessage('Οι διαχειριστές πλατφόρμας δεν επιτρέπεται να δημιουργούν καταστήματα.');
-      } else {
-        setErrorMessage(errMsg || 'Αποτυχία αρχικοποίησης καταστήματος. Παρακαλώ δοκιμάστε ξανά.');
-      }
+      const normalized = normalizeRegistrationError(err);
+      setErrorMessage(normalized.message);
     }
   }
 
@@ -282,6 +269,8 @@ export default function RegisterPage() {
               type="text"
               required
               autoFocus
+              autoComplete="off"
+              spellCheck={false}
               value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="stx_..."
@@ -341,6 +330,7 @@ export default function RegisterPage() {
               type="email"
               required
               autoFocus
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="owner@example.com"
@@ -356,6 +346,7 @@ export default function RegisterPage() {
               id="password-input"
               type="password"
               required
+              autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -372,6 +363,7 @@ export default function RegisterPage() {
                 id="confirm-password-input"
                 type="password"
                 required
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
@@ -428,6 +420,7 @@ export default function RegisterPage() {
                 id="slug-input"
                 type="text"
                 required
+                maxLength={SLUG_MAX_LENGTH}
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().trim())}
                 placeholder="bp-kallis"
@@ -436,7 +429,7 @@ export default function RegisterPage() {
               <span className="flex items-center pr-3.5 text-xs text-slate-500 font-mono">.shiftoryx.gr</span>
             </div>
             <p className="mt-1 text-[11px] text-slate-400">
-              Πεζά λατινικά, αριθμοί και παύλες (π.χ. bp-kallis, my-cafe).
+              Πεζά λατινικά, αριθμοί και παύλες ({SLUG_MIN_LENGTH}-{SLUG_MAX_LENGTH} χαρακτήρες, π.χ. bp-kallis, my-cafe).
             </p>
           </div>
 
@@ -450,7 +443,7 @@ export default function RegisterPage() {
               onChange={(e) => setBusinessCategory(e.target.value)}
               className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-sm text-slate-100 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             >
-              {BUSINESS_CATEGORIES.map((cat) => (
+              {BUSINESS_CATEGORY_OPTIONS.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.label}
                 </option>
@@ -504,8 +497,8 @@ export default function RegisterPage() {
           <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-3.5 text-left text-xs text-slate-300 space-y-1">
             <p className="font-semibold text-cyan-200">Στοιχεία Πρόσβασης:</p>
             <p>• Ρόλος: <span className="text-white font-mono font-bold">OWNER</span></p>
-            <p>• Κατηγορία: <span className="text-white">{BUSINESS_CATEGORIES.find(c => c.id === createdTenant?.businessCategory)?.label || createdTenant?.businessCategory}</span></p>
-            <p>• Δοκιμαστική Περίοδος: <span className="text-emerald-400 font-semibold">Ενεργή (30 ημέρες)</span></p>
+            <p>• Κατηγορία: <span className="text-white">{BUSINESS_CATEGORY_OPTIONS.find(c => c.id === createdTenant?.businessCategory)?.label || createdTenant?.businessCategory}</span></p>
+            <p>• Δοκιμαστική Περίοδος: <span className="text-emerald-400 font-semibold">Ενεργή ({TRIAL_DURATION_DAYS} ημέρες)</span></p>
           </div>
 
           <button

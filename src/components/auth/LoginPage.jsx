@@ -5,9 +5,9 @@ import {
   getReturnToParam,
   resolveAuthorizedReturnTo,
   resolveCentralTenantDestination,
-  TENANT_ACCESS_MESSAGES,
 } from '../../services/tenantAccessService';
 import { getCurrentTenantHostContext } from '../../utils/tenantHostContext';
+import { determinePostLoginDestination } from '../../utils/portalHelpers';
 import AuthPageShell from './AuthPageShell';
 
 const MAX_EMAIL_LENGTH = 254;
@@ -36,9 +36,9 @@ export default function LoginPage() {
     }
 
     try {
-      const isPlatformAdmin = await authRepository.isPlatformAdmin?.(user.uid);
+      const isPlatformAdmin = await authRepository.isPlatformAdmin(user.uid);
       if (isPlatformAdmin) {
-        window.location.assign('/admin-console');
+        window.location.assign('/admin');
         return;
       }
     } catch {
@@ -84,7 +84,7 @@ export default function LoginPage() {
       return;
     }
 
-    // Zero memberships -> guidance
+    // Zero memberships -> guidance on /stores
     window.location.assign('/stores');
   }
 

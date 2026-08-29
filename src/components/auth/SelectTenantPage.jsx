@@ -7,6 +7,7 @@ import {
   resolveCentralTenantDestination,
   TENANT_ACCESS_MESSAGES,
 } from '../../services/tenantAccessService';
+import { resolveStoreSelectorState } from '../../utils/portalHelpers';
 import AuthPageShell from './AuthPageShell';
 
 const isAuthBrokerEnabled = String(import.meta.env.VITE_ENABLE_AUTH_BROKER || '').trim().toLowerCase() === 'true';
@@ -32,8 +33,8 @@ export default function SelectTenantPage() {
         }
 
         try {
-          // Check if platform admin
-          const isAdmin = await authRepository.isPlatformAdmin?.(user.uid);
+          // Check if platform admin using real repository method
+          const isAdmin = await authRepository.isPlatformAdmin(user.uid);
           if (!cancelled && isAdmin) {
             setIsPlatformAdmin(true);
           }
@@ -61,23 +62,8 @@ export default function SelectTenantPage() {
           const result = await resolveCentralTenantDestination(user.uid);
           if (cancelled) return;
 
-          if (result.type === 'redirect' && result.url) {
-            setStatus('redirecting');
-            setMessage('Μεταφορά στο κατάστημα...');
-            if (isAuthBrokerEnabled) {
-              const redirectUrl = await createTenantAuthTicketRedirect({
-                returnTo: result.url,
-                tenantId: result.tenant?.id,
-              });
-              window.location.assign(redirectUrl);
-              return;
-            }
-
-            window.location.assign(result.url);
-            return;
-          }
-
-          if (result.type === 'select') {
+          const selectorState = resolveStoreSelectorState({ user, tenants: result.tenants });
+          if (selectorState === 'ready') {
             setTenants(result.tenants);
             setStatus('ready');
             return;
@@ -135,10 +121,10 @@ export default function SelectTenantPage() {
         <div className="mb-4 rounded-xl border border-purple-500/30 bg-purple-950/30 p-3 text-xs text-purple-200 flex items-center justify-between">
           <span>Έχετε ρόλο Platform Administrator.</span>
           <a
-            href="/admin-console"
+            href="/admin"
             className="rounded-lg bg-purple-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-purple-500"
           >
-            Admin Console →
+            Admin Panel →
           </a>
         </div>
       )}

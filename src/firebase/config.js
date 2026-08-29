@@ -15,7 +15,9 @@ const REQUIRED_FIREBASE_ENV_KEYS = [
 ];
 
 function getEnvValue(name) {
-  const value = import.meta.env[name];
+  const value = (typeof import.meta !== 'undefined' && import.meta.env)
+    ? import.meta.env[name]
+    : (typeof process !== 'undefined' && process.env ? process.env[name] : '');
   return typeof value === 'string' ? value.trim() : '';
 }
 
@@ -58,7 +60,7 @@ export const firebaseConfigErrorMessage = isFirebaseConfigured
   ? ''
   : `Το Firebase δεν είναι ρυθμισμένο. Λείπουν env vars: ${missingFirebaseEnvKeys.join(', ')}`;
 
-if (import.meta.env.DEV && !isFirebaseConfigured) {
+if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && !isFirebaseConfigured) {
   console.error(firebaseConfigErrorMessage);
 }
 

@@ -164,7 +164,7 @@ export default function App() {
         message="Για ενεργοποίηση ή ανανέωση πρόσβασης, επικοινώνησε προσωρινά με τον διαχειριστή."
       />
     );
-  } else if (routePath === '/admin-console') {
+  } else if (routePath === '/admin' || routePath === '/admin-console') {
     page = (
       <RouteNoticePage
         title="Superadmin console"

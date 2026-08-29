@@ -19,6 +19,7 @@ import {
   generateEngineMonthSchedule,
   generateEngineWeekSchedule,
   validateSchedulerEmployeeCapacity,
+  validateSchedulerRoleConfiguration,
 } from '../utils/schedulerEngineAdapter';
 import { hasTimeOverlap } from '../utils/overlap';
 import { calculateWeeklyTotals, SHIFT_TYPES } from '../utils/analytics';
@@ -2529,9 +2530,9 @@ export const useSchedulerStore = create((set, get) => ({
   generateMagicWeek: async () => {
     if (!requireAdmin(get, set)) return;
 
-    const capacity = validateSchedulerEmployeeCapacity(get().employees);
-    if (!capacity.valid) {
-      set({ warningMessage: capacity.message });
+    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+    if (!roleValidation.valid) {
+      set({ warningMessage: roleValidation.message });
       return;
     }
 
@@ -2628,9 +2629,9 @@ export const useSchedulerStore = create((set, get) => ({
       return false;
     }
 
-    const capacity = validateSchedulerEmployeeCapacity(get().employees);
-    if (!capacity.valid) {
-      set({ warningMessage: capacity.message });
+    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+    if (!roleValidation.valid) {
+      set({ warningMessage: roleValidation.message });
       return false;
     }
 

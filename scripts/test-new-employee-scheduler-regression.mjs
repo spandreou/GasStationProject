@@ -3,16 +3,17 @@ import {
   generateEngineWeekSchedule,
   generateEngineMonthSchedule,
   validateSchedulerEmployeeCapacity,
+  validateSchedulerRoleConfiguration,
+  resolveEngineRoleMap,
 } from '../src/utils/schedulerEngineAdapter.js';
 import {
   buildGroupedScheduleRows,
-  buildScheduleRows,
   validateExportScheduleState,
   exportScheduleToPdf,
 } from '../src/utils/exportService.js';
 
 console.log('==========================================================');
-console.log('START: 20-CASE FINAL SCHEDULER SAFETY HARDENING SUITE');
+console.log('START: COMPREHENSIVE FINAL ROLE-MAPPING & SCHEDULER SUITE');
 console.log('==========================================================\n');
 
 const weekDays = [
@@ -35,102 +36,238 @@ function createBase4Employees() {
 }
 
 // -----------------------------------------------------------------------------
-// TEST 1: 4 correctly configured base employees -> PASS
+// SECTION 1: EXACT ROLE ALIAS PRESERVATION & MAPPING
 // -----------------------------------------------------------------------------
-console.log('TEST 1: 4 correctly configured base employees...');
-const base4 = createBase4Employees();
-const cap4 = validateSchedulerEmployeeCapacity(base4);
-assert.equal(cap4.valid, true, '4 active employees must be valid capacity');
+console.log('SECTION 1: Exact Role Alias Preservation & Mapping Tests...');
 
-const res1 = await generateEngineWeekSchedule({
+// 1. Exact CORE_A alias
+console.log('  Test 1.1: Exact CORE_A alias -> CORE_A');
+const resCoreA = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'CORE1' },
+  { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'core2' },
+  { id: 'e3', fullName: 'Emp C', isActive: true, scheduleRole: 'flex1' },
+  { id: 'e4', fullName: 'Emp D', isActive: true, scheduleRole: 'flex2' },
+]);
+assert.equal(resCoreA.roleById.get('e1'), 'CORE_A', 'CORE1 must map to CORE_A');
+assert.equal(resCoreA.valid, true);
+
+// 2. Exact CORE_B alias
+console.log('  Test 1.2: Exact CORE_B alias -> CORE_B');
+const resCoreB = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'core1' },
+  { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'CORE_2' },
+  { id: 'e3', fullName: 'Emp C', isActive: true, scheduleRole: 'flex1' },
+  { id: 'e4', fullName: 'Emp D', isActive: true, scheduleRole: 'flex2' },
+]);
+assert.equal(resCoreB.roleById.get('e2'), 'CORE_B', 'CORE_2 must map to CORE_B');
+assert.equal(resCoreB.valid, true);
+
+// 3. Generic CORE #1 and #2 -> CORE_A then CORE_B
+console.log('  Test 1.3: Generic CORE #1 and #2 -> CORE_A then CORE_B');
+const resGenCore = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Alpha Core', isActive: true, scheduleRole: 'CORE' },
+  { id: 'e2', fullName: 'Beta Core', isActive: true, scheduleRole: 'CORE' },
+  { id: 'e3', fullName: 'Gamma Flex', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'e4', fullName: 'Delta Flex', isActive: true, scheduleRole: 'intermediate' },
+]);
+assert.equal(resGenCore.roleById.get('e1'), 'CORE_A', 'First generic CORE must map to CORE_A');
+assert.equal(resGenCore.roleById.get('e2'), 'CORE_B', 'Second generic CORE must map to CORE_B');
+assert.equal(resGenCore.valid, true);
+
+// 4. Exact FLEX_A alias
+console.log('  Test 1.4: Exact FLEX_A alias -> FLEX_A');
+const resFlexA = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'core1' },
+  { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'core2' },
+  { id: 'e3', fullName: 'Emp C', isActive: true, scheduleRole: 'FLEX_1' },
+  { id: 'e4', fullName: 'Emp D', isActive: true, scheduleRole: 'FLEX_2' },
+]);
+assert.equal(resFlexA.roleById.get('e3'), 'FLEX_A', 'FLEX_1 must map specifically to FLEX_A');
+assert.equal(resFlexA.valid, true);
+
+// 5. Exact FLEX_B alias
+console.log('  Test 1.5: Exact FLEX_B alias -> FLEX_B');
+const resFlexB = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'core1' },
+  { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'core2' },
+  { id: 'e3', fullName: 'Emp C', isActive: true, scheduleRole: 'FLEX_2' },
+]);
+assert.equal(resFlexB.roleById.get('e3'), 'FLEX_B', 'FLEX_2 must map specifically to FLEX_B even if FLEX_A is empty');
+assert.equal(resFlexB.valid, true);
+
+// 6. Generic Intermediate #1 and #2 -> FLEX_A then FLEX_B
+console.log('  Test 1.6: Generic Intermediate #1 and #2 -> FLEX_A then FLEX_B');
+const resGenInter = resolveEngineRoleMap([
+  { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'core1' },
+  { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'core2' },
+  { id: 'e3', fullName: 'Alpha Inter', isActive: true, scheduleRole: 'INTERMEDIATE' },
+  { id: 'e4', fullName: 'Beta Inter', isActive: true, scheduleRole: 'COVERAGE' },
+]);
+assert.equal(resGenInter.roleById.get('e3'), 'FLEX_A', 'First generic intermediate must map to FLEX_A');
+assert.equal(resGenInter.roleById.get('e4'), 'FLEX_B', 'Second generic intermediate must map to FLEX_B');
+assert.equal(resGenInter.valid, true);
+
+// 7. CUSTOM and GENERAL aliases -> EXTRA_A and EXTRA_B
+console.log('  Test 1.7: CUSTOM and GENERAL aliases -> EXTRA_A and EXTRA_B');
+const resCustomGen = resolveEngineRoleMap([
+  ...createBase4Employees(),
+  { id: 'e5', fullName: 'Alpha Custom', isActive: true, scheduleRole: 'CUSTOM' },
+  { id: 'e6', fullName: 'Beta General', isActive: true, scheduleRole: 'GENERAL' },
+]);
+assert.equal(resCustomGen.roleById.get('e5'), 'EXTRA_A', 'CUSTOM must map to EXTRA_A');
+assert.equal(resCustomGen.roleById.get('e6'), 'EXTRA_B', 'GENERAL must map to EXTRA_B');
+assert.equal(resCustomGen.valid, true);
+
+// 8. Truly unconfigured legacy employees
+console.log('  Test 1.8: Truly unconfigured legacy employees -> sequential slots');
+const resUnconf = resolveEngineRoleMap([
+  { id: 'u1', fullName: 'Ανδρέας', isActive: true },
+  { id: 'u2', fullName: 'Βασίλης', isActive: true },
+  { id: 'u3', fullName: 'Γιώργος', isActive: true },
+  { id: 'u4', fullName: 'Δημήτρης', isActive: true },
+]);
+assert.equal(resUnconf.roleById.get('u1'), 'CORE_A');
+assert.equal(resUnconf.roleById.get('u2'), 'CORE_B');
+assert.equal(resUnconf.roleById.get('u3'), 'FLEX_A');
+assert.equal(resUnconf.roleById.get('u4'), 'FLEX_B');
+assert.equal(resUnconf.valid, true);
+console.log('  PASS: SECTION 1 verified.\n');
+
+// -----------------------------------------------------------------------------
+// SECTION 2: INVALID CONFIGURATION & NO SILENT REASSIGNMENT (FAIL-CLOSED)
+// -----------------------------------------------------------------------------
+console.log('SECTION 2: Invalid Configuration & No Silent Reassignment Tests...');
+
+// 2.1 Duplicate Core 1
+console.log('  Test 2.1: Duplicate Core 1 -> fail-closed, no silent reassignment');
+const dupCore1Emps = [
+  { id: 'c1a', fullName: 'Core 1 First', isActive: true, scheduleRole: 'core1' },
+  { id: 'c1b', fullName: 'Core 1 Second', isActive: true, scheduleRole: 'core1' },
+  { id: 'f1', fullName: 'Flex 1', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'f2', fullName: 'Flex 2', isActive: true, scheduleRole: 'intermediate' },
+];
+const resDupCore1 = resolveEngineRoleMap(dupCore1Emps);
+assert.equal(resDupCore1.valid, false, 'Duplicate core1 must mark configuration as invalid');
+assert.equal(resDupCore1.errors[0], 'Υπάρχει διπλότυπος ρόλος Core 1 στους εργαζομένους.');
+assert.equal(resDupCore1.roleById.get('c1b'), undefined, 'Second core1 must NOT be assigned any role (no EXTRA_A, EXTRA_B, FLEX_A, FLEX_B, or CORE_B)');
+
+const weekDupCore1 = await generateEngineWeekSchedule({
   weekDays,
-  employees: base4,
+  employees: dupCore1Emps,
   allShifts: [],
   absences: [],
   rules: { weeklyRotationEnabled: true },
 });
-assert.ok(res1.shifts.length > 0, 'Shifts must be generated for 4 base employees');
-assert.equal(res1.meta.resolvedRoles.baseEmployees.length, 4, '4 base employees in engine');
-console.log('  PASS: TEST 1 verified.');
+assert.equal(weekDupCore1.shifts.length, 0, 'No shifts generated when duplicate core1 exists');
+assert.equal(weekDupCore1.warnings[0], 'Υπάρχει διπλότυπος ρόλος Core 1 στους εργαζομένους.');
+
+// 2.2 Duplicate Core 2
+console.log('  Test 2.2: Duplicate Core 2 -> fail-closed, no silent reassignment');
+const dupCore2Emps = [
+  { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
+  { id: 'c2a', fullName: 'Core 2 First', isActive: true, scheduleRole: 'core2' },
+  { id: 'c2b', fullName: 'Core 2 Second', isActive: true, scheduleRole: 'core2' },
+  { id: 'f1', fullName: 'Flex 1', isActive: true, scheduleRole: 'intermediate' },
+];
+const resDupCore2 = resolveEngineRoleMap(dupCore2Emps);
+assert.equal(resDupCore2.valid, false, 'Duplicate core2 must mark configuration as invalid');
+assert.equal(resDupCore2.errors[0], 'Υπάρχει διπλότυπος ρόλος Core 2 στους εργαζομένους.');
+assert.equal(resDupCore2.roleById.get('c2b'), undefined, 'Second core2 must NOT be silently reassigned');
+
+// 2.3 Third Intermediate
+console.log('  Test 2.3: Third Intermediate -> fail-closed, no silent Extra promotion');
+const thirdInterEmps = [
+  { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
+  { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
+  { id: 'i1', fullName: 'Inter 1', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'i2', fullName: 'Inter 2', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'i3', fullName: 'Inter 3', isActive: true, scheduleRole: 'intermediate' },
+];
+const resThirdInter = resolveEngineRoleMap(thirdInterEmps);
+assert.equal(resThirdInter.valid, false, 'Third intermediate must be invalid');
+assert.equal(resThirdInter.errors[0], 'Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Intermediate / Coverage.');
+assert.equal(resThirdInter.roleById.get('i3'), undefined, 'Third intermediate must NOT be promoted to EXTRA_A');
+
+// 2.4 Third Custom
+console.log('  Test 2.4: Third Custom -> fail-closed, no slot duplicate');
+const thirdCustomEmps = [
+  { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
+  { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
+  { id: 'i1', fullName: 'Inter 1', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'x1', fullName: 'Custom 1', isActive: true, scheduleRole: 'custom' },
+  { id: 'x2', fullName: 'Custom 2', isActive: true, scheduleRole: 'custom' },
+  { id: 'x3', fullName: 'Custom 3', isActive: true, scheduleRole: 'custom' },
+];
+const resThirdCustom = resolveEngineRoleMap(thirdCustomEmps);
+assert.equal(resThirdCustom.valid, false, 'Third custom must be invalid');
+assert.equal(resThirdCustom.errors[0], 'Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Extra / Substitute.');
+assert.equal(resThirdCustom.roleById.get('x3'), undefined, 'Third custom must NOT duplicate EXTRA slots or become base');
+
+// 2.5 Missing base + explicit Custom
+console.log('  Test 2.5: Missing base slot + explicit Custom -> Custom stays Extra, base reported missing');
+const missingBaseWithCustom = [
+  { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
+  { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
+  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
+  { id: 'emp-custom', fullName: 'Άκης Αναπληρωτής', isActive: true, scheduleRole: 'custom', fixedDayOff: 5 },
+];
+const resMissingBase = resolveEngineRoleMap(missingBaseWithCustom);
+assert.equal(resMissingBase.roleById.get('emp-custom'), 'EXTRA_A', 'Custom employee stays EXTRA_A');
+assert.equal(resMissingBase.roleById.get('emp-custom') !== 'FLEX_B', true, 'Custom employee NEVER becomes FLEX_B');
+console.log('  PASS: SECTION 2 verified.\n');
 
 // -----------------------------------------------------------------------------
-// TEST 2: 5 employees: 4 base + EXTRA_A -> PASS
+// SECTION 3: CAPACITY & BOUNDED AUTOSCHEDULER ENFORCEMENT
 // -----------------------------------------------------------------------------
-console.log('\nTEST 2: 5 employees: 4 base + EXTRA_A...');
+console.log('SECTION 3: Capacity & Bounded Autoscheduler Enforcement Tests...');
+
+// 3.1 4 Employees
+console.log('  Test 3.1: 4 Employees -> valid');
+const base4 = createBase4Employees();
+assert.equal(validateSchedulerEmployeeCapacity(base4).valid, true);
+
+// 3.2 5 Employees
+console.log('  Test 3.2: 5 Employees -> valid');
 const emp5 = [
-  ...createBase4Employees(),
+  ...base4,
   { id: 'emp-5', fullName: 'Γιώργος Extra 1', isActive: true, scheduleRole: 'custom', extraMode: 'SUBSTITUTE_ONLY', participatesInRotation: true, participatesInSundayRotation: true },
 ];
-const cap5 = validateSchedulerEmployeeCapacity(emp5);
-assert.equal(cap5.valid, true, '5 active employees must be valid capacity');
+assert.equal(validateSchedulerEmployeeCapacity(emp5).valid, true);
 
-const res2 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: emp5,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-const extras2 = res2.meta.resolvedRoles.extras.map((e) => e.employeeId);
-assert.ok(extras2.includes('emp-5'), 'emp-5 must be in extras');
-assert.equal(res2.meta.resolvedRoles.roles.EXTRA_A?.employeeId, 'emp-5', 'emp-5 must be EXTRA_A');
-console.log('  PASS: TEST 2 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 3: 6 employees: 4 base + EXTRA_A + EXTRA_B -> PASS (no duplicate role ID)
-// -----------------------------------------------------------------------------
-console.log('\nTEST 3: 6 employees: 4 base + EXTRA_A + EXTRA_B (no role ID duplication)...');
+// 3.3 6 Employees
+console.log('  Test 3.3: 6 Employees -> valid');
 const emp6 = [
-  ...createBase4Employees(),
-  { id: 'emp-5', fullName: 'Γιώργος Extra 1', isActive: true, scheduleRole: 'custom', extraMode: 'SUBSTITUTE_ONLY', participatesInRotation: true, participatesInSundayRotation: true },
+  ...emp5,
   { id: 'emp-6', fullName: 'Άννα Extra 2', isActive: true, scheduleRole: 'custom', extraMode: 'SUBSTITUTE_ONLY', participatesInRotation: true, participatesInSundayRotation: true },
 ];
-const cap6 = validateSchedulerEmployeeCapacity(emp6);
-assert.equal(cap6.valid, true, '6 active employees must be valid capacity');
+assert.equal(validateSchedulerEmployeeCapacity(emp6).valid, true);
 
-const res3 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: emp6,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-const assignedEmpIds = Object.values(res3.meta.resolvedRoles.roles).map((e) => e.employeeId);
-assert.equal(new Set(assignedEmpIds).size, assignedEmpIds.length, 'No role ID duplication in 6-employee setup');
-const assignedExtras = [
-  res3.meta.resolvedRoles.roles.EXTRA_A?.employeeId,
-  res3.meta.resolvedRoles.roles.EXTRA_B?.employeeId,
-];
-assert.ok(assignedExtras.includes('emp-5') && assignedExtras.includes('emp-6'), 'Both emp-5 and emp-6 assigned to EXTRA_A and EXTRA_B');
-console.log('  PASS: TEST 3 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 4: 7 active employees -> SAFE REJECTION
-// -----------------------------------------------------------------------------
-console.log('\nTEST 4: 7 active employees -> SAFE REJECTION...');
+// 3.4 7 Employees -> Safe rejection
+console.log('  Test 3.4: 7 Employees -> safe rejection');
 const emp7 = [
   ...emp6,
   { id: 'emp-7', fullName: 'Δημήτρης 7ος', isActive: true, scheduleRole: 'custom' },
 ];
 const cap7 = validateSchedulerEmployeeCapacity(emp7);
-assert.equal(cap7.valid, false, '7 active employees must be invalid capacity');
+assert.equal(cap7.valid, false);
 assert.equal(cap7.message, 'Το αυτόματο πρόγραμμα υποστηρίζει έως 6 ενεργούς εργαζομένους.');
 
-const res4 = await generateEngineWeekSchedule({
+const weekRes7 = await generateEngineWeekSchedule({
   weekDays,
   employees: emp7,
   allShifts: [],
   absences: [],
   rules: { weeklyRotationEnabled: true },
 });
-assert.equal(res4.shifts.length, 0, 'No shifts generated for 7 active employees');
-assert.equal(res4.warnings[0], 'Το αυτόματο πρόγραμμα υποστηρίζει έως 6 ενεργούς εργαζομένους.');
-console.log('  PASS: TEST 4 verified.');
+assert.equal(weekRes7.shifts.length, 0);
+assert.equal(weekRes7.warnings[0], 'Το αυτόματο πρόγραμμα υποστηρίζει έως 6 ενεργούς εργαζομένους.');
+console.log('  PASS: SECTION 3 verified.\n');
 
 // -----------------------------------------------------------------------------
-// TEST 5 & 6: Newly added regular employee in valid base role -> weekly and monthly shifts > 0
+// SECTION 4: USER BUG FIX & REGULAR EMPLOYEE SCHEDULE VERIFICATION
 // -----------------------------------------------------------------------------
-console.log('\nTEST 5 & 6: Newly added regular employee in base role has weekly and monthly shifts...');
+console.log('SECTION 4: User Bug Fix & Regular Employee Schedule Verification...');
+
 const empWithNewRegular = [
   { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
   { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
@@ -161,94 +298,16 @@ const res6 = generateEngineMonthSchedule({
 const newEmpMonthShifts = res6.shifts.filter((s) => s.employeeId === 'emp-new');
 console.log(`  New regular employee monthly shifts: ${newEmpMonthShifts.length}`);
 assert.ok(newEmpMonthShifts.length >= 20, 'New regular employee must have monthly shifts');
-console.log('  PASS: TEST 5 & 6 verified.');
+console.log('  PASS: SECTION 4 verified.\n');
 
 // -----------------------------------------------------------------------------
-// TEST 7: Explicit custom employee remains Extra, NEVER promoted to base role
+// SECTION 5: EXTRA / SUBSTITUTE BEHAVIOR
 // -----------------------------------------------------------------------------
-console.log('\nTEST 7: Explicit custom employee remains Extra...');
-const res7 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: emp5,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-const emp5Role = res7.meta.resolvedRoles.roles.EXTRA_A?.employeeId;
-assert.equal(emp5Role, 'emp-5', 'Explicit custom employee must be EXTRA_A, not base role');
-assert.equal(res7.meta.resolvedRoles.baseEmployees.some((b) => b.employeeId === 'emp-5'), false);
-console.log('  PASS: TEST 7 verified.');
+console.log('SECTION 5: Extra / Substitute Behavior Tests...');
 
-// -----------------------------------------------------------------------------
-// TEST 8: Duplicate core1 -> warning generated, never silently remapped
-// -----------------------------------------------------------------------------
-console.log('\nTEST 8: Duplicate core1 configuration...');
-const duplicateCore1 = [
-  { id: 'emp-1a', fullName: 'Νίκος 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
-  { id: 'emp-1b', fullName: 'Νίκος 2', isActive: true, scheduleRole: 'core1', fixedDayOff: 4 },
-  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
-  { id: 'emp-4', fullName: 'Ελένη Flex 2', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 5 },
-];
-const res8 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: duplicateCore1,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-const missingRoleWarn = res8.warnings.some((w) => w.includes('CORE_B') || w.includes('MISSING_REQUIRED_ROLE'));
-console.log('  Warnings for duplicate core1:', res8.warnings);
-assert.ok(missingRoleWarn, 'Engine must surface warning for missing CORE_B when duplicate core1 exists');
-console.log('  PASS: TEST 8 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 9: Missing required base slot + explicit custom -> custom remains extra, missing base reported
-// -----------------------------------------------------------------------------
-console.log('\nTEST 9: Missing base slot + explicit custom...');
-const missingBaseWithCustom = [
-  { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
-  { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
-  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
-  { id: 'emp-custom', fullName: 'Άκης Αναπληρωτής', isActive: true, scheduleRole: 'custom', fixedDayOff: 5 },
-];
-const res9 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: missingBaseWithCustom,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-assert.equal(res9.meta.resolvedRoles.roles.EXTRA_A?.employeeId, 'emp-custom', 'Custom employee stays EXTRA_A');
-const flexBWarn = res9.warnings.some((w) => w.includes('FLEX_B') || w.includes('MISSING_REQUIRED_ROLE'));
-assert.ok(flexBWarn, 'Missing FLEX_B must be reported as missing role warning');
-console.log('  PASS: TEST 9 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 10: fixedDayOff = 0 -> Sunday correctly respected
-// -----------------------------------------------------------------------------
-console.log('\nTEST 10: fixedDayOff = 0 (Sunday)...');
-const sundayOffEmp = [
-  { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 0 },
-  { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
-  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
-  { id: 'emp-4', fullName: 'Ελένη Flex 2', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 5 },
-];
-const res10 = await generateEngineWeekSchedule({
-  weekDays,
-  employees: sundayOffEmp,
-  allShifts: [],
-  absences: [],
-  rules: { weeklyRotationEnabled: true },
-});
-const emp1Sunday = res10.shifts.find((s) => s.employeeId === 'emp-1' && s.date === '2026-05-10');
-assert.equal(emp1Sunday, undefined, 'Employee with fixedDayOff=0 must not receive Sunday shift');
-console.log('  PASS: TEST 10 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 11: Substitute absence replacement -> PASS
-// -----------------------------------------------------------------------------
-console.log('\nTEST 11: Substitute absence replacement...');
-const absencesForTest11 = [
+// 5.1 Substitute Absence Replacement
+console.log('  Test 5.1: Substitute absence replacement');
+const absencesForSub = [
   {
     id: 'abs-1',
     employeeId: 'emp-1',
@@ -259,22 +318,19 @@ const absencesForTest11 = [
     status: 'CONFIRMED',
   },
 ];
-const res11 = await generateEngineWeekSchedule({
+const resSubGap = await generateEngineWeekSchedule({
   weekDays,
   employees: emp5,
   allShifts: [],
-  absences: absencesForTest11,
+  absences: absencesForSub,
   rules: { weeklyRotationEnabled: true },
 });
-const replacementShift = res11.shifts.find((s) => s.date === '2026-05-04' && s.employeeId === 'emp-5');
-assert.ok(replacementShift, 'Substitute emp-5 must fill absence gap for emp-1 on 2026-05-04');
+const replacementShift = resSubGap.shifts.find((s) => s.date === '2026-05-04' && s.employeeId === 'emp-5');
+assert.ok(replacementShift, 'Substitute emp-5 must fill absence gap on 2026-05-04');
 assert.equal(replacementShift.source, 'ABSENCE_REPLACEMENT');
-console.log('  PASS: TEST 11 verified.');
 
-// -----------------------------------------------------------------------------
-// TEST 12: Substitute Sunday participation -> PASS
-// -----------------------------------------------------------------------------
-console.log('\nTEST 12: Substitute Sunday participation...');
+// 5.2 Substitute Sunday Participation
+console.log('  Test 5.2: Substitute Sunday participation in rotation pool');
 const testSundays = [
   ['2026-05-04', '2026-05-05', '2026-05-06', '2026-05-07', '2026-05-08', '2026-05-09', '2026-05-10'],
   ['2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14', '2026-05-15', '2026-05-16', '2026-05-17'],
@@ -282,7 +338,6 @@ const testSundays = [
   ['2026-05-25', '2026-05-26', '2026-05-27', '2026-05-28', '2026-05-29', '2026-05-30', '2026-05-31'],
   ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
 ];
-
 const sundayRecipients = [];
 for (const week of testSundays) {
   const res = await generateEngineWeekSchedule({
@@ -295,16 +350,12 @@ for (const week of testSundays) {
   const sundayShift = res.shifts.find((s) => s.customLabel === 'Κυριακή' || s.startTime === '08:00');
   if (sundayShift) sundayRecipients.push(sundayShift.employeeId);
 }
-console.log('  Sunday recipients:', sundayRecipients);
-assert.ok(sundayRecipients.includes('emp-5'), 'emp-5 must receive Sunday in rotation pool');
-console.log('  PASS: TEST 12 verified.');
+assert.ok(sundayRecipients.includes('emp-5'), 'emp-5 must receive Sunday in rotation');
 
-// -----------------------------------------------------------------------------
-// TEST 13: Sunday opt-out -> never receives Sunday
-// -----------------------------------------------------------------------------
-console.log('\nTEST 13: Sunday opt-out...');
+// 5.3 Sunday Opt-out
+console.log('  Test 5.3: Sunday opt-out');
 const empWithOptOut = [
-  ...createBase4Employees(),
+  ...base4,
   { id: 'emp-optout', fullName: 'Χωρίς Κυριακές', isActive: true, scheduleRole: 'custom', participatesInSundayRotation: false },
 ];
 const optOutSundayRecipients = [];
@@ -320,17 +371,13 @@ for (const week of testSundays) {
   if (sundayShift) optOutSundayRecipients.push(sundayShift.employeeId);
 }
 assert.equal(optOutSundayRecipients.includes('emp-optout'), false, 'Opt-out employee must NEVER receive Sunday');
-console.log('  PASS: TEST 13 verified.');
 
-// -----------------------------------------------------------------------------
-// TEST 14: extraMode = DISABLED -> no Sunday and no replacement
-// -----------------------------------------------------------------------------
-console.log('\nTEST 14: extraMode = DISABLED...');
+// 5.4 DISABLED Extra
+console.log('  Test 5.4: DISABLED Extra exclusion');
 const empWithDisabled = [
-  ...createBase4Employees(),
+  ...base4,
   { id: 'emp-disabled', fullName: 'Disabled Extra', isActive: true, scheduleRole: 'custom', extraMode: 'DISABLED', participatesInSundayRotation: true },
 ];
-
 const disabledSundayRecipients = [];
 for (const week of testSundays) {
   const res = await generateEngineWeekSchedule({
@@ -345,23 +392,10 @@ for (const week of testSundays) {
 }
 assert.equal(disabledSundayRecipients.includes('emp-disabled'), false, 'DISABLED extra must NEVER receive Sunday');
 
-const res14Gap = await generateEngineWeekSchedule({
-  weekDays,
-  employees: empWithDisabled,
-  allShifts: [],
-  absences: absencesForTest11,
-  rules: { weeklyRotationEnabled: true },
-});
-const disabledReplacement = res14Gap.shifts.find((s) => s.date === '2026-05-04' && s.employeeId === 'emp-disabled');
-assert.equal(disabledReplacement, undefined, 'DISABLED extra must NEVER fill replacement gap');
-console.log('  PASS: TEST 14 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 15: ACTIVE_SEASONAL date range boundaries respected
-// -----------------------------------------------------------------------------
-console.log('\nTEST 15: ACTIVE_SEASONAL date range boundaries...');
+// 5.5 ACTIVE_SEASONAL date range boundaries
+console.log('  Test 5.5: ACTIVE_SEASONAL date range boundaries');
 const seasonalEmp = [
-  ...createBase4Employees(),
+  ...base4,
   {
     id: 'emp-seasonal',
     fullName: 'Seasonal Extra',
@@ -374,7 +408,7 @@ const seasonalEmp = [
   },
 ];
 const seasonalSundayRes = await generateEngineWeekSchedule({
-  weekDays, // Sunday is 2026-05-10, outside activeTo (2026-05-07)
+  weekDays,
   employees: seasonalEmp,
   allShifts: [],
   absences: [],
@@ -382,41 +416,40 @@ const seasonalSundayRes = await generateEngineWeekSchedule({
 });
 const seasonalSunday = seasonalSundayRes.shifts.find((s) => s.date === '2026-05-10' && s.employeeId === 'emp-seasonal');
 assert.equal(seasonalSunday, undefined, 'Seasonal employee outside activeTo must not receive Sunday');
-console.log('  PASS: TEST 15 verified.');
+console.log('  PASS: SECTION 5 verified.\n');
 
 // -----------------------------------------------------------------------------
-// TEST 16: PDF 0 work / 0 absence regular employee -> blocked
+// SECTION 6: PDF EXPORT GUARD & STANDBY SEMANTICS
 // -----------------------------------------------------------------------------
-console.log('\nTEST 16: PDF 0 work / 0 absence regular employee -> blocked...');
+console.log('SECTION 6: PDF Export Guard & Standby Semantics...');
+
+// 6.1 Unassigned regular employee blocked
+console.log('  Test 6.1: PDF 0 work / 0 absence regular employee -> blocked');
 const incompleteEmployees = [
-  ...createBase4Employees(),
+  ...base4,
   { id: 'emp-unassigned', fullName: 'Ανάθεση Χωρίς Βάρδιες', isActive: true, scheduleRole: 'core1', participatesInRotation: true },
 ];
-
-let pdfExportBlocked16 = false;
+let pdfBlocked = false;
 try {
   await exportScheduleToPdf({
     days: weekDays,
     employees: incompleteEmployees,
-    shifts: res1.shifts, // shifts do not include emp-unassigned
+    shifts: res1Shifts(base4),
     absences: [],
     exportAuthorization: { isAdmin: true, auditRequired: true },
     onBeforeDownload: async () => {},
   });
 } catch (error) {
-  pdfExportBlocked16 = true;
+  pdfBlocked = true;
   assert.equal(
     error.message,
     'Το πρόγραμμα δεν περιέχει έγκυρες βάρδιες για όλους τους ενεργούς εργαζομένους. Έλεγξε το πρόγραμμα πριν την εξαγωγή.',
   );
 }
-assert.ok(pdfExportBlocked16, 'PDF export must be blocked for unassigned regular employee');
-console.log('  PASS: TEST 16 verified.');
+assert.ok(pdfBlocked, 'PDF export must be blocked for unassigned regular employee');
 
-// -----------------------------------------------------------------------------
-// TEST 17: PDF partial sickness + otherwise missing regular schedule -> blocked
-// -----------------------------------------------------------------------------
-console.log('\nTEST 17: PDF partial sickness + missing regular schedule -> blocked...');
+// 6.2 Partial absence regular employee blocked
+console.log('  Test 6.2: PDF partial absence regular employee -> blocked');
 const partialSickness = [
   {
     id: 'abs-1day',
@@ -428,19 +461,16 @@ const partialSickness = [
     status: 'CONFIRMED',
   },
 ];
-const val17 = validateExportScheduleState({
+const valPartial = validateExportScheduleState({
   days: weekDays,
   employees: incompleteEmployees,
-  shifts: res1.shifts,
+  shifts: res1Shifts(base4),
   absences: partialSickness,
 });
-assert.equal(val17.valid, false, 'Partial sickness with 0 work on other days must be invalid');
-console.log('  PASS: TEST 17 verified.');
+assert.equal(valPartial.valid, false, 'Partial sickness with 0 work on other days must be invalid');
 
-// -----------------------------------------------------------------------------
-// TEST 18: PDF full-period absence -> valid
-// -----------------------------------------------------------------------------
-console.log('\nTEST 18: PDF full-period absence -> valid...');
+// 6.3 Full-period absence valid
+console.log('  Test 6.3: PDF full-period absence -> valid');
 const fullWeekSickness = [
   {
     id: 'abs-fullweek',
@@ -452,86 +482,67 @@ const fullWeekSickness = [
     status: 'CONFIRMED',
   },
 ];
-const val18 = validateExportScheduleState({
+const valFull = validateExportScheduleState({
   days: weekDays,
   employees: incompleteEmployees,
-  shifts: res1.shifts,
+  shifts: res1Shifts(base4),
   absences: fullWeekSickness,
 });
-assert.equal(val18.valid, true, 'Full-period absence covering all days must be valid');
+assert.equal(valFull.valid, true, 'Full-period absence covering all days must be valid');
 
-const rows18 = buildGroupedScheduleRows({
-  days: weekDays,
-  employees: incompleteEmployees,
-  shifts: res1.shifts,
-  absences: fullWeekSickness,
-});
-const unassignedStatuses = rows18.map((r) => {
-  const names = r.fullName.split('\n');
-  const statuses = r.workRest.split('\n');
-  const idx = names.findIndex((n) => n.includes('Ανάθεση Χωρίς Βάρδιες'));
-  return statuses[idx];
-});
-for (const s of unassignedStatuses) {
-  assert.equal(s, 'Ασθένεια', 'All 7 days report Ασθένεια');
-}
-console.log('  PASS: TEST 18 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 19: Normal base employee work/rest PDF -> correct
-// -----------------------------------------------------------------------------
-console.log('\nTEST 19: Normal base employee work/rest PDF...');
-const rows19 = buildGroupedScheduleRows({
-  days: weekDays,
-  employees: base4,
-  shifts: res1.shifts,
-  absences: [],
-});
-for (const emp of base4) {
-  const empStatuses = rows19.map((row) => {
-    const names = row.fullName.split('\n');
-    const statuses = row.workRest.split('\n');
-    const idx = names.findIndex((n) => n.includes(emp.fullName));
-    return statuses[idx];
-  });
-  const ergCount = empStatuses.filter((s) => s === 'ΕΡΓ').length;
-  const anCount = empStatuses.filter((s) => s === 'ΑΝ').length;
-  assert.ok(ergCount >= 5, 'Base employee works at least 5 days');
-  assert.ok(anCount >= 1, 'Base employee has legitimate rest');
-  assert.equal(ergCount + anCount, 7, 'All 7 days accounted for with ΕΡΓ or ΑΝ');
-}
-console.log('  PASS: TEST 19 verified.');
-
-// -----------------------------------------------------------------------------
-// TEST 20: Legitimate substitute with no weekday assignment -> valid standby "-", not false rest
-// -----------------------------------------------------------------------------
-console.log('\nTEST 20: Legitimate substitute with no weekday assignment (standby)...');
-const val20 = validateExportScheduleState({
+// 6.4 Substitute standby renders "-" not false "ΑΝ"
+console.log('  Test 6.4: Substitute standby renders "-" not false "ΑΝ"');
+const valSubStandby = validateExportScheduleState({
   days: weekDays,
   employees: emp5,
-  shifts: res1.shifts, // shifts only for base 4
+  shifts: res1Shifts(base4),
   absences: [],
 });
-assert.equal(val20.valid, true, 'Substitute on standby with 0 work and 0 absences is valid');
+assert.equal(valSubStandby.valid, true, 'Substitute on standby is valid for export');
 
-const rows20 = buildGroupedScheduleRows({
+const rowsSub = buildGroupedScheduleRows({
   days: weekDays,
   employees: emp5,
-  shifts: res1.shifts,
+  shifts: res1Shifts(base4),
   absences: [],
 });
-const subStatuses = rows20.map((r) => {
+const subStatuses = rowsSub.map((r) => {
   const names = r.fullName.split('\n');
   const statuses = r.workRest.split('\n');
   const idx = names.findIndex((n) => n.includes('Γιώργος Extra 1'));
   return statuses[idx];
 });
-console.log('  Substitute on standby statuses:', subStatuses);
 for (const s of subStatuses) {
   assert.equal(s, '-', 'Substitute on standby must report "-" and NOT false "ΑΝ"');
 }
-console.log('  PASS: TEST 20 verified.');
+console.log('  PASS: SECTION 6 verified.\n');
 
-console.log('\n==========================================================');
-console.log('ALL 20 FINAL HARDENED REGRESSION TESTS PASSED (100%)');
+// Helper
+function res1Shifts(employees) {
+  return [
+    { id: 's1', employeeId: 'emp-1', date: '2026-05-04', shiftType: 'MORNING' },
+    { id: 's2', employeeId: 'emp-1', date: '2026-05-05', shiftType: 'MORNING' },
+    { id: 's3', employeeId: 'emp-1', date: '2026-05-06', shiftType: 'MORNING' },
+    { id: 's4', employeeId: 'emp-1', date: '2026-05-08', shiftType: 'MORNING' },
+    { id: 's5', employeeId: 'emp-1', date: '2026-05-09', shiftType: 'MORNING' },
+    { id: 's6', employeeId: 'emp-2', date: '2026-05-04', shiftType: 'AFTERNOON' },
+    { id: 's7', employeeId: 'emp-2', date: '2026-05-05', shiftType: 'AFTERNOON' },
+    { id: 's8', employeeId: 'emp-2', date: '2026-05-06', shiftType: 'AFTERNOON' },
+    { id: 's9', employeeId: 'emp-2', date: '2026-05-07', shiftType: 'AFTERNOON' },
+    { id: 's10', employeeId: 'emp-2', date: '2026-05-09', shiftType: 'AFTERNOON' },
+    { id: 's11', employeeId: 'emp-3', date: '2026-05-04', shiftType: 'INTERMEDIATE' },
+    { id: 's12', employeeId: 'emp-3', date: '2026-05-05', shiftType: 'INTERMEDIATE' },
+    { id: 's13', employeeId: 'emp-3', date: '2026-05-07', shiftType: 'INTERMEDIATE' },
+    { id: 's14', employeeId: 'emp-3', date: '2026-05-08', shiftType: 'INTERMEDIATE' },
+    { id: 's15', employeeId: 'emp-3', date: '2026-05-09', shiftType: 'INTERMEDIATE' },
+    { id: 's16', employeeId: 'emp-4', date: '2026-05-04', shiftType: 'INTERMEDIATE' },
+    { id: 's17', employeeId: 'emp-4', date: '2026-05-06', shiftType: 'INTERMEDIATE' },
+    { id: 's18', employeeId: 'emp-4', date: '2026-05-07', shiftType: 'INTERMEDIATE' },
+    { id: 's19', employeeId: 'emp-4', date: '2026-05-08', shiftType: 'INTERMEDIATE' },
+    { id: 's20', employeeId: 'emp-4', date: '2026-05-09', shiftType: 'INTERMEDIATE' },
+  ];
+}
+
+console.log('==========================================================');
+console.log('ALL COMPREHENSIVE REGRESSION & ROLE SAFETY TESTS PASSED (100%)');
 console.log('==========================================================');

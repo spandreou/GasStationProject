@@ -47,8 +47,8 @@ The detailed audit contains 39 classified areas:
 - A short-lived Firebase auth-ticket broker foundation exists on Node.js 22 (Gen 2) with hashed tickets, exact-origin checks, transactional one-time consumption and custom-token exchange for `OWNER` only.
 - `platformAdmins/{uid}` is strictly decoupled from tenant ownership: active platform admins have 0 tenant memberships and cannot access tenant private data.
 - Production data remediation complete: BP Kallis pilot OWNER established (`IlyYsuAS3mYZ5CK8lYtp5NhIJBU2`), zero overlap with platform admin, zero legacy `ADMIN`/`MANAGER` memberships.
-- Phase 3 Registration Token Backend is fully implemented, verified, and deployed to production (`gasstationproject-9dd89`): high-entropy 256-bit tokens, opaque management IDs (`rtok_...`), secret SHA-256 lookup hash (`registrationTokenLookups`), zero plaintext token persistence, platform-admin-only management (`generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`), public rate-limited validation (`validateRegistrationToken`), atomic consumption primitive for tenant provisioning, fail-closed canonical expiry, and strict client deny-all Firestore rules (active ruleset: `51bf31c1-87a3-47f8-964a-aea3c7e41bf0`, 7 active Cloud Functions on Node.js 22).
-- Phase 4 Automated Tenant Provisioning Backend is fully implemented, verified, and deployed to production (`gasstationproject-9dd89`): `provisionTenantFromRegistrationToken` is active (Node.js 22 Gen2 callable in `us-central1`, bringing total active Cloud Functions to 8), with atomic single-transaction execution across `slugReservations`, `tenants`, `tenantMemberships` (`role: 'OWNER'`, zero PII email), `users/{uid}` mirror, scheduler settings, 7-day trial subscription (`trialEndsAt`), token consumption (`status: 'CONSUMED'`), and `platformAuditLogs`. Strict 3–40 char slug contract, platform admin / existing membership fail-closed checks, safe `OTHER` category fallback, `domain: null` pending Phase 6 cutover, and deferred synthetic template assignment.
+- Phase 3 Registration Token Backend is fully implemented, verified, and deployed to production (`gasstationproject-9dd89`): high-entropy 256-bit tokens, opaque management IDs (`rtok_...`), secret SHA-256 lookup hash (`registrationTokenLookups`), zero plaintext token persistence, platform-admin-only management (`generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`), public rate-limited validation (`validateRegistrationToken`), atomic consumption primitive for tenant provisioning, fail-closed canonical expiry, and strict client deny-all Firestore rules (active ruleset: `51bf31c1-87a3-47f8-964a-aea3c7e41bf0`, the seven Phase 3 Cloud Functions remain active on Node.js 22).
+- Phase 4 Automated Tenant Provisioning Backend is fully implemented, verified, and deployed to production (`gasstationproject-9dd89`): `provisionTenantFromRegistrationToken` is active (Node.js 22 Gen2 callable in `us-central1`, bringing total active production Cloud Functions to 8), with atomic single-transaction execution across `slugReservations`, `tenants`, `tenantMemberships` (`role: 'OWNER'`, zero PII email), `users/{uid}` mirror, scheduler settings, 7-day trial subscription (`trialEndsAt`), token consumption (`status: 'CONSUMED'`), and `platformAuditLogs`. Strict 3–40 char slug contract, platform admin / existing membership fail-closed checks, safe `OTHER` category fallback, `domain: null` pending Phase 6 cutover, and deferred synthetic template assignment.
 
 ## Partial Or Risky Capabilities
 
@@ -71,7 +71,7 @@ The detailed audit contains 39 classified areas:
 - Root registration UI, store selector and ShiftOryx Admin lifecycle panel (Phase 5).
 - Slug aliases and vanity store routing.
 - Server-side subscription/feature/planning-horizon enforcement and `usage/daily`.
-- `platformAuditLogs` and server-enforced privileged audit events.
+- Broader privileged audit-event coverage and admin audit viewer/lifecycle tooling (Phase 4 implements `platformAuditLogs` for tenant provisioning).
 - `publicStatusEntries`, explicit `publicNote`/`privateNote` separation and owner preview.
 - Business-category templates, template registry/versioning, tenant branding tokens/assets and safe assignment/migration flows.
 - Paid customization request/quote workflow.
@@ -84,7 +84,7 @@ The canonical roadmap was synchronized on 22 July 2026 with the future category/
 
 | Group | Implemented/partial | Missing |
 | --- | --- | --- |
-| Platform | `users` (partial), `tenants`, `tenantMemberships`, `platformAdmins` (partial), `authTickets` | `registrationTokens`, `slugReservations`, `slugAliases`, `platformAuditLogs`, `customizationRequests` |
+| Platform | `users` (partial), `tenants`, `tenantMemberships`, `platformAdmins` (partial), `authTickets`, `registrationTokens`, `slugReservations`, `platformAuditLogs` (partial) | `slugAliases`, `customizationRequests` |
 | Tenant private | `employees`, `shifts`, `shiftTemplates`, `absences`, `settings`, `announcements`, `weekHistory`, `auditLogs`, `subscription/current` (partial) | `usage/daily` |
 | Tenant public | `publicSchedules`, `publicMonths`, `publicEmployees`, `publicAnnouncements` | `publicStatusEntries` |
 

@@ -55,29 +55,203 @@ function stableEmployeeSort(a, b) {
   );
 }
 
-function resolveEngineRoleMap(employees) {
-  const sorted = [...employees].sort(stableEmployeeSort);
+export function validateSchedulerEmployeeCapacity(employees = []) {
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  if (activeEmployees.length < 4) {
+    return {
+      valid: false,
+      count: activeEmployees.length,
+      message: 'Το αυτόματο πρόγραμμα χρειάζεται τουλάχιστον 4 ενεργούς εργαζομένους.',
+    };
+  }
+  if (activeEmployees.length > 6) {
+    return {
+      valid: false,
+      count: activeEmployees.length,
+      message: 'Το αυτόματο πρόγραμμα υποστηρίζει έως 6 ενεργούς εργαζομένους.',
+    };
+  }
+  return {
+    valid: true,
+    count: activeEmployees.length,
+    message: '',
+  };
+}
+
+export function resolveEngineRoleMap(employees = []) {
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  const sorted = [...activeEmployees].sort(stableEmployeeSort);
   const roleById = new Map();
+  const assignedRoles = new Set();
+  const errors = [];
 
-  sorted.forEach((employee) => {
-    const explicit = mapExplicitRole(getEmployeeRoleToken(employee));
-    if (explicit) roleById.set(employee.id, explicit);
-  });
-
-  const assignFirst = (role, predicate) => {
-    if ([...roleById.values()].includes(role)) return;
-    const employee = sorted.find((item) => !roleById.has(item.id) && predicate(getEmployeeRoleToken(item), item));
-    if (employee) roleById.set(employee.id, role);
+  const isExplicitCore1 = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['CORE_A', 'CORE1', 'CORE_1', 'COREA'].includes(t);
+  };
+  const isExplicitCore2 = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['CORE_B', 'CORE2', 'CORE_2', 'COREB'].includes(t);
+  };
+  const isGenericCore = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['CORE', 'ΒΑΣΙΚΟΣ', 'ΣΤΑΘΕΡΟΣ'].includes(t);
+  };
+  const isExplicitFlexA = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['FLEX_A', 'FLEX1', 'FLEX_1', 'FLEXA'].includes(t);
+  };
+  const isExplicitFlexB = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['FLEX_B', 'FLEX2', 'FLEX_2', 'FLEXB'].includes(t);
+  };
+  const isGenericIntermediate = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['INTERMEDIATE', 'COVERAGE', 'ΕΝΔΙΑΜΕΣΟΣ', 'ΚΑΛΥΨΗ'].includes(t);
+  };
+  const isExplicitCustom = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return ['CUSTOM', 'EXTRA', 'SUBSTITUTE', 'GENERAL', 'ΑΝΑΠΛΗΡΩΤΗΣ'].includes(t);
+  };
+  const isUnconfigured = (emp) => {
+    const t = getEmployeeRoleToken(emp);
+    return !t || t === 'AUTO' || t === 'NONE';
   };
 
-  assignFirst('CORE_A', (token) => token === 'CORE');
-  assignFirst('CORE_B', (token) => token === 'CORE');
-  assignFirst('FLEX_A', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
-  assignFirst('FLEX_B', (token) => token === 'INTERMEDIATE' || token === 'COVERAGE');
-  assignFirst('EXTRA_A', (token) => token === 'CUSTOM' || token === 'GENERAL' || token === '');
-  assignFirst('EXTRA_B', (token) => token === 'CUSTOM' || token === 'GENERAL' || token === '');
+  // 1. Explicit Core 1 (maps to CORE_A)
+  const core1Emps = sorted.filter(isExplicitCore1);
+  if (core1Emps.length > 1) {
+    errors.push('Υπάρχει διπλότυπος ρόλος Core 1 στους εργαζομένους.');
+  }
+  if (core1Emps.length === 1) {
+    roleById.set(core1Emps[0].id, 'CORE_A');
+    assignedRoles.add('CORE_A');
+  }
 
-  return roleById;
+  // 2. Explicit Core 2 (maps to CORE_B)
+  const core2Emps = sorted.filter(isExplicitCore2);
+  if (core2Emps.length > 1) {
+    errors.push('Υπάρχει διπλότυπος ρόλος Core 2 στους εργαζομένους.');
+  }
+  if (core2Emps.length === 1) {
+    roleById.set(core2Emps[0].id, 'CORE_B');
+    assignedRoles.add('CORE_B');
+  }
+
+  // 3. Generic Core (CORE / ΒΑΣΙΚΟΣ / ΣΤΑΘΕΡΟΣ)
+  const genericCoreEmps = sorted.filter(isGenericCore);
+  genericCoreEmps.forEach((emp) => {
+    if (!assignedRoles.has('CORE_A')) {
+      roleById.set(emp.id, 'CORE_A');
+      assignedRoles.add('CORE_A');
+    } else if (!assignedRoles.has('CORE_B')) {
+      roleById.set(emp.id, 'CORE_B');
+      assignedRoles.add('CORE_B');
+    } else {
+      errors.push(`Ο εργαζόμενος ${emp.fullName || emp.id} έχει πλεονάζοντα ρόλο Core.`);
+    }
+  });
+
+  // 4. Explicit Flex A
+  const flexAEmps = sorted.filter(isExplicitFlexA);
+  if (flexAEmps.length > 1) {
+    errors.push('Υπάρχει διπλότυπος ρόλος Flex A στους εργαζομένους.');
+  }
+  if (flexAEmps.length === 1) {
+    roleById.set(flexAEmps[0].id, 'FLEX_A');
+    assignedRoles.add('FLEX_A');
+  }
+
+  // 5. Explicit Flex B
+  const flexBEmps = sorted.filter(isExplicitFlexB);
+  if (flexBEmps.length > 1) {
+    errors.push('Υπάρχει διπλότυπος ρόλος Flex B στους εργαζομένους.');
+  }
+  if (flexBEmps.length === 1) {
+    roleById.set(flexBEmps[0].id, 'FLEX_B');
+    assignedRoles.add('FLEX_B');
+  }
+
+  // 6. Generic Intermediate (INTERMEDIATE / COVERAGE)
+  const genericInterEmps = sorted.filter(isGenericIntermediate);
+  genericInterEmps.forEach((emp) => {
+    if (!assignedRoles.has('FLEX_A')) {
+      roleById.set(emp.id, 'FLEX_A');
+      assignedRoles.add('FLEX_A');
+    } else if (!assignedRoles.has('FLEX_B')) {
+      roleById.set(emp.id, 'FLEX_B');
+      assignedRoles.add('FLEX_B');
+    } else {
+      errors.push('Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Intermediate / Coverage.');
+    }
+  });
+
+  // 7. Explicit Custom / Extra / General
+  const customEmps = sorted.filter(isExplicitCustom);
+  customEmps.forEach((emp) => {
+    if (!assignedRoles.has('EXTRA_A')) {
+      roleById.set(emp.id, 'EXTRA_A');
+      assignedRoles.add('EXTRA_A');
+    } else if (!assignedRoles.has('EXTRA_B')) {
+      roleById.set(emp.id, 'EXTRA_B');
+      assignedRoles.add('EXTRA_B');
+    } else {
+      errors.push('Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Extra / Substitute.');
+    }
+  });
+
+  // 8. Truly unconfigured legacy employees
+  const unconfiguredEmps = sorted.filter((emp) => !roleById.has(emp.id) && isUnconfigured(emp));
+  const candidateSlots = ['CORE_A', 'CORE_B', 'FLEX_A', 'FLEX_B', 'EXTRA_A', 'EXTRA_B'];
+  for (const slot of candidateSlots) {
+    if (!assignedRoles.has(slot) && unconfiguredEmps.length > 0) {
+      const nextEmp = unconfiguredEmps.shift();
+      roleById.set(nextEmp.id, slot);
+      assignedRoles.add(slot);
+    }
+  }
+
+  // 9. Mandatory Four Base Operational Slots Validation
+  if (!assignedRoles.has('CORE_A') && !errors.some((e) => e.includes('Core 1'))) {
+    errors.push('Λείπει ο απαιτούμενος ρόλος Core 1.');
+  }
+  if (!assignedRoles.has('CORE_B') && !errors.some((e) => e.includes('Core 2'))) {
+    errors.push('Λείπει ο απαιτούμενος ρόλος Core 2.');
+  }
+  if ((!assignedRoles.has('FLEX_A') || !assignedRoles.has('FLEX_B')) && !errors.some((e) => e.includes('Intermediate'))) {
+    errors.push('Λείπει απαιτούμενη θέση Intermediate / Coverage.');
+  }
+
+  return {
+    roleById,
+    assignedRoles,
+    errors,
+    valid: errors.length === 0,
+    message: errors[0] || '',
+  };
+}
+
+export function validateSchedulerRoleConfiguration(employees = []) {
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  const capacity = validateSchedulerEmployeeCapacity(activeEmployees);
+  if (!capacity.valid) {
+    return capacity;
+  }
+  const { errors, valid, message } = resolveEngineRoleMap(activeEmployees);
+  if (!valid) {
+    return {
+      valid: false,
+      count: activeEmployees.length,
+      message: message || 'Μη έγκυρη διαμόρφωση ρόλων εργαζομένων.',
+      errors,
+    };
+  }
+  return {
+    valid: true,
+    count: activeEmployees.length,
+    message: '',
+    errors: [],
+  };
 }
 
 function toEngineWeekday(value) {
@@ -107,7 +281,9 @@ function toEngineRules(rules = {}) {
 }
 
 function toEngineEmployee(employee, scheduleRole, rules = {}) {
-  const fixedDayOff = toEngineWeekday(rules.fixedDaysOff?.[employee.id] ?? employee.fixedDayOff);
+  const rawFixedDayOff = rules.fixedDaysOff?.[employee.id] ?? employee.fixedDayOff;
+  const fixedDayOff = toEngineWeekday(rawFixedDayOff);
+  const isExtra = typeof scheduleRole === 'string' && scheduleRole.startsWith('EXTRA');
   return {
     employeeId: employee.id,
     fullName: employee.fullName || employee.id,
@@ -118,7 +294,7 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
     participatesInWeeklyRotation: employee.participatesInRotation !== false,
     participatesInSundayRotation: employee.participatesInSundayRotation !== false,
     weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
-    extraMode: employee.extraMode || (scheduleRole.startsWith('EXTRA') ? 'SUBSTITUTE_ONLY' : undefined),
+    extraMode: employee.extraMode || (isExtra ? 'SUBSTITUTE_ONLY' : undefined),
     activeFrom: employee.activeFrom || undefined,
     activeTo: employee.activeTo || undefined,
     canCoverLeaves: employee.canCoverLeaves !== false,
@@ -131,10 +307,17 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
 
 function toEngineEmployees(employees = [], rules = {}) {
   const activeEmployees = (employees || []).filter((employee) => employee?.isActive !== false && employee?.id);
-  const roleById = resolveEngineRoleMap(activeEmployees);
-  return activeEmployees
-    .filter((employee) => roleById.has(employee.id))
-    .map((employee) => toEngineEmployee(employee, roleById.get(employee.id), rules));
+  const { roleById, valid } = resolveEngineRoleMap(activeEmployees);
+  if (!valid) {
+    return [];
+  }
+  return activeEmployees.map((employee) => {
+    const scheduleRole = roleById.get(employee.id);
+    if (!scheduleRole) {
+      throw new Error(`Ανεπαρκής ανάθεση ρόλου για τον εργαζόμενο: ${employee.fullName || employee.id}`);
+    }
+    return toEngineEmployee(employee, scheduleRole, rules);
+  });
 }
 
 function toEngineAbsence(shift) {
@@ -201,6 +384,7 @@ function toAppShift(shift) {
     shiftType: APP_SHIFT_TYPES[shift.shiftType] || 'custom',
     customLabel: shift.shiftType === 'SUNDAY_12H' ? 'Κυριακή' : '',
     notes: `Auto-generated scheduler engine (${shift.source})`,
+    source: shift.source,
     isHoliday: false,
     isSpecialDay: false,
     specialDayLabel: '',
@@ -259,6 +443,20 @@ export async function generateEngineWeekSchedule({
     throw new Error('Μη έγκυρες ημέρες εβδομάδας για scheduler engine.');
   }
 
+  const roleConfig = validateSchedulerRoleConfiguration(employees);
+  if (!roleConfig.valid) {
+    return {
+      shifts: [],
+      warnings: [roleConfig.message],
+      meta: {
+        engine: 'scheduler-engine',
+        valid: false,
+        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
+        dayPlans: [],
+      },
+    };
+  }
+
   const engineEmployees = toEngineEmployees(employees, rules);
   const engineAbsences = [
     ...toEngineAbsences(allShifts, weekDays),
@@ -293,6 +491,33 @@ export function generateEngineMonthSchedule({
   rules = {},
 }) {
   const monthDays = getMonthDays(year, month);
+  const roleConfig = validateSchedulerRoleConfiguration(employees);
+  if (!roleConfig.valid) {
+    return {
+      shifts: [],
+      warnings: [roleConfig.message],
+      unresolvedGaps: [],
+      validation: {
+        valid: false,
+        violations: [
+          {
+            id: 'role-configuration-violation',
+            code: 'INVALID_ROLE_CONFIGURATION',
+            message: roleConfig.message,
+            severity: 'error',
+          },
+        ],
+      },
+      meta: {
+        monthDays,
+        engine: 'scheduler-engine',
+        valid: false,
+        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
+        dayPlans: [],
+      },
+    };
+  }
+
   const engineEmployees = toEngineEmployees(employees, rules);
   const engineAbsences = [
     ...toEngineAbsences([...allShifts, ...existingMonthShifts], monthDays),

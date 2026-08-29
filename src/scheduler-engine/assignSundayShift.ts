@@ -27,7 +27,7 @@ function isSundayRotationMember(employee: EmployeeScheduleConfig, date: string):
   if (!employee.participatesInSundayRotation) return false;
   if (employee.isEnabled === false) return false;
   if (employee.canWorkSunday === false) return false;
-  if (employee.scheduleRole.startsWith('EXTRA') && employee.extraMode !== 'ACTIVE_SEASONAL') return false;
+  if (employee.scheduleRole.startsWith('EXTRA') && employee.extraMode === 'DISABLED') return false;
   if (employee.activeFrom && date < employee.activeFrom) return false;
   if (employee.activeTo && date > employee.activeTo) return false;
   return true;

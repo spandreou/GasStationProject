@@ -21,9 +21,15 @@ export async function provisionTenantService(db, { callerUid, callerEmail, input
   try {
     validated = validateProvisioningInput(input);
   } catch (err) {
-    throw new HttpsError('invalid-argument', err.message, {
-      reason: PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
-    });
+    const isTokenError = err?.reason === PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID;
+    const message = isTokenError
+      ? 'Το registration token δεν είναι έγκυρο.'
+      : 'Το αίτημα δεν είναι έγκυρο.';
+    const reason = isTokenError
+      ? PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID
+      : PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT;
+
+    throw new HttpsError('invalid-argument', message, { reason });
   }
 
   try {

@@ -232,14 +232,15 @@ async function runTenantProvisioningEmulatorTests() {
     password: 'Password123!',
   });
 
-  // 2a. Malformed token syntax
+  // 2a. Malformed token syntax (clean bounded message and registration-token-invalid reason)
   const malformedRes = await callFunction(
     'provisionTenantFromRegistrationToken',
     { token: 'invalid_syntax', slug: 'fail-malformed', displayName: 'Fail' },
     testUserToken2,
   );
   assert.notEqual(malformedRes.status, 200, 'Malformed token must fail');
-  assert.equal(malformedRes.body?.error?.details?.reason, 'invalid-argument');
+  assert.equal(malformedRes.body?.error?.details?.reason, 'registration-token-invalid');
+  assert.equal(malformedRes.body?.error?.message, 'Το registration token δεν είναι έγκυρο.');
 
   // 2b. Nonexistent token
   const nonexistentRes = await callFunction(
@@ -365,9 +366,28 @@ async function runTenantProvisioningEmulatorTests() {
   console.log('Registration Token Fail-Closed & Error Reasons Matrix passed.');
 
   // ==========================================================
-  // TEST 3: Existing Membership & Platform Admin Policy Matrix
+  // TEST 3: Existing Membership & Platform Admin Policy Matrix (State Proofs)
   // ==========================================================
   console.log('\n--- Test 3: Existing Membership & Platform Admin Policy Matrix ---');
+
+  // Helper to assert full state fail-closed properties
+  async function assertFailedProvisioningState({ userUid, targetSlug, token, expectedReason }) {
+    // 1. Verify token remains ACTIVE
+    const tSnap = await adminDb.doc(`registrationTokens/${token.tokenId}`).get();
+    assert.equal(tSnap.data()?.status, 'ACTIVE', `Token ${token.tokenId} must remain ACTIVE`);
+
+    // 2. Verify target tenant was NOT created
+    const tenantSnap = await adminDb.doc(`tenants/${targetSlug}`).get();
+    assert.equal(tenantSnap.exists, false, `Tenant "${targetSlug}" must not be created`);
+
+    // 3. Verify slug reservation was NOT created
+    const resSnap = await adminDb.doc(`slugReservations/${targetSlug}`).get();
+    assert.equal(resSnap.exists, false, `Slug reservation "${targetSlug}" must not be created`);
+
+    // 4. Verify new membership was NOT created
+    const memSnap = await adminDb.doc(`tenantMemberships/${userUid}_${targetSlug}`).get();
+    assert.equal(memSnap.exists, false, `Membership for "${userUid}_${targetSlug}" must not be created`);
+  }
 
   // 3-Admin. Platform Admin attempting to provision a tenant
   const tokPlatformAdmin = await generateToken({ label: 'Platform Admin Provision Attempt' });
@@ -378,6 +398,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(platAdminAttemptRes.status, 200, 'Platform Admin provisioning attempt must fail');
   assert.equal(platAdminAttemptRes.body?.error?.details?.reason, 'platform-admin-overlap');
+  await assertFailedProvisioningState({
+    userUid: platformAdminUid,
+    targetSlug: 'store-plat-admin-fail',
+    token: tokPlatformAdmin,
+    expectedReason: 'platform-admin-overlap',
+  });
 
   // 3a. User with existing ACTIVE OWNER in another tenant
   const activeOwnerUid = 'user-has-active-owner';
@@ -401,6 +427,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(activeOwnerRes.status, 200, 'User with existing ACTIVE OWNER must be rejected');
   assert.equal(activeOwnerRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: activeOwnerUid,
+    targetSlug: 'new-store-active-owner',
+    token: tokActiveOwner,
+    expectedReason: 'existing-membership',
+  });
 
   // 3b. User with existing REVOKED OWNER in another tenant
   const revokedOwnerUid = 'user-has-revoked-owner';
@@ -420,6 +452,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(revokedOwnerRes.status, 200, 'User with existing REVOKED membership must be rejected');
   assert.equal(revokedOwnerRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: revokedOwnerUid,
+    targetSlug: 'new-store-revoked-owner',
+    token: tokRevokedOwner,
+    expectedReason: 'existing-membership',
+  });
 
   // 3c. User with legacy ADMIN membership
   const legacyAdminUid = 'user-has-legacy-admin';
@@ -439,6 +477,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(legacyAdminRes.status, 200, 'User with legacy ADMIN membership must be rejected');
   assert.equal(legacyAdminRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: legacyAdminUid,
+    targetSlug: 'new-store-legacy-admin',
+    token: tokLegacyAdmin,
+    expectedReason: 'existing-membership',
+  });
 
   // 3d. User with legacy MANAGER membership
   const legacyManagerUid = 'user-has-legacy-manager';
@@ -458,6 +502,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(legacyManagerRes.status, 200, 'User with legacy MANAGER membership must be rejected');
   assert.equal(legacyManagerRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: legacyManagerUid,
+    targetSlug: 'new-store-legacy-manager',
+    token: tokLegacyManager,
+    expectedReason: 'existing-membership',
+  });
 
   // 3e. User with unknown role
   const unknownRoleUid = 'user-has-unknown-role';
@@ -477,6 +527,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(unknownRoleRes.status, 200, 'User with unknown role membership must be rejected');
   assert.equal(unknownRoleRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: unknownRoleUid,
+    targetSlug: 'new-store-unknown-role',
+    token: tokUnknownRole,
+    expectedReason: 'existing-membership',
+  });
 
   // 3f. Mirror-only membership in users/{uid}.memberships
   const mirrorOnlyUid = 'user-has-mirror-only';
@@ -494,6 +550,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorOnlyRes.status, 200, 'User with mirror-only membership must be rejected');
   assert.equal(mirrorOnlyRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: mirrorOnlyUid,
+    targetSlug: 'new-store-mirror-only',
+    token: tokMirrorOnly,
+    expectedReason: 'existing-membership',
+  });
 
   // 3g. Malformed Canonical Membership — Missing UID field
   const missingUidCaller = 'user-canonical-missing-uid';
@@ -511,6 +573,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(missingUidRes.status, 200, 'User with canonical doc ID matching prefix must be rejected');
   assert.equal(missingUidRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: missingUidCaller,
+    targetSlug: 'new-store-missing-uid',
+    token: tokMissingUid,
+    expectedReason: 'existing-membership',
+  });
 
   // 3h. Malformed Canonical Membership — Wrong UID field
   const wrongUidCaller = 'user-canonical-wrong-uid';
@@ -529,6 +597,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(wrongUidRes.status, 200, 'User with canonical doc ID matching prefix (wrong internal uid) must be rejected');
   assert.equal(wrongUidRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: wrongUidCaller,
+    targetSlug: 'new-store-wrong-uid',
+    token: tokWrongUid,
+    expectedReason: 'existing-membership',
+  });
 
   // 3i. Field-Only Legacy Membership (Non-canonical doc ID, valid uid field)
   const legacyFieldCaller = 'user-legacy-field-only';
@@ -547,6 +621,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(legacyFieldRes.status, 200, 'User with legacy non-canonical doc ID but matching uid field must be rejected');
   assert.equal(legacyFieldRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: legacyFieldCaller,
+    targetSlug: 'new-store-legacy-field',
+    token: tokLegacyField,
+    expectedReason: 'existing-membership',
+  });
 
   // 3j. Malformed Mirror String
   const malformedMirrorStrUid = 'user-mirror-str';
@@ -563,6 +643,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorStrRes.status, 200, 'User with string memberships mirror must be rejected');
   assert.equal(mirrorStrRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: malformedMirrorStrUid,
+    targetSlug: 'new-store-mirror-str',
+    token: tokMirrorStr,
+    expectedReason: 'existing-membership',
+  });
 
   // 3k. Malformed Mirror Array
   const malformedMirrorArrUid = 'user-mirror-arr';
@@ -579,6 +665,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorArrRes.status, 200, 'User with array memberships mirror must be rejected');
   assert.equal(mirrorArrRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: malformedMirrorArrUid,
+    targetSlug: 'new-store-mirror-arr',
+    token: tokMirrorArr,
+    expectedReason: 'existing-membership',
+  });
 
   // 3l. Malformed Mirror Number
   const malformedMirrorNumUid = 'user-mirror-num';
@@ -595,6 +687,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorNumRes.status, 200, 'User with number memberships mirror must be rejected');
   assert.equal(mirrorNumRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: malformedMirrorNumUid,
+    targetSlug: 'new-store-mirror-num',
+    token: tokMirrorNum,
+    expectedReason: 'existing-membership',
+  });
 
   // 3m. Malformed Mirror Boolean
   const malformedMirrorBoolUid = 'user-mirror-bool';
@@ -611,6 +709,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorBoolRes.status, 200, 'User with boolean memberships mirror must be rejected');
   assert.equal(mirrorBoolRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: malformedMirrorBoolUid,
+    targetSlug: 'new-store-mirror-bool',
+    token: tokMirrorBool,
+    expectedReason: 'existing-membership',
+  });
 
   // 3n. Malformed Mirror Null
   const malformedMirrorNullUid = 'user-mirror-null';
@@ -627,6 +731,12 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(mirrorNullRes.status, 200, 'User with null memberships mirror must be rejected');
   assert.equal(mirrorNullRes.body?.error?.details?.reason, 'existing-membership');
+  await assertFailedProvisioningState({
+    userUid: malformedMirrorNullUid,
+    targetSlug: 'new-store-mirror-null',
+    token: tokMirrorNull,
+    expectedReason: 'existing-membership',
+  });
 
   // 3o. Empty Mirror Object ({}) - Must be eligible and succeed!
   const emptyMirrorUid = 'user-mirror-empty-obj';
@@ -645,31 +755,7 @@ async function runTenantProvisioningEmulatorTests() {
   assert.equal(emptyMirrorRes.status, 200, 'User with plain empty object memberships mirror must be eligible');
   assert.equal(emptyMirrorRes.body?.result?.success, true);
 
-  // Verify tokens remain ACTIVE for all rejected tests
-  const rejectedTokens = [
-    tokPlatformAdmin,
-    tokActiveOwner,
-    tokRevokedOwner,
-    tokLegacyAdmin,
-    tokLegacyManager,
-    tokUnknownRole,
-    tokMirrorOnly,
-    tokMissingUid,
-    tokWrongUid,
-    tokLegacyField,
-    tokMirrorStr,
-    tokMirrorArr,
-    tokMirrorNum,
-    tokMirrorBool,
-    tokMirrorNull,
-  ];
-
-  for (const t of rejectedTokens) {
-    const tSnap = await adminDb.doc(`registrationTokens/${t.tokenId}`).get();
-    assert.equal(tSnap.data()?.status, 'ACTIVE', 'Token must remain ACTIVE after rejected membership check');
-  }
-
-  console.log('Existing & Malformed Membership Policy Matrix passed.');
+  console.log('Existing & Malformed Membership Policy Matrix passed (State Proofs Verified).');
 
   // ==========================================================
   // TEST 4: Slug Reservation & Collision Matrix
@@ -682,7 +768,7 @@ async function runTenantProvisioningEmulatorTests() {
     password: 'Password123!',
   });
 
-  // 4a. Existing tenant without reservation -> collision rejected
+  // 4a. Existing tenant without reservation -> collision rejected, token remains ACTIVE
   await adminDb.doc('tenants/manual-orphan-tenant').set({
     slug: 'manual-orphan-tenant',
     displayName: 'Manual Orphan',
@@ -696,8 +782,10 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(collARes.status, 200, 'Existing tenant without reservation must fail');
   assert.equal(collARes.body?.error?.details?.reason, 'tenant-slug-taken');
+  const tokCollASnap = await adminDb.doc(`registrationTokens/${tokCollA.tokenId}`).get();
+  assert.equal(tokCollASnap.data()?.status, 'ACTIVE', 'Coll A token must remain ACTIVE');
 
-  // 4b. Existing reservation without tenant -> collision rejected
+  // 4b. Existing reservation without tenant -> collision rejected, token remains ACTIVE
   await adminDb.doc('slugReservations/pre-reserved-slug').set({
     slug: 'pre-reserved-slug',
     tenantId: 'pre-reserved-slug',
@@ -712,10 +800,14 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(collBRes.status, 200, 'Existing slug reservation must fail');
   assert.equal(collBRes.body?.error?.details?.reason, 'tenant-slug-taken');
+  const tokCollBSnap = await adminDb.doc(`registrationTokens/${tokCollB.tokenId}`).get();
+  assert.equal(tokCollBSnap.data()?.status, 'ACTIVE', 'Coll B token must remain ACTIVE');
 
   // 4c. Race test: 2 different valid tokens, 2 different users, same requested slug
-  const raceUser1Token = await createAuthUser({ uid: 'race-slug-user-1', email: 'raceslug1@test.com', password: 'Password123!' });
-  const raceUser2Token = await createAuthUser({ uid: 'race-slug-user-2', email: 'raceslug2@test.com', password: 'Password123!' });
+  const raceUser1Uid = 'race-slug-user-1';
+  const raceUser2Uid = 'race-slug-user-2';
+  const raceUser1Token = await createAuthUser({ uid: raceUser1Uid, email: 'raceslug1@test.com', password: 'Password123!' });
+  const raceUser2Token = await createAuthUser({ uid: raceUser2Uid, email: 'raceslug2@test.com', password: 'Password123!' });
   const tokRace1 = await generateToken({ label: 'Race 1' });
   const tokRace2 = await generateToken({ label: 'Race 2' });
 
@@ -732,7 +824,45 @@ async function runTenantProvisioningEmulatorTests() {
   const failedRaceRes = [raceRes1, raceRes2].find((r) => r.status !== 200);
   assert.equal(failedRaceRes.body?.error?.details?.reason, 'tenant-slug-taken');
 
-  console.log('Slug Reservation & Collision Matrix passed.');
+  // Dynamic winner/loser verification
+  const winnerIsUser1 = raceRes1.status === 200;
+  const winnerUid = winnerIsUser1 ? raceUser1Uid : raceUser2Uid;
+  const loserUid = winnerIsUser1 ? raceUser2Uid : raceUser1Uid;
+  const winnerTokenId = winnerIsUser1 ? tokRace1.tokenId : tokRace2.tokenId;
+  const loserTokenId = winnerIsUser1 ? tokRace2.tokenId : tokRace1.tokenId;
+
+  // 1. Verify exactly 1 tenant exists
+  const raceTenantSnap = await adminDb.doc('tenants/target-same-slug').get();
+  assert.ok(raceTenantSnap.exists, 'Contested tenant must exist');
+  assert.equal(raceTenantSnap.data()?.createdBy, winnerUid, 'Tenant createdBy must match dynamic winner');
+
+  // 2. Verify exactly 1 slug reservation exists
+  const raceReservationSnap = await adminDb.doc('slugReservations/target-same-slug').get();
+  assert.ok(raceReservationSnap.exists, 'Contested slug reservation must exist');
+  assert.equal(raceReservationSnap.data()?.reservedBy, winnerUid, 'Reservation reservedBy must match dynamic winner');
+
+  // 3. Verify exactly 1 OWNER membership created for winner
+  const winnerMemSnap = await adminDb.doc(`tenantMemberships/${winnerUid}_target-same-slug`).get();
+  assert.ok(winnerMemSnap.exists, 'Winner membership must exist');
+  assert.equal(winnerMemSnap.data()?.role, 'OWNER');
+
+  const loserMemSnap = await adminDb.doc(`tenantMemberships/${loserUid}_target-same-slug`).get();
+  assert.equal(loserMemSnap.exists, false, 'Loser membership must NOT exist');
+
+  // 4. Verify winner token is CONSUMED, loser token is ACTIVE
+  const winnerTokenSnap = await adminDb.doc(`registrationTokens/${winnerTokenId}`).get();
+  assert.equal(winnerTokenSnap.data()?.status, 'CONSUMED', 'Winner token must be CONSUMED');
+  assert.equal(winnerTokenSnap.data()?.consumedBy, winnerUid);
+
+  const loserTokenSnap = await adminDb.doc(`registrationTokens/${loserTokenId}`).get();
+  assert.equal(loserTokenSnap.data()?.status, 'ACTIVE', 'Loser token must remain ACTIVE');
+
+  // 5. Verify exactly 1 audit log entry for the contested tenant
+  const raceAuditQuery = await adminDb.collection('platformAuditLogs').where('tenantId', '==', 'target-same-slug').get();
+  assert.equal(raceAuditQuery.size, 1, 'Exactly 1 platform audit log entry must exist for contested tenant');
+  assert.equal(raceAuditQuery.docs[0].data()?.actorUid, winnerUid);
+
+  console.log('Slug Reservation & Collision Matrix passed (Race Proof Verified).');
 
   // ==========================================================
   // TEST 4b: 41-Character Slug Rejection in Emulator
@@ -750,6 +880,7 @@ async function runTenantProvisioningEmulatorTests() {
   );
   assert.notEqual(slug41Res.status, 200, '41-character slug must be rejected');
   assert.equal(slug41Res.body?.error?.details?.reason, 'invalid-argument');
+  assert.equal(slug41Res.body?.error?.message, 'Το αίτημα δεν είναι έγκυρο.');
 
   // Verify token remains ACTIVE
   const tok41Snap = await adminDb.doc(`registrationTokens/${tok41.tokenId}`).get();
@@ -896,27 +1027,101 @@ async function runTenantProvisioningEmulatorTests() {
   console.log('Direct Client Security Rules Enforcement passed.');
 
   // ==========================================================
-  // TEST 8: Error Redaction & Internal Path Protection Test
+  // TEST 8: Error Redaction, Sanitization & Input Reflection Safety Test
   // ==========================================================
-  console.log('\n--- Test 8: Error Redaction & Internal Path Protection Test ---');
-  // Pass an invalid token that causes failure, verify response body doesn't leak paths or stack traces
-  const badRes = await callFunction(
+  console.log('\n--- Test 8: Error Redaction, Sanitization & Input Reflection Safety Test ---');
+
+  const validTokenForTest8 = await generateToken({ label: 'Test 8 Token' });
+
+  // 8a. Unknown field with long unusual name
+  const unknownKey = 'attacker_controlled_field_XXXXXXXXXXXXXXXX';
+  const unknownVal = 'injected_attacker_payload_YYYYYYYYYYYYYYYY';
+  const unknownRes = await callFunction(
     'provisionTenantFromRegistrationToken',
-    { token: 'stx_badtoken1234567890123456789012345678901234567', slug: 'bad-store', displayName: 'Bad Store' },
+    {
+      token: validTokenForTest8.rawToken,
+      slug: 'store-unknown-field',
+      displayName: 'Store Unknown',
+      [unknownKey]: unknownVal,
+    },
     clientTesterToken,
   );
-  assert.notEqual(badRes.status, 200);
-  assert.equal(badRes.body?.error?.details?.reason, 'registration-token-invalid');
+  assert.notEqual(unknownRes.status, 200);
+  assert.equal(unknownRes.body?.error?.details?.reason, 'invalid-argument');
+  assert.equal(unknownRes.body?.error?.message, 'Το αίτημα δεν είναι έγκυρο.');
+  const unknownSerialized = JSON.stringify(unknownRes.body);
+  assert.equal(unknownSerialized.includes(unknownKey), false, 'Response must not reflect unknown field key');
+  assert.equal(unknownSerialized.includes(unknownVal), false, 'Response must not reflect unknown field value');
 
-  const errorJsonStr = JSON.stringify(badRes.body);
-  assert.equal(errorJsonStr.includes('registrationTokenLookups'), false, 'Error response must not expose internal lookup path');
-  assert.equal(errorJsonStr.includes('registrationTokens/'), false, 'Error response must not expose internal token path');
-  assert.equal(errorJsonStr.includes('platformAdmins/'), false, 'Error response must not expose platformAdmins path');
-  assert.equal(errorJsonStr.includes('tenantMemberships/'), false, 'Error response must not expose tenantMemberships path');
-  assert.equal(errorJsonStr.includes('stack'), false, 'Error response must not expose stack traces');
-  assert.equal(errorJsonStr.includes('tokenHash'), false, 'Error response must not expose tokenHash');
+  // 8b. Forbidden field injection
+  const forbiddenRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    {
+      token: validTokenForTest8.rawToken,
+      slug: 'store-forbidden-field',
+      displayName: 'Store Forbidden',
+      role: 'SUPER_ADMIN_INJECT',
+      domain: 'malicious.attacker.host.com',
+    },
+    clientTesterToken,
+  );
+  assert.notEqual(forbiddenRes.status, 200);
+  assert.equal(forbiddenRes.body?.error?.details?.reason, 'invalid-argument');
+  assert.equal(forbiddenRes.body?.error?.message, 'Το αίτημα δεν είναι έγκυρο.');
+  const forbiddenSerialized = JSON.stringify(forbiddenRes.body);
+  assert.equal(forbiddenSerialized.includes('SUPER_ADMIN_INJECT'), false, 'Response must not reflect forbidden field value');
+  assert.equal(forbiddenSerialized.includes('malicious.attacker.host.com'), false, 'Response must not reflect domain value');
 
-  console.log('Error Redaction & Internal Path Protection Test passed.');
+  // 8c. Invalid business category
+  const invalidCatVal = 'EVIL_BUSINESS_CATEGORY_INJECTION';
+  const invalidCatRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    {
+      token: validTokenForTest8.rawToken,
+      slug: 'store-invalid-category',
+      displayName: 'Store Invalid Category',
+      businessCategory: invalidCatVal,
+    },
+    clientTesterToken,
+  );
+  assert.notEqual(invalidCatRes.status, 200);
+  assert.equal(invalidCatRes.body?.error?.details?.reason, 'invalid-argument');
+  assert.equal(invalidCatRes.body?.error?.message, 'Το αίτημα δεν είναι έγκυρο.');
+  const invalidCatSerialized = JSON.stringify(invalidCatRes.body);
+  assert.equal(invalidCatSerialized.includes(invalidCatVal), false, 'Response must not reflect invalid category string');
+
+  // 8d. Malformed token format
+  const badTokenVal = 'malformed_token_string_ZZZZZZZZZZ';
+  const badTokenRes = await callFunction(
+    'provisionTenantFromRegistrationToken',
+    {
+      token: badTokenVal,
+      slug: 'store-bad-token',
+      displayName: 'Store Bad Token',
+    },
+    clientTesterToken,
+  );
+  assert.notEqual(badTokenRes.status, 200);
+  assert.equal(badTokenRes.body?.error?.details?.reason, 'registration-token-invalid');
+  assert.equal(badTokenRes.body?.error?.message, 'Το registration token δεν είναι έγκυρο.');
+  const badTokenSerialized = JSON.stringify(badTokenRes.body);
+  assert.equal(badTokenSerialized.includes(badTokenVal), false, 'Response must not reflect raw token string');
+
+  // 8e. Verify zero leakage of internal paths, hashes, or stack traces across all responses
+  const allSerializedResponses = [unknownSerialized, forbiddenSerialized, invalidCatSerialized, badTokenSerialized];
+  for (const serialized of allSerializedResponses) {
+    assert.equal(serialized.includes('registrationTokenLookups'), false, 'Error response must not expose registrationTokenLookups');
+    assert.equal(serialized.includes('registrationTokens/'), false, 'Error response must not expose registrationTokens/');
+    assert.equal(serialized.includes('platformAdmins/'), false, 'Error response must not expose platformAdmins/');
+    assert.equal(serialized.includes('tenantMemberships/'), false, 'Error response must not expose tenantMemberships/');
+    assert.equal(serialized.includes('slugReservations/'), false, 'Error response must not expose slugReservations/');
+    assert.equal(serialized.includes('tokenHash'), false, 'Error response must not expose tokenHash');
+    assert.equal(serialized.includes('stack'), false, 'Error response must not expose stack traces');
+    assert.equal(serialized.includes('FirebaseError'), false, 'Error response must not expose FirebaseError');
+    assert.equal(serialized.includes('Firestore'), false, 'Error response must not expose Firestore');
+  }
+
+  console.log('Error Redaction, Sanitization & Input Reflection Safety Test passed.');
 
   console.log('\n==========================================================');
   console.log('ALL PHASE 4 PRE-PRODUCTION ALIGNMENT EMULATOR TESTS PASSED 100%');

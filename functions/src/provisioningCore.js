@@ -53,31 +53,54 @@ export const PROVISIONING_ERROR_REASONS = Object.freeze({
   UNAUTHENTICATED: 'unauthenticated',
 });
 
+export class ProvisioningValidationError extends Error {
+  constructor(reason = PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, message = 'Invalid provisioning input') {
+    super(message);
+    this.name = 'ProvisioningValidationError';
+    this.reason = reason;
+  }
+}
+
 export function validateTenantSlug(rawSlug) {
   if (typeof rawSlug !== 'string') {
-    throw new Error('slug must be a string');
+    throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'slug must be a string');
   }
 
   const slug = rawSlug.trim().toLowerCase();
 
   if (slug.length < SLUG_MIN_LENGTH || slug.length > SLUG_MAX_LENGTH) {
-    throw new Error(`slug length must be between ${SLUG_MIN_LENGTH} and ${SLUG_MAX_LENGTH} characters`);
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      `slug length must be between ${SLUG_MIN_LENGTH} and ${SLUG_MAX_LENGTH} characters`,
+    );
   }
 
   if (!SLUG_REGEX.test(slug)) {
-    throw new Error('slug must consist of lowercase alphanumeric characters and hyphens, and cannot start or end with a hyphen');
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      'slug must consist of lowercase alphanumeric characters and hyphens, and cannot start or end with a hyphen',
+    );
   }
 
   if (RESERVED_SLUGS.has(slug)) {
-    throw new Error(`slug "${slug}" is reserved for platform services`);
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      `slug "${slug}" is reserved for platform services`,
+    );
   }
 
   if (slug.startsWith('gas-') || slug.endsWith('-gas')) {
-    throw new Error('slug cannot start with "gas-" or end with "-gas"');
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      'slug cannot start with "gas-" or end with "-gas"',
+    );
   }
 
   if (slug.startsWith('shiftoryx-') || slug.endsWith('-shiftoryx')) {
-    throw new Error('slug cannot start with "shiftoryx-" or end with "-shiftoryx"');
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      'slug cannot start with "shiftoryx-" or end with "-shiftoryx"',
+    );
   }
 
   return slug;
@@ -85,18 +108,24 @@ export function validateTenantSlug(rawSlug) {
 
 export function validateDisplayName(rawDisplayName) {
   if (typeof rawDisplayName !== 'string') {
-    throw new Error('displayName must be a string');
+    throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'displayName must be a string');
   }
 
   const displayName = rawDisplayName.trim();
 
   if (displayName.length < 1 || displayName.length > 100) {
-    throw new Error('displayName length must be between 1 and 100 characters');
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      'displayName length must be between 1 and 100 characters',
+    );
   }
 
   // Reject ASCII control characters
   if (/[\x00-\x1F\x7F]/.test(displayName)) {
-    throw new Error('displayName cannot contain control characters');
+    throw new ProvisioningValidationError(
+      PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+      'displayName cannot contain control characters',
+    );
   }
 
   return displayName;
@@ -105,11 +134,14 @@ export function validateDisplayName(rawDisplayName) {
 export function resolveBusinessCategory(rawCategory, tokenHint) {
   if (rawCategory !== undefined && rawCategory !== null) {
     if (typeof rawCategory !== 'string') {
-      throw new Error('businessCategory must be a string if provided');
+      throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'businessCategory must be a string if provided');
     }
     const normalized = rawCategory.trim().toUpperCase();
     if (!VALID_BUSINESS_CATEGORIES.includes(normalized)) {
-      throw new Error(`businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`);
+      throw new ProvisioningValidationError(
+        PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+        `businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`,
+      );
     }
     return normalized;
   }
@@ -151,27 +183,27 @@ const FORBIDDEN_INPUT_KEYS = new Set([
 
 export function validateProvisioningInput(rawInput) {
   if (!rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) {
-    throw new Error('Input must be a non-null object');
+    throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'Input must be a non-null object');
   }
 
   const keys = Object.keys(rawInput);
 
   for (const key of keys) {
     if (FORBIDDEN_INPUT_KEYS.has(key)) {
-      throw new Error(`Forbidden field detected: "${key}"`);
+      throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, `Forbidden field detected: "${key}"`);
     }
     if (!ALLOWED_PROVISIONING_INPUT_KEYS.has(key)) {
-      throw new Error(`Unknown field detected: "${key}"`);
+      throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, `Unknown field detected: "${key}"`);
     }
   }
 
   if (!rawInput.token || typeof rawInput.token !== 'string') {
-    throw new Error('token is required and must be a string');
+    throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID, 'token is required and must be a string');
   }
 
   const token = rawInput.token.trim();
   if (!TOKEN_FORMAT_REGEX.test(token)) {
-    throw new Error('Invalid registration token format');
+    throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID, 'Invalid registration token format');
   }
 
   const slug = validateTenantSlug(rawInput.slug);
@@ -180,11 +212,14 @@ export function validateProvisioningInput(rawInput) {
   let rawCategory = undefined;
   if (rawInput.businessCategory !== undefined && rawInput.businessCategory !== null) {
     if (typeof rawInput.businessCategory !== 'string') {
-      throw new Error('businessCategory must be a string if provided');
+      throw new ProvisioningValidationError(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'businessCategory must be a string if provided');
     }
     const normalized = rawInput.businessCategory.trim().toUpperCase();
     if (!VALID_BUSINESS_CATEGORIES.includes(normalized)) {
-      throw new Error(`businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`);
+      throw new ProvisioningValidationError(
+        PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+        `businessCategory must be one of: ${VALID_BUSINESS_CATEGORIES.join(', ')}`,
+      );
     }
     rawCategory = normalized;
   }

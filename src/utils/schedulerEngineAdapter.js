@@ -211,12 +211,16 @@ export function resolveEngineRoleMap(employees = []) {
     }
   }
 
-  // Check if any active employee was left unmapped
-  sorted.forEach((emp) => {
-    if (!roleById.has(emp.id) && !errors.length) {
-      errors.push(`Ο εργαζόμενος ${emp.fullName || emp.id} δεν έχει έγκυρο ρόλο στο πρόγραμμα.`);
-    }
-  });
+  // 9. Mandatory Four Base Operational Slots Validation
+  if (!assignedRoles.has('CORE_A') && !errors.some((e) => e.includes('Core 1'))) {
+    errors.push('Λείπει ο απαιτούμενος ρόλος Core 1.');
+  }
+  if (!assignedRoles.has('CORE_B') && !errors.some((e) => e.includes('Core 2'))) {
+    errors.push('Λείπει ο απαιτούμενος ρόλος Core 2.');
+  }
+  if ((!assignedRoles.has('FLEX_A') || !assignedRoles.has('FLEX_B')) && !errors.some((e) => e.includes('Intermediate'))) {
+    errors.push('Λείπει απαιτούμενη θέση Intermediate / Coverage.');
+  }
 
   return {
     roleById,

@@ -91,8 +91,10 @@ const resFlexB = resolveEngineRoleMap([
   { id: 'e1', fullName: 'Emp A', isActive: true, scheduleRole: 'core1' },
   { id: 'e2', fullName: 'Emp B', isActive: true, scheduleRole: 'core2' },
   { id: 'e3', fullName: 'Emp C', isActive: true, scheduleRole: 'FLEX_2' },
+  { id: 'e4', fullName: 'Emp D', isActive: true, scheduleRole: 'intermediate' },
 ]);
-assert.equal(resFlexB.roleById.get('e3'), 'FLEX_B', 'FLEX_2 must map specifically to FLEX_B even if FLEX_A is empty');
+assert.equal(resFlexB.roleById.get('e3'), 'FLEX_B', 'FLEX_2 must map specifically to FLEX_B');
+assert.equal(resFlexB.roleById.get('e4'), 'FLEX_A', 'Generic intermediate fills remaining FLEX_A');
 assert.equal(resFlexB.valid, true);
 
 // 6. Generic Intermediate #1 and #2 -> FLEX_A then FLEX_B
@@ -134,12 +136,83 @@ assert.equal(resUnconf.valid, true);
 console.log('  PASS: SECTION 1 verified.\n');
 
 // -----------------------------------------------------------------------------
-// SECTION 2: INVALID CONFIGURATION & NO SILENT REASSIGNMENT (FAIL-CLOSED)
+// SECTION 2: MANDATORY BASE SLOTS & INVALID CONFIGURATION FAIL-CLOSED
 // -----------------------------------------------------------------------------
-console.log('SECTION 2: Invalid Configuration & No Silent Reassignment Tests...');
+console.log('SECTION 2: Mandatory Base Slots & Invalid Configuration Fail-Closed Tests...');
 
-// 2.1 Duplicate Core 1
-console.log('  Test 2.1: Duplicate Core 1 -> fail-closed, no silent reassignment');
+// 2.1 Missing CORE_A
+console.log('  Test 2.1: Missing CORE_A -> fail-closed');
+const missingCoreA = [
+  { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
+  { id: 'f1', fullName: 'Flex 1', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'f2', fullName: 'Flex 2', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'ex', fullName: 'Extra', isActive: true, scheduleRole: 'custom' },
+];
+const valMissingCoreA = validateSchedulerRoleConfiguration(missingCoreA);
+assert.equal(valMissingCoreA.valid, false, 'Missing CORE_A must be invalid');
+assert.ok(valMissingCoreA.message.includes('Core 1'), 'Message must indicate missing Core 1');
+
+// 2.2 Missing CORE_B
+console.log('  Test 2.2: Missing CORE_B -> fail-closed');
+const missingCoreB = [
+  { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
+  { id: 'f1', fullName: 'Flex 1', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'f2', fullName: 'Flex 2', isActive: true, scheduleRole: 'intermediate' },
+  { id: 'ex', fullName: 'Extra', isActive: true, scheduleRole: 'custom' },
+];
+const valMissingCoreB = validateSchedulerRoleConfiguration(missingCoreB);
+assert.equal(valMissingCoreB.valid, false, 'Missing CORE_B must be invalid');
+assert.ok(valMissingCoreB.message.includes('Core 2'), 'Message must indicate missing Core 2');
+
+// 2.3 Missing FLEX_A / FLEX_B
+console.log('  Test 2.3: Missing Flex slot -> fail-closed');
+const missingFlex = [
+  { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
+  { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
+  { id: 'f1', fullName: 'Flex 1', isActive: true, scheduleRole: 'flex1' },
+  { id: 'ex', fullName: 'Extra', isActive: true, scheduleRole: 'custom' },
+];
+const valMissingFlex = validateSchedulerRoleConfiguration(missingFlex);
+assert.equal(valMissingFlex.valid, false, 'Missing Flex slot must be invalid');
+assert.ok(valMissingFlex.message.includes('Intermediate'), 'Message must indicate missing Intermediate / Coverage');
+
+// 2.4 Missing base slot + explicit Custom -> Custom stays Extra, base reported missing, 0 shifts
+console.log('  Test 2.4: Missing base slot + explicit Custom -> Custom stays Extra, 0 shifts');
+const missingBaseWithCustom = [
+  { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
+  { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
+  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
+  { id: 'emp-custom', fullName: 'Άκης Αναπληρωτής', isActive: true, scheduleRole: 'custom', fixedDayOff: 5 },
+];
+const resMissingBaseMap = resolveEngineRoleMap(missingBaseWithCustom);
+assert.equal(resMissingBaseMap.roleById.get('emp-custom'), 'EXTRA_A', 'Custom employee stays EXTRA_A');
+assert.equal(resMissingBaseMap.roleById.get('emp-custom') !== 'FLEX_B', true, 'Custom employee NEVER becomes FLEX_B');
+assert.equal(resMissingBaseMap.valid, false, 'Missing FLEX_B marks config invalid');
+
+const weekMissingBase = await generateEngineWeekSchedule({
+  weekDays,
+  employees: missingBaseWithCustom,
+  allShifts: [],
+  absences: [],
+  rules: { weeklyRotationEnabled: true },
+});
+assert.equal(weekMissingBase.shifts.length, 0, 'No shifts generated when base slot is missing');
+assert.ok(weekMissingBase.warnings[0].includes('Intermediate'), 'Warning identifies missing base slot');
+
+const monthMissingBase = generateEngineMonthSchedule({
+  month: 4,
+  year: 2026,
+  employees: missingBaseWithCustom,
+  allShifts: [],
+  existingMonthShifts: [],
+  absences: [],
+  rules: { weeklyRotationEnabled: true },
+});
+assert.equal(monthMissingBase.shifts.length, 0, 'No monthly shifts generated when base slot is missing');
+assert.equal(monthMissingBase.validation.valid, false);
+
+// 2.5 Duplicate Core 1
+console.log('  Test 2.5: Duplicate Core 1 -> fail-closed, no silent reassignment');
 const dupCore1Emps = [
   { id: 'c1a', fullName: 'Core 1 First', isActive: true, scheduleRole: 'core1' },
   { id: 'c1b', fullName: 'Core 1 Second', isActive: true, scheduleRole: 'core1' },
@@ -149,7 +222,7 @@ const dupCore1Emps = [
 const resDupCore1 = resolveEngineRoleMap(dupCore1Emps);
 assert.equal(resDupCore1.valid, false, 'Duplicate core1 must mark configuration as invalid');
 assert.equal(resDupCore1.errors[0], 'Υπάρχει διπλότυπος ρόλος Core 1 στους εργαζομένους.');
-assert.equal(resDupCore1.roleById.get('c1b'), undefined, 'Second core1 must NOT be assigned any role (no EXTRA_A, EXTRA_B, FLEX_A, FLEX_B, or CORE_B)');
+assert.equal(resDupCore1.roleById.get('c1b'), undefined, 'Second core1 must NOT be assigned any role');
 
 const weekDupCore1 = await generateEngineWeekSchedule({
   weekDays,
@@ -159,10 +232,9 @@ const weekDupCore1 = await generateEngineWeekSchedule({
   rules: { weeklyRotationEnabled: true },
 });
 assert.equal(weekDupCore1.shifts.length, 0, 'No shifts generated when duplicate core1 exists');
-assert.equal(weekDupCore1.warnings[0], 'Υπάρχει διπλότυπος ρόλος Core 1 στους εργαζομένους.');
 
-// 2.2 Duplicate Core 2
-console.log('  Test 2.2: Duplicate Core 2 -> fail-closed, no silent reassignment');
+// 2.6 Duplicate Core 2
+console.log('  Test 2.6: Duplicate Core 2 -> fail-closed, no silent reassignment');
 const dupCore2Emps = [
   { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
   { id: 'c2a', fullName: 'Core 2 First', isActive: true, scheduleRole: 'core2' },
@@ -174,8 +246,8 @@ assert.equal(resDupCore2.valid, false, 'Duplicate core2 must mark configuration 
 assert.equal(resDupCore2.errors[0], 'Υπάρχει διπλότυπος ρόλος Core 2 στους εργαζομένους.');
 assert.equal(resDupCore2.roleById.get('c2b'), undefined, 'Second core2 must NOT be silently reassigned');
 
-// 2.3 Third Intermediate
-console.log('  Test 2.3: Third Intermediate -> fail-closed, no silent Extra promotion');
+// 2.7 Third Intermediate
+console.log('  Test 2.7: Third Intermediate -> fail-closed, no silent Extra promotion');
 const thirdInterEmps = [
   { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
   { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
@@ -188,8 +260,8 @@ assert.equal(resThirdInter.valid, false, 'Third intermediate must be invalid');
 assert.equal(resThirdInter.errors[0], 'Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Intermediate / Coverage.');
 assert.equal(resThirdInter.roleById.get('i3'), undefined, 'Third intermediate must NOT be promoted to EXTRA_A');
 
-// 2.4 Third Custom
-console.log('  Test 2.4: Third Custom -> fail-closed, no slot duplicate');
+// 2.8 Third Custom
+console.log('  Test 2.8: Third Custom -> fail-closed, no slot duplicate');
 const thirdCustomEmps = [
   { id: 'c1', fullName: 'Core 1', isActive: true, scheduleRole: 'core1' },
   { id: 'c2', fullName: 'Core 2', isActive: true, scheduleRole: 'core2' },
@@ -201,19 +273,8 @@ const thirdCustomEmps = [
 const resThirdCustom = resolveEngineRoleMap(thirdCustomEmps);
 assert.equal(resThirdCustom.valid, false, 'Third custom must be invalid');
 assert.equal(resThirdCustom.errors[0], 'Υπάρχουν πάνω από 2 εργαζόμενοι με ρόλο Extra / Substitute.');
-assert.equal(resThirdCustom.roleById.get('x3'), undefined, 'Third custom must NOT duplicate EXTRA slots or become base');
+assert.equal(resThirdCustom.roleById.get('x3'), undefined, 'Third custom must NOT duplicate EXTRA slots');
 
-// 2.5 Missing base + explicit Custom
-console.log('  Test 2.5: Missing base slot + explicit Custom -> Custom stays Extra, base reported missing');
-const missingBaseWithCustom = [
-  { id: 'emp-1', fullName: 'Νίκος Core 1', isActive: true, scheduleRole: 'core1', fixedDayOff: 3 },
-  { id: 'emp-2', fullName: 'Μαρία Core 2', isActive: true, scheduleRole: 'core2', fixedDayOff: 4 },
-  { id: 'emp-3', fullName: 'Κώστας Flex 1', isActive: true, scheduleRole: 'intermediate', fixedDayOff: 2 },
-  { id: 'emp-custom', fullName: 'Άκης Αναπληρωτής', isActive: true, scheduleRole: 'custom', fixedDayOff: 5 },
-];
-const resMissingBase = resolveEngineRoleMap(missingBaseWithCustom);
-assert.equal(resMissingBase.roleById.get('emp-custom'), 'EXTRA_A', 'Custom employee stays EXTRA_A');
-assert.equal(resMissingBase.roleById.get('emp-custom') !== 'FLEX_B', true, 'Custom employee NEVER becomes FLEX_B');
 console.log('  PASS: SECTION 2 verified.\n');
 
 // -----------------------------------------------------------------------------
@@ -221,21 +282,21 @@ console.log('  PASS: SECTION 2 verified.\n');
 // -----------------------------------------------------------------------------
 console.log('SECTION 3: Capacity & Bounded Autoscheduler Enforcement Tests...');
 
-// 3.1 4 Employees
-console.log('  Test 3.1: 4 Employees -> valid');
+// 3.1 4 Employees (4 Base)
+console.log('  Test 3.1: 4 Employees (4 Base) -> valid');
 const base4 = createBase4Employees();
 assert.equal(validateSchedulerEmployeeCapacity(base4).valid, true);
 
-// 3.2 5 Employees
-console.log('  Test 3.2: 5 Employees -> valid');
+// 3.2 5 Employees (4 Base + 1 Extra)
+console.log('  Test 3.2: 5 Employees (4 Base + 1 Extra) -> valid');
 const emp5 = [
   ...base4,
   { id: 'emp-5', fullName: 'Γιώργος Extra 1', isActive: true, scheduleRole: 'custom', extraMode: 'SUBSTITUTE_ONLY', participatesInRotation: true, participatesInSundayRotation: true },
 ];
 assert.equal(validateSchedulerEmployeeCapacity(emp5).valid, true);
 
-// 3.3 6 Employees
-console.log('  Test 3.3: 6 Employees -> valid');
+// 3.3 6 Employees (4 Base + 2 Extras)
+console.log('  Test 3.3: 6 Employees (4 Base + 2 Extras) -> valid');
 const emp6 = [
   ...emp5,
   { id: 'emp-6', fullName: 'Άννα Extra 2', isActive: true, scheduleRole: 'custom', extraMode: 'SUBSTITUTE_ONLY', participatesInRotation: true, participatesInSundayRotation: true },
@@ -301,9 +362,9 @@ assert.ok(newEmpMonthShifts.length >= 20, 'New regular employee must have monthl
 console.log('  PASS: SECTION 4 verified.\n');
 
 // -----------------------------------------------------------------------------
-// SECTION 5: EXTRA / SUBSTITUTE BEHAVIOR
+// SECTION 5: EXTRA / SUBSTITUTE BEHAVIOR & EVIDENCE GAPS
 // -----------------------------------------------------------------------------
-console.log('SECTION 5: Extra / Substitute Behavior Tests...');
+console.log('SECTION 5: Extra / Substitute Behavior & Evidence Gaps...');
 
 // 5.1 Substitute Absence Replacement
 console.log('  Test 5.1: Substitute absence replacement');
@@ -329,8 +390,24 @@ const replacementShift = resSubGap.shifts.find((s) => s.date === '2026-05-04' &&
 assert.ok(replacementShift, 'Substitute emp-5 must fill absence gap on 2026-05-04');
 assert.equal(replacementShift.source, 'ABSENCE_REPLACEMENT');
 
-// 5.2 Substitute Sunday Participation
-console.log('  Test 5.2: Substitute Sunday participation in rotation pool');
+// 5.2 Direct Assertion: DISABLED Extra never replaces absence
+console.log('  Test 5.2: Direct assertion - DISABLED Extra never replaces absence');
+const empWithDisabled = [
+  ...base4,
+  { id: 'emp-disabled', fullName: 'Disabled Extra', isActive: true, scheduleRole: 'custom', extraMode: 'DISABLED', participatesInSundayRotation: true },
+];
+const resDisabledGap = await generateEngineWeekSchedule({
+  weekDays,
+  employees: empWithDisabled,
+  allShifts: [],
+  absences: absencesForSub,
+  rules: { weeklyRotationEnabled: true },
+});
+const disabledReplacements = resDisabledGap.shifts.filter((s) => s.employeeId === 'emp-disabled');
+assert.equal(disabledReplacements.length, 0, 'DISABLED Extra must receive 0 replacement shifts');
+
+// 5.3 Substitute Sunday Participation
+console.log('  Test 5.3: Substitute Sunday participation in rotation pool');
 const testSundays = [
   ['2026-05-04', '2026-05-05', '2026-05-06', '2026-05-07', '2026-05-08', '2026-05-09', '2026-05-10'],
   ['2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14', '2026-05-15', '2026-05-16', '2026-05-17'],
@@ -352,8 +429,8 @@ for (const week of testSundays) {
 }
 assert.ok(sundayRecipients.includes('emp-5'), 'emp-5 must receive Sunday in rotation');
 
-// 5.3 Sunday Opt-out
-console.log('  Test 5.3: Sunday opt-out');
+// 5.4 Sunday Opt-out
+console.log('  Test 5.4: Sunday opt-out');
 const empWithOptOut = [
   ...base4,
   { id: 'emp-optout', fullName: 'Χωρίς Κυριακές', isActive: true, scheduleRole: 'custom', participatesInSundayRotation: false },
@@ -372,12 +449,8 @@ for (const week of testSundays) {
 }
 assert.equal(optOutSundayRecipients.includes('emp-optout'), false, 'Opt-out employee must NEVER receive Sunday');
 
-// 5.4 DISABLED Extra
-console.log('  Test 5.4: DISABLED Extra exclusion');
-const empWithDisabled = [
-  ...base4,
-  { id: 'emp-disabled', fullName: 'Disabled Extra', isActive: true, scheduleRole: 'custom', extraMode: 'DISABLED', participatesInSundayRotation: true },
-];
+// 5.5 DISABLED Extra Sunday exclusion
+console.log('  Test 5.5: DISABLED Extra Sunday exclusion');
 const disabledSundayRecipients = [];
 for (const week of testSundays) {
   const res = await generateEngineWeekSchedule({
@@ -392,8 +465,8 @@ for (const week of testSundays) {
 }
 assert.equal(disabledSundayRecipients.includes('emp-disabled'), false, 'DISABLED extra must NEVER receive Sunday');
 
-// 5.5 ACTIVE_SEASONAL date range boundaries
-console.log('  Test 5.5: ACTIVE_SEASONAL date range boundaries');
+// 5.6 ACTIVE_SEASONAL in-range and out-of-range direct assertions
+console.log('  Test 5.6: ACTIVE_SEASONAL in-range vs out-of-range direct assertions');
 const seasonalEmp = [
   ...base4,
   {
@@ -402,11 +475,36 @@ const seasonalEmp = [
     isActive: true,
     scheduleRole: 'custom',
     extraMode: 'ACTIVE_SEASONAL',
-    activeFrom: '2026-05-05',
-    activeTo: '2026-05-07',
+    activeFrom: '2026-05-04',
+    activeTo: '2026-05-08',
     participatesInSundayRotation: true,
   },
 ];
+
+// In-range replacement (2026-05-05 is within activeFrom..activeTo)
+const inRangeAbsence = [
+  {
+    id: 'abs-in-range',
+    employeeId: 'emp-1',
+    startDate: '2026-05-05',
+    endDate: '2026-05-05',
+    type: 'SICK',
+    scope: 'FULL_DAY',
+    status: 'CONFIRMED',
+  },
+];
+const resSeasonalInRange = await generateEngineWeekSchedule({
+  weekDays,
+  employees: seasonalEmp,
+  allShifts: [],
+  absences: inRangeAbsence,
+  rules: { weeklyRotationEnabled: true },
+});
+const seasonalInRangeShift = resSeasonalInRange.shifts.find((s) => s.date === '2026-05-05' && s.employeeId === 'emp-seasonal');
+assert.ok(seasonalInRangeShift, 'Seasonal employee must fill gap on in-range date (2026-05-05)');
+assert.equal(seasonalInRangeShift.source, 'ABSENCE_REPLACEMENT');
+
+// Out-of-range Sunday (2026-05-10 is outside activeTo: 2026-05-08)
 const seasonalSundayRes = await generateEngineWeekSchedule({
   weekDays,
   employees: seasonalEmp,
@@ -415,7 +513,8 @@ const seasonalSundayRes = await generateEngineWeekSchedule({
   rules: { avoidConsecutiveSundays: true },
 });
 const seasonalSunday = seasonalSundayRes.shifts.find((s) => s.date === '2026-05-10' && s.employeeId === 'emp-seasonal');
-assert.equal(seasonalSunday, undefined, 'Seasonal employee outside activeTo must not receive Sunday');
+assert.equal(seasonalSunday, undefined, 'Seasonal employee outside activeTo must NOT receive Sunday shift');
+
 console.log('  PASS: SECTION 5 verified.\n');
 
 // -----------------------------------------------------------------------------

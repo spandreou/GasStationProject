@@ -89,17 +89,44 @@ assert(!validateTicketFormat('short').valid, 'Short tickets must be rejected.');
 assert(!validateTicketFormat('../bad-ticket').valid, 'Unsafe ticket strings must be rejected.');
 assertEqual(hashAuthTicket('a'.repeat(64)).length, 64, 'Ticket hashes must be SHA-256 hex.');
 
-const validReturnTo = validateBrokerReturnTo({
+const validLegacyReturnTo = validateBrokerReturnTo({
   returnTo: 'https://bp-kallis.homelabshare.gr/app?week=2026-06-01',
   expectedTenantId: 'bp-kallis',
-  baseDomain: 'homelabshare.gr',
-  centralDomain: 'gas.homelabshare.gr',
+  callerOrigin: 'https://gas.homelabshare.gr',
   allowedTenantIds: ['bp-kallis'],
   production: true,
 });
-assert(validReturnTo.valid, 'Valid BP Kallis tenant returnTo must pass.');
-assertEqual(validReturnTo.tenantId, 'bp-kallis', 'returnTo must resolve bp-kallis tenant.');
-assertEqual(validReturnTo.allowedTenantOrigin, 'https://bp-kallis.homelabshare.gr', 'Tenant origin must be normalized.');
+assert(validLegacyReturnTo.valid, 'Valid BP Kallis legacy tenant returnTo must pass.');
+assertEqual(validLegacyReturnTo.tenantId, 'bp-kallis', 'Legacy returnTo must resolve bp-kallis tenant.');
+assertEqual(validLegacyReturnTo.allowedTenantOrigin, 'https://bp-kallis.homelabshare.gr', 'Legacy tenant origin must be normalized.');
+
+const validPrimaryReturnTo = validateBrokerReturnTo({
+  returnTo: 'https://bp-kallis.shiftoryx.gr/app?week=2026-06-01',
+  expectedTenantId: 'bp-kallis',
+  callerOrigin: 'https://shiftoryx.gr',
+  allowedTenantIds: ['bp-kallis'],
+  production: true,
+});
+assert(validPrimaryReturnTo.valid, 'Valid BP Kallis primary tenant returnTo must pass.');
+assertEqual(validPrimaryReturnTo.tenantId, 'bp-kallis', 'Primary returnTo must resolve bp-kallis tenant.');
+assertEqual(validPrimaryReturnTo.allowedTenantOrigin, 'https://bp-kallis.shiftoryx.gr', 'Primary tenant origin must be normalized.');
+
+// Cross-family redirection security checks
+const crossFamily1 = validateBrokerReturnTo({
+  returnTo: 'https://bp-kallis.homelabshare.gr/app',
+  expectedTenantId: 'bp-kallis',
+  callerOrigin: 'https://shiftoryx.gr',
+  production: true,
+});
+assert(!crossFamily1.valid && crossFamily1.reason === 'cross-family-redirect-not-allowed', 'Primary central to legacy tenant redirect must be rejected.');
+
+const crossFamily2 = validateBrokerReturnTo({
+  returnTo: 'https://bp-kallis.shiftoryx.gr/app',
+  expectedTenantId: 'bp-kallis',
+  callerOrigin: 'https://gas.homelabshare.gr',
+  production: true,
+});
+assert(!crossFamily2.valid && crossFamily2.reason === 'cross-family-redirect-not-allowed', 'Legacy central to primary tenant redirect must be rejected.');
 
 [
   'https://evil.com/app',
@@ -107,6 +134,10 @@ assertEqual(validReturnTo.allowedTenantOrigin, 'https://bp-kallis.homelabshare.g
   'data:text/html,hi',
   'https://user:pass@bp-kallis.homelabshare.gr/app',
   'https://gas.homelabshare.gr/login',
+  'https://shiftoryx.gr/login',
+  'https://www.shiftoryx.gr/login',
+  'https://admin.shiftoryx.gr/app',
+  'https://api.shiftoryx.gr/app',
   'https://unknown.homelabshare.gr/app',
   'https://bp-kallis.homelabshare.gr/../../admin',
 ].forEach((returnTo) => {
@@ -114,8 +145,6 @@ assertEqual(validReturnTo.allowedTenantOrigin, 'https://bp-kallis.homelabshare.g
     !validateBrokerReturnTo({
       returnTo,
       expectedTenantId: 'bp-kallis',
-      baseDomain: 'homelabshare.gr',
-      centralDomain: 'gas.homelabshare.gr',
       allowedTenantIds: ['bp-kallis'],
       production: true,
     }).valid,
@@ -123,18 +152,19 @@ assertEqual(validReturnTo.allowedTenantOrigin, 'https://bp-kallis.homelabshare.g
   );
 });
 
-assert(isAllowedBrokerOrigin('https://gas.homelabshare.gr', ['https://gas.homelabshare.gr']), 'Central origin must be allowlisted.');
-assert(!isAllowedBrokerOrigin('https://evil.com', ['https://gas.homelabshare.gr']), 'Unknown origins must be rejected.');
+assert(isAllowedBrokerOrigin('https://gas.homelabshare.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Legacy central origin must be allowlisted.');
+assert(isAllowedBrokerOrigin('https://shiftoryx.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Primary central origin must be allowlisted.');
+assert(!isAllowedBrokerOrigin('https://evil.com', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Unknown origins must be rejected.');
 assert(!isAllowedBrokerOrigin('', ['https://gas.homelabshare.gr']), 'Missing origins must be rejected.');
 
 const ticketDoc = buildAuthTicketDocument({
   uid: 'uid-123',
   tenantId: 'bp-kallis',
   role: 'OWNER',
-  returnTo: validReturnTo.url,
-  returnToHost: validReturnTo.returnToHost,
-  centralOrigin: 'https://gas.homelabshare.gr',
-  allowedTenantOrigin: validReturnTo.allowedTenantOrigin,
+  returnTo: validPrimaryReturnTo.url,
+  returnToHost: validPrimaryReturnTo.returnToHost,
+  centralOrigin: 'https://shiftoryx.gr',
+  allowedTenantOrigin: validPrimaryReturnTo.allowedTenantOrigin,
   requestId: 'request-1',
   nowMs: 1_000,
 });
@@ -144,8 +174,8 @@ assertEqual(ticketDoc.expiresAtMs, 61_000, 'Ticket expiration must be 60 seconds
 assert(!JSON.stringify(ticketDoc).includes('customToken'), 'Ticket documents must not contain custom tokens.');
 assert(!JSON.stringify(ticketDoc).includes('refreshToken'), 'Ticket documents must not contain refresh tokens.');
 
-const redirectUrl = buildTenantTicketRedirectUrl(validReturnTo.url, 'b'.repeat(64));
-assertStartsWith(redirectUrl, 'https://bp-kallis.homelabshare.gr/app?week=2026-06-01#authTicket=', 'Ticket must be sent in URL fragment.');
+const redirectUrl = buildTenantTicketRedirectUrl(validPrimaryReturnTo.url, 'b'.repeat(64));
+assertStartsWith(redirectUrl, 'https://bp-kallis.shiftoryx.gr/app?week=2026-06-01#authTicket=', 'Ticket must be sent in URL fragment.');
 assert(!redirectUrl.includes('?authTicket='), 'Ticket must not be sent in query params.');
 
 [

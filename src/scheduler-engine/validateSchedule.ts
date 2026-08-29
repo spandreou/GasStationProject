@@ -36,8 +36,8 @@ export function validateSchedule(params: {
 }): { valid: boolean; violations: ScheduleWarning[] } {
   const violations: ScheduleWarning[] = [];
   const enabledEmployees = params.employees.filter((employee) => employee.isEnabled !== false);
-  if (enabledEmployees.length < 4) {
-    violations.push(violation('INVALID_EMPLOYEE_COUNT', 'Το πρόγραμμα χρειάζεται τουλάχιστον 4 ενεργούς εργαζόμενους.'));
+  if (enabledEmployees.length < 4 || enabledEmployees.length > 6) {
+    violations.push(violation('INVALID_EMPLOYEE_COUNT', 'Το πρόγραμμα χρειάζεται 4 έως 6 ενεργούς εργαζόμενους.'));
   }
 
   for (const role of REQUIRED_BASE_ROLES) {

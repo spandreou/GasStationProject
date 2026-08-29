@@ -1,5 +1,5 @@
-import { REQUIRED_BASE_ROLES } from './constants.ts';
-import type { EmployeeScheduleConfig, ResolvedScheduleRoles, ScheduleWarning } from './types.ts';
+import { EXTRA_ROLES, REQUIRED_BASE_ROLES } from './constants.ts';
+import type { EmployeeScheduleConfig, ResolvedScheduleRoles, ScheduleRole, ScheduleWarning } from './types.ts';
 
 function warning(id: string, code: string, message: string): ScheduleWarning {
   return { id, severity: 'error', code, message };
@@ -10,7 +10,7 @@ export function resolveScheduleRoles(employees: EmployeeScheduleConfig[]): Resol
     (employee) => employee.isEnabled !== false && employee.participatesInWeeklyRotation !== false,
   );
   const warnings: ScheduleWarning[] = [];
-  const roles: Record<string, EmployeeScheduleConfig> = {};
+  const roles: Partial<Record<ScheduleRole, EmployeeScheduleConfig>> = {};
   const baseEmployees: EmployeeScheduleConfig[] = [];
   const extras: EmployeeScheduleConfig[] = [];
 
@@ -40,10 +40,16 @@ export function resolveScheduleRoles(employees: EmployeeScheduleConfig[]): Resol
     }
   }
 
+  for (const role of EXTRA_ROLES) {
+    const match = enabledEmployees.find((employee) => employee.scheduleRole === role);
+    if (match) {
+      roles[role] = match;
+    }
+  }
+
   for (const employee of enabledEmployees) {
     if (!baseEmployees.some((b) => b.employeeId === employee.employeeId)) {
       extras.push(employee);
-      roles[employee.scheduleRole || `EXTRA_${employee.employeeId}`] = employee;
     }
   }
 
@@ -56,10 +62,6 @@ export function resolveScheduleRoles(employees: EmployeeScheduleConfig[]): Resol
       !baseEmployees.some((b) => b.employeeId === employee.employeeId)
     ) {
       extras.push(employee);
-      const roleKey = REQUIRED_BASE_ROLES.includes(employee.scheduleRole)
-        ? `EXTRA_${employee.employeeId}`
-        : employee.scheduleRole || `EXTRA_${employee.employeeId}`;
-      roles[roleKey] = employee;
     }
   }
 

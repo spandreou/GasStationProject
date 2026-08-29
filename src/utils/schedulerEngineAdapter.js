@@ -102,13 +102,14 @@ function resolveEngineRoleMap(employees) {
   assignSlot('FLEX_A', () => true);
   assignSlot('FLEX_B', () => true);
 
-  // 4. Assign dynamic EXTRA roles for ALL remaining employees
-  let extraIndex = 1;
+  // 4. Assign EXTRA_A and EXTRA_B for remaining extra employees
+  assignSlot('EXTRA_A', () => true);
+  assignSlot('EXTRA_B', () => true);
+
+  // Bounded fallback for any additional employee beyond 6
   sorted.forEach((employee) => {
     if (!roleById.has(employee.id)) {
-      const extraLetter = extraIndex <= 26 ? String.fromCharCode(64 + extraIndex) : `${extraIndex}`;
-      roleById.set(employee.id, `EXTRA_${extraLetter}`);
-      extraIndex++;
+      roleById.set(employee.id, 'EXTRA_B');
     }
   });
 

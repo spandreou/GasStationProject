@@ -284,20 +284,31 @@ export function validateExportScheduleState({ days = [], employees = [], shifts 
     shiftMap.get(key).push(shift);
   });
   const absenceMap = buildAbsenceMap(absences);
+  const totalDays = (days || []).length;
 
-  const unassignedEmployees = activeParticipating.filter((employee) => {
-    const hasWork = (days || []).some((d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0);
-    const hasAbsence = (days || []).some((d) => Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)));
-    return !hasWork && !hasAbsence;
+  const invalidEmployees = activeParticipating.filter((employee) => {
+    const workDaysCount = (days || []).filter(
+      (d) => getEmployeeDayWorkShifts(shiftMap, d, employee.id).length > 0,
+    ).length;
+    if (workDaysCount > 0) return false;
+
+    const absenceDaysCount = (days || []).filter(
+      (d) => Boolean(getActiveAbsenceForDay(absenceMap, d, employee.id)),
+    ).length;
+
+    // If 0 work shifts, the absence must cover the full target period to be considered a complete valid schedule
+    if (absenceDaysCount >= totalDays && totalDays > 0) return false;
+
+    return true;
   });
 
   return {
-    valid: unassignedEmployees.length === 0,
-    unassignedEmployees,
-    unassignedCount: unassignedEmployees.length,
+    valid: invalidEmployees.length === 0,
+    unassignedEmployees: invalidEmployees,
+    unassignedCount: invalidEmployees.length,
     warning:
-      unassignedEmployees.length > 0
-        ? `Προσοχή: ${unassignedEmployees.length} ενεργοί εργαζόμενοι δεν έχουν καταγεγραμμένη βάρδια ή άδεια στην περίοδο.`
+      invalidEmployees.length > 0
+        ? 'Το πρόγραμμα δεν περιέχει έγκυρες βάρδιες για όλους τους ενεργούς εργαζομένους. Έλεγξε το πρόγραμμα πριν την εξαγωγή.'
         : '',
   };
 }
@@ -511,6 +522,16 @@ export async function exportScheduleToPdf({
   }
   if (!employees.length) {
     throw new Error('\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C5\u03C0\u03AC\u03BB\u03BB\u03B7\u03BB\u03BF\u03B9 \u03B3\u03B9\u03B1 \u03B5\u03BE\u03B1\u03B3\u03C9\u03B3\u03AE PDF.');
+  }
+
+  const exportValidation = validateExportScheduleState({
+    days: targetDays,
+    employees,
+    shifts,
+    absences,
+  });
+  if (!exportValidation.valid) {
+    throw new Error('Το πρόγραμμα δεν περιέχει έγκυρες βάρδιες για όλους τους ενεργούς εργαζομένους. Έλεγξε το πρόγραμμα πριν την εξαγωγή.');
   }
 
   const rows = buildGroupedScheduleRows({ days: targetDays, employees, shifts, absences });

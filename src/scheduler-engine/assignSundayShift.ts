@@ -15,9 +15,7 @@ const SUNDAY_ROLE_ORDER: Record<string, number> = {
 };
 
 function sundayRotationRank(employee: EmployeeScheduleConfig): number {
-  if (employee.scheduleRole in SUNDAY_ROLE_ORDER) return SUNDAY_ROLE_ORDER[employee.scheduleRole];
-  if (employee.scheduleRole.startsWith('EXTRA')) return 6;
-  return 99;
+  return SUNDAY_ROLE_ORDER[employee.scheduleRole] ?? 99;
 }
 
 function sundayOrdinal(date: string): number {

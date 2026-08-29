@@ -48,3 +48,10 @@ export function getWeekIndex(rangeStartDate: string, date: string): number {
   const currentMonday = parseIsoDate(getMondayStart(date)).getTime();
   return Math.floor((currentMonday - firstMonday) / (MS_PER_DAY * 7));
 }
+
+export function timeToMinutes(timeStr: string): number {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10) || 0);
+  return h * 60 + m;
+}
+

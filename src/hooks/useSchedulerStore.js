@@ -1419,7 +1419,7 @@ export const useSchedulerStore = create((set, get) => ({
         email: email?.trim() || '',
         hireDate: hireDate || '',
         isActive: true,
-        scheduleRole: 'custom',
+        scheduleRole: 'auto',
         fixedDayOff: null,
         participatesInRotation: true,
         participatesInSundayRotation: true,
@@ -2551,13 +2551,24 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const generationRunId = createGenerationRunId('week_generation');
-      const { shifts: generatedShifts, warnings } = await generateEngineWeekSchedule({
+      const { shifts: generatedShifts, warnings, validation } = await generateEngineWeekSchedule({
         weekDays,
         employees: get().employees,
         allShifts: get().shifts,
         absences: getAbsencesForRange(get().absences, weekDays[0], weekDays[weekDays.length - 1]),
         rules: weeklyRules,
       });
+
+      if (validation && validation.valid === false) {
+        const errorMessages = validation.violations?.map((v) => v.message).filter(Boolean) || [];
+        set({
+          warningMessage: errorMessages.length
+            ? errorMessages.join(' | ')
+            : 'Αποτυχία επικύρωσης προγράμματος. Δεν αποθηκεύτηκαν βάρδιες.',
+          isSaving: false,
+        });
+        return false;
+      }
 
       const manualKey = new Set(manualWeekShifts.map((shift) => `${shift.employeeId}_${shift.date}`));
       const safeGeneratedShifts = generatedShifts.filter((shift) => {
@@ -2663,7 +2674,7 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const generationRunId = createGenerationRunId('month_generation');
-      const { shifts: generatedShifts, warnings, meta } = generateEngineMonthSchedule({
+      const { shifts: generatedShifts, warnings, validation, meta } = generateEngineMonthSchedule({
         month,
         year,
         employees: get().employees,
@@ -2677,6 +2688,17 @@ export const useSchedulerStore = create((set, get) => ({
         rules: mergedRules,
         roleConfig,
       });
+
+      if (validation && validation.valid === false) {
+        const errorMessages = validation.violations?.map((v) => v.message).filter(Boolean) || [];
+        set({
+          warningMessage: errorMessages.length
+            ? errorMessages.join(' | ')
+            : 'Αποτυχία επικύρωσης προγράμματος μήνα. Δεν αποθηκεύτηκαν βάρδιες.',
+          isSaving: false,
+        });
+        return false;
+      }
 
       const shiftsToCreate = generatedShifts.map((shift) => ({ ...shift, generationRunId }));
       await replaceShiftsBatch({

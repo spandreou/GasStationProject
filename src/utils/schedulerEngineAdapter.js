@@ -473,8 +473,11 @@ export async function generateEngineWeekSchedule({
   return {
     shifts: filterAgainstManualEntries(engineResult.shifts.map(toAppShift), allShifts),
     warnings: collectWarnings(engineResult),
+    validation: engineResult.validation,
+    unresolvedGaps: engineResult.unresolvedGaps,
     meta: {
       engine: 'scheduler-engine',
+      valid: engineResult.validation?.valid !== false,
       resolvedRoles: engineResult.debug.resolvedRoles,
       dayPlans: engineResult.debug.dayPlans,
     },

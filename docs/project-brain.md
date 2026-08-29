@@ -86,14 +86,14 @@ References:
 
 ## Approved Phase Order
 
-0. Documentation alignment.
-1. Current-state audit.
-2A. Read-only role inventory, migration design and emulator rehearsal.
-2B. Separately approved controlled OWNER migration.
-3. Registration token backend.
-4. Automated tenant provisioning.
-5. Root portal και store selector.
-6. Wildcard ShiftOryx domains.
+0. Documentation alignment. (CLOSED)
+1. Current-state audit. (CLOSED)
+2A. Read-only role inventory, migration design and emulator rehearsal. (CLOSED)
+2B. Separately approved controlled OWNER migration. (CLOSED)
+3. Registration token backend. (CLOSED)
+4. Automated tenant provisioning. (CLOSED)
+5. Root portal και store selector. (CLOSED)
+6. Wildcard ShiftOryx domains. (CURRENT ACTIVE - PREFLIGHT)
 7. Trial/subscription entitlements.
 8. Multi-store lifecycle.
 9. ShiftOryx admin panel.
@@ -101,12 +101,12 @@ References:
 11. Subdomain aliases.
 12. Customization requests.
 13. Production EU VPS.
-14. HomeOps read-only integration.
+14. HomeOps read-only integration. (CANCELLED)
 15. Billing provider.
 
 Μία phase κάθε φορά. Πριν από αλλαγές: branch/status, current-state inspection και backup. Καμία production αλλαγή χωρίς explicit approval. Κάθε phase κλείνει με tests, security/dependency review, risks και rollback, και σταματά πριν την επόμενη phase.
 
-Phase 0 and Phase 1 are complete. After the 22 July 2026 documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task. Phase 2A requires separate human approval and remains read-only; Phase 2B requires another explicit approval.
+Phase 0, 1, 2A, 2B, 3, 4, και 5 είναι πλήρως ολοκληρωμένες και verified. Η Phase 6 είναι η τρέχουσα ενεργή φάση σε επίπεδο Preflight / Readiness Design. Καμία αλλαγή production (DNS, Vercel domains, Firebase Authorized Domains, Cloud Functions deploy) δεν εκτελείται χωρίς ρητή έγκριση.
 
 ## Product Proposals, Not Current Enforcement
 

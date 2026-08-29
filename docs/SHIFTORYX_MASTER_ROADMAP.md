@@ -657,68 +657,57 @@ Production Closure Summary:
   - Cloud Functions deployed: `createAuthTicket`, `exchangeAuthTicket` (Node 22 Gen 2). `cleanupAuthTickets` preserved intact.
 - **Phase 2 Status**: **CLOSED**. Next Phase: **Phase 3** (`PHASE_3_STARTED=NO`).
 
-### Phase 3 — Registration Token Backend
+### Phase 3 — Registration Token Backend (CLOSED)
 
-Goal: secure token lifecycle.
+Status: **CLOSED**
 
-Implement in Cloud Functions:
+Production Closure Summary:
+- Deployed to `gasstationproject-9dd89` on 2026-08-28.
+- 256-bit entropy cryptographic tokens (`stx_...`), opaque management IDs (`rtok_...`), SHA-256 lookup hashes in `registrationTokenLookups`, zero plaintext token persistence.
+- Cloud Functions: `generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`, `validateRegistrationToken`.
+- Firestore Rules: `rulesets/51bf31c1-87a3-47f8-964a-aea3c7e41bf0` deny-all direct client access to `registrationTokens`, `registrationTokenLookups`, `platformAuditLogs`, and `rateLimits`.
+- Fail-closed canonical `expiresAt` validation and bounded rate limiting.
 
-- `generateRegistrationToken` admin-only,
-- list safe token metadata,
-- `revokeRegistrationToken`,
-- validate token with generic response,
-- atomic consume during registration,
-- rate limiting and audit.
+### Phase 4 — Automated Tenant Provisioning (CLOSED)
 
-Tests: valid, expired, revoked, reused, concurrent consumption, unauthorized generation.
+Status: **CLOSED**
 
-### Phase 4 — Automated Tenant Provisioning
+Production Closure Summary:
+- Deployed to `gasstationproject-9dd89` on 2026-08-28.
+- Cloud Function: `provisionTenantFromRegistrationToken` (Node.js 22 Gen 2 in `us-central1`).
+- Atomic single-transaction provisioning across `slugReservations`, `tenants`, `tenantMemberships` (`role: 'OWNER'`, zero PII email), `users/{uid}` mirror, scheduler settings, 7-day trial subscription (`trialEndsAt`), token consumption (`status: 'CONSUMED'`), and `platformAuditLogs`.
+- Strict 3–40 character slug validation, platform admin overlap denial, existing membership fail-closed check, safe `OTHER` category fallback, `domain: null` pending Phase 6 cutover. Total production Cloud Functions: 8.
 
-Goal: register → usable workspace χωρίς manual infrastructure.
+### Phase 5 — Root Portal And Store Selector (CLOSED)
 
-Atomic workflow:
+Status: **CLOSED**
 
-- validate token,
-- create/verify Firebase user,
-- reserve slug,
-- create tenant,
-- create OWNER membership,
-- assign the approved default `businessCategory`, `templateId`, `templateVersion`, validated empty/default `brandingOverrides` and `customizationMode` from provisioning configuration,
-- create defaults,
-- create trial subscription,
-- consume token,
-- audit.
-
-Αποτυχία σε οποιοδήποτε βήμα δεν αφήνει orphan tenant, membership ή reserved slug.
-
-### Phase 5 — Root Portal And Store Selector
-
-Routes:
-
-- `/login`,
-- `/register`,
-- `/forgot-password`,
-- `/reset-password`,
-- `/stores`,
-- `/admin`.
-
-Owner login loads memberships and shows stores. Tenant redirects use the auth broker. No open redirect.
+Production Closure Summary:
+- Merged to `main` at `c2ad046f3966e6ac81b623e679545afaa6dcdd6d` and verified live on Vercel Production.
+- Routes: `/`, `/login`, `/register`, `/stores`, `/select-tenant`, `/admin`.
+- Progressive 5-step registration flow, transient memory tokens, zero password/PII leaks, direct `createUserAccount`.
+- Central login identity routing via pure `determinePostLoginDestination` with fail-safe platform admin lookup.
+- Open redirect prevention via `resolveAuthorizedReturnTo` tenant membership verification.
+- Functions discovery guard verified at 658ms (< 3000ms threshold).
 
 ### Phase 6 — Wildcard ShiftOryx Domains
 
-Only after domain purchase. Domain ownership is now `PURCHASED`, but configuration and cutover remain unapproved.
+Status: **CURRENT ACTIVE PHASE (PREFLIGHT / READINESS MODE)**
+
+Domain ownership is confirmed (`shiftoryx.gr` is `PURCHASED`).
+Phase 6 Preflight audit complete: DNS, Vercel wildcard domain, Firebase Authorized Domains, Auth Broker, frontend configuration, and rollback safety designed.
+Live production cutover requires explicit human approval.
 
 Tasks:
 
-- Cloudflare zone,
+- Cloudflare / Vercel DNS zone configuration (A record `76.76.21.21`, CNAME `www` and `*` to `cname.vercel-dns.com`),
 - root/www records,
-- wildcard record,
-- tunnel/reverse proxy route,
-- Firebase authorized domains,
+- wildcard record (`*.shiftoryx.gr`),
+- Firebase Authorized Domains (`shiftoryx.gr`),
 - CSP/connect-src/frame rules,
 - tenant resolver,
 - unknown/suspended/expired states,
-- dual-domain BP Kallis rollout.
+- dual-domain BP Kallis rollout (keeping `bp-kallis.homelabshare.gr` active during overlap).
 
 Rollback keeps homelabshare URL active.
 
@@ -810,12 +799,11 @@ Every write is server-side, admin-authorized, confirmed and audited.
 - controlled cutover,
 - rollback to homelab.
 
-### Phase 14 — HomeOps Read-Only Integration
+### Phase 14 — HomeOps Read-Only Integration (CANCELLED)
 
-- sanitized health endpoint,
-- signed/internal access,
-- traffic and system metrics,
-- no business/private payloads.
+Status: **CANCELLED**
+
+HomeOps read-only integration is officially cancelled. Codebase audit confirms zero HomeOps endpoints, telemetry collectors, background daemons, or dependencies exist in the repository.
 
 ### Phase 15 — Billing Provider
 
@@ -917,10 +905,7 @@ The MVP is ready only when:
 
 ## 20. Next Action
 
-Phase 0 and Phase 1 are complete.
-
-After this documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task.
-
-Phase 2A follows only after separate human approval and remains read-only for production. Phase 2B production migration remains separately approved.
-
-This next-action sequence does not claim that templates, branding, customization, dependency remediation or either Phase 2 stage is already implemented. It does not authorize runtime implementation, DNS changes, Firebase rules deployment or production deployment.
+Phase 0, 1, 2A, 2B, 3, 4, and 5 are fully complete, verified, and closed.
+Phase 6 (Wildcard ShiftOryx Domains & Production Cutover) is the current active phase in **Preflight / Readiness Mode**.
+The comprehensive preflight discovery, DNS analysis, Vercel wildcard domain design, Firebase Auth analysis, and rollback plan have been established.
+Production domain cutover requires explicit human approval before any DNS, Vercel domain, or Firebase Authorized Domains configuration is executed.

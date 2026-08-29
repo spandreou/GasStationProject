@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_BUSINESS_CATEGORY,
   DEFAULT_CUSTOMIZATION_MODE,
+  PROVISIONING_ERROR_REASONS,
+  ProvisioningValidationError,
   RESERVED_SLUGS,
+  SLUG_MAX_LENGTH,
+  SLUG_MIN_LENGTH,
+  TRIAL_DURATION_DAYS,
   VALID_BUSINESS_CATEGORIES,
   resolveBusinessCategory,
   validateDisplayName,
@@ -12,7 +17,10 @@ import {
 
 console.log('--- RUNNING PHASE 4 TENANT PROVISIONING CORE VALIDATION SUITE ---');
 
-// 1. Slug Validation Tests
+// 1. Slug Validation Tests & Exact Boundary Checks (3-40)
+assert.equal(SLUG_MIN_LENGTH, 3);
+assert.equal(SLUG_MAX_LENGTH, 40);
+
 const validSlugs = ['eko-station', 'bp-kallis-2', 'my-cafe', 'salon-123', 'retail-store'];
 for (const slug of validSlugs) {
   assert.equal(validateTenantSlug(slug), slug, `Slug "${slug}" should be valid`);
@@ -21,46 +29,69 @@ for (const slug of validSlugs) {
 // Uppercase normalized to lowercase
 assert.equal(validateTenantSlug('EKO-Station-1'), 'eko-station-1');
 
-// Invalid length
-assert.throws(() => validateTenantSlug('ab'), /slug length must be between 3 and 64 characters/);
-assert.throws(() => validateTenantSlug('a'.repeat(65)), /slug length must be between 3 and 64 characters/);
+// Exact Length Boundary Tests
+// Length 2 -> Fail
+assert.throws(
+  () => validateTenantSlug('ab'),
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+);
+// Length 3 -> Pass
+const slug3 = 'abc';
+assert.equal(validateTenantSlug(slug3), 'abc', '3-character slug must be valid');
+// Length 40 -> Pass
+const slug40 = 'a' + 'b'.repeat(38) + 'c';
+assert.equal(slug40.length, 40);
+assert.equal(validateTenantSlug(slug40), slug40, '40-character slug must be valid');
+// Length 41 -> Fail
+const slug41 = 'a' + 'b'.repeat(39) + 'c';
+assert.equal(slug41.length, 41);
+assert.throws(
+  () => validateTenantSlug(slug41),
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+);
+// Length 64 -> Fail
+assert.throws(
+  () => validateTenantSlug('a'.repeat(64)),
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
+);
 
 // Invalid characters
-assert.throws(() => validateTenantSlug('-start-hyphen'), /cannot start or end with a hyphen/);
-assert.throws(() => validateTenantSlug('end-hyphen-'), /cannot start or end with a hyphen/);
-assert.throws(() => validateTenantSlug('has_underscore'), /lowercase alphanumeric characters and hyphens/);
-assert.throws(() => validateTenantSlug('has space'), /lowercase alphanumeric characters and hyphens/);
-assert.throws(() => validateTenantSlug('has!special'), /lowercase alphanumeric characters and hyphens/);
+assert.throws(() => validateTenantSlug('-start-hyphen'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('end-hyphen-'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('has_underscore'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('has space'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('has!special'), (err) => err instanceof ProvisioningValidationError);
 
 // Reserved slugs
 for (const reserved of RESERVED_SLUGS) {
-  assert.throws(() => validateTenantSlug(reserved), /reserved for platform services/);
+  assert.throws(() => validateTenantSlug(reserved), (err) => err instanceof ProvisioningValidationError);
 }
 
 // Prohibited prefixes & suffixes
-assert.throws(() => validateTenantSlug('gas-station'), /cannot start with "gas-"/);
-assert.throws(() => validateTenantSlug('station-gas'), /cannot start with "gas-" or end with "-gas"/);
-assert.throws(() => validateTenantSlug('shiftoryx-tenant'), /cannot start with "shiftoryx-"/);
-assert.throws(() => validateTenantSlug('tenant-shiftoryx'), /cannot start with "shiftoryx-" or end with "-shiftoryx"/);
+assert.throws(() => validateTenantSlug('gas-station'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('station-gas'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('shiftoryx-tenant'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateTenantSlug('tenant-shiftoryx'), (err) => err instanceof ProvisioningValidationError);
 
-console.log('Slug validation tests passed.');
+console.log('Slug validation and exact boundary tests passed (3-40 chars).');
 
 // 2. Display Name Validation Tests
 assert.equal(validateDisplayName('  EKO Station Kallis  '), 'EKO Station Kallis');
 assert.equal(validateDisplayName('Café & Bistro 100%'), 'Café & Bistro 100%');
 assert.equal(validateDisplayName('Πρατήριο Καυσίμων'), 'Πρατήριο Καυσίμων');
 
-assert.throws(() => validateDisplayName(''), /displayName length must be between 1 and 100 characters/);
-assert.throws(() => validateDisplayName('   '), /displayName length must be between 1 and 100 characters/);
-assert.throws(() => validateDisplayName('x'.repeat(101)), /displayName length must be between 1 and 100 characters/);
-assert.throws(() => validateDisplayName('Bad\x00Name'), /cannot contain control characters/);
-assert.throws(() => validateDisplayName('Bad\nName'), /cannot contain control characters/);
+assert.throws(() => validateDisplayName(''), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateDisplayName('   '), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateDisplayName('x'.repeat(101)), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateDisplayName('Bad\x00Name'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => validateDisplayName('Bad\nName'), (err) => err instanceof ProvisioningValidationError);
 
 console.log('Display name validation tests passed.');
 
-// 3. Business Category Precedence & Resolution Tests
+// 3. Business Category Precedence & Trial Constants
 assert.equal(DEFAULT_BUSINESS_CATEGORY, 'OTHER');
 assert.equal(DEFAULT_CUSTOMIZATION_MODE, 'STANDARD');
+assert.equal(TRIAL_DURATION_DAYS, 7, 'Trial duration must be exactly 7 days');
 
 // Explicit valid categories
 for (const cat of VALID_BUSINESS_CATEGORIES) {
@@ -81,12 +112,26 @@ assert.equal(resolveBusinessCategory(undefined, undefined), 'OTHER');
 assert.equal(resolveBusinessCategory(undefined, 'INVALID_HINT'), 'OTHER');
 
 // Explicit invalid category throws
-assert.throws(() => resolveBusinessCategory('INVALID_CATEGORY'), /businessCategory must be one of:/);
-assert.throws(() => resolveBusinessCategory(123), /businessCategory must be a string/);
+assert.throws(() => resolveBusinessCategory('INVALID_CATEGORY'), (err) => err instanceof ProvisioningValidationError);
+assert.throws(() => resolveBusinessCategory(123), (err) => err instanceof ProvisioningValidationError);
 
-console.log('Business category precedence tests passed.');
+console.log('Business category precedence and 7-day trial constant tests passed.');
 
-// 4. Provisioning Input Validation (Strict Unknown & Forbidden Rejection)
+// 4. Structured Error Reasons Vocabulary
+assert.equal(PROVISIONING_ERROR_REASONS.PLATFORM_ADMIN_OVERLAP, 'platform-admin-overlap');
+assert.equal(PROVISIONING_ERROR_REASONS.EXISTING_MEMBERSHIP, 'existing-membership');
+assert.equal(PROVISIONING_ERROR_REASONS.TENANT_SLUG_TAKEN, 'tenant-slug-taken');
+assert.equal(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_EXPIRED, 'registration-token-expired');
+assert.equal(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_REVOKED, 'registration-token-revoked');
+assert.equal(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_CONSUMED, 'registration-token-consumed');
+assert.equal(PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID, 'registration-token-invalid');
+assert.equal(PROVISIONING_ERROR_REASONS.PROVISIONING_INTERNAL, 'provisioning-internal');
+assert.equal(PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT, 'invalid-argument');
+assert.equal(PROVISIONING_ERROR_REASONS.UNAUTHENTICATED, 'unauthenticated');
+
+console.log('Structured error reasons vocabulary tests passed.');
+
+// 5. Provisioning Input Validation (Strict Unknown & Forbidden Rejection)
 const validToken = 'stx_abcdef1234567890abcdef1234567890abcdef12345';
 const validPayload = {
   token: validToken,
@@ -125,7 +170,7 @@ const forbiddenFields = [
 for (const forbidden of forbiddenFields) {
   assert.throws(
     () => validateProvisioningInput({ ...validPayload, ...forbidden }),
-    /Forbidden field detected:/,
+    (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
     `Forbidden field "${Object.keys(forbidden)[0]}" must be rejected`,
   );
 }
@@ -133,17 +178,17 @@ for (const forbidden of forbiddenFields) {
 // Unknown field rejection
 assert.throws(
   () => validateProvisioningInput({ ...validPayload, unexpectedExtraField: 'value' }),
-  /Unknown field detected: "unexpectedExtraField"/,
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.INVALID_ARGUMENT,
 );
 
 // Malformed token format
 assert.throws(
   () => validateProvisioningInput({ ...validPayload, token: 'invalid_token_no_prefix' }),
-  /Invalid registration token format/,
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID,
 );
 assert.throws(
   () => validateProvisioningInput({ ...validPayload, token: 'stx_short' }),
-  /Invalid registration token format/,
+  (err) => err instanceof ProvisioningValidationError && err.reason === PROVISIONING_ERROR_REASONS.REGISTRATION_TOKEN_INVALID,
 );
 
 console.log('Input tampering and security validation tests passed.');

@@ -256,20 +256,28 @@ export function buildProvisioningPayload(input = {}) {
   };
 }
 
-export function determinePostLoginDestination({ isPlatformAdmin, returnTo, destination }) {
+export function determinePostLoginDestination({ isPlatformAdmin, authorizedReturnTo, centralDestination }) {
   if (isPlatformAdmin) {
     return { type: 'admin', url: '/admin' };
   }
 
-  if (returnTo) {
-    return { type: 'returnTo', url: returnTo };
+  if (authorizedReturnTo && authorizedReturnTo.allowed && authorizedReturnTo.url) {
+    return {
+      type: 'authorizedReturnTo',
+      url: authorizedReturnTo.url,
+      tenantId: authorizedReturnTo.access?.tenant?.id,
+    };
   }
 
-  if (destination && destination.type === 'redirect' && destination.url) {
-    return { type: 'tenant', url: destination.url };
+  if (centralDestination && centralDestination.type === 'redirect' && centralDestination.url) {
+    return {
+      type: 'tenant',
+      url: centralDestination.url,
+      tenantId: centralDestination.tenant?.id,
+    };
   }
 
-  if (destination && destination.type === 'select') {
+  if (centralDestination && centralDestination.type === 'select') {
     return { type: 'select', url: '/select-tenant' };
   }
 

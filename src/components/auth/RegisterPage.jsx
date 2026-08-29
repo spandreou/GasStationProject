@@ -123,7 +123,7 @@ export default function RegisterPage() {
     setStatus('loading');
     try {
       if (authMode === 'signup') {
-        const user = await authRepository.createUserAccount?.({ email: normEmail, password });
+        const user = await authRepository.createUserAccount({ email: normEmail, password });
         setCurrentUser(user);
       } else {
         const user = await authRepository.signInAdmin({ email: normEmail, password });
@@ -412,24 +412,20 @@ export default function RegisterPage() {
 
           <div>
             <label htmlFor="slug-input" className="block text-xs font-medium text-slate-300">
-              Αναγνωριστικό URL (Slug) <span className="text-cyan-400">*</span>
+              Αναγνωριστικό Καταστήματος (Slug) <span className="text-cyan-400">*</span>
             </label>
-            <div className="mt-1.5 flex rounded-xl border border-slate-700 bg-slate-900/90 focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500">
-              <span className="flex items-center pl-3.5 text-xs text-slate-500 font-mono">https://</span>
-              <input
-                id="slug-input"
-                type="text"
-                required
-                maxLength={SLUG_MAX_LENGTH}
-                value={slug}
-                onChange={(e) => setSlug(e.target.value.toLowerCase().trim())}
-                placeholder="bp-kallis"
-                className="w-full bg-transparent px-2 py-2.5 font-mono text-sm text-cyan-300 placeholder-slate-600 focus:outline-none"
-              />
-              <span className="flex items-center pr-3.5 text-xs text-slate-500 font-mono">.shiftoryx.gr</span>
-            </div>
+            <input
+              id="slug-input"
+              type="text"
+              required
+              maxLength={SLUG_MAX_LENGTH}
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase().trim())}
+              placeholder="π.χ. bp-kallis ή my-cafe"
+              className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2.5 font-mono text-sm text-cyan-300 placeholder-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
             <p className="mt-1 text-[11px] text-slate-400">
-              Πεζά λατινικά, αριθμοί και παύλες ({SLUG_MIN_LENGTH}-{SLUG_MAX_LENGTH} χαρακτήρες, π.χ. bp-kallis, my-cafe).
+              Το slug χρησιμοποιείται ως μοναδικό αναγνωριστικό του καταστήματος ({SLUG_MIN_LENGTH}-{SLUG_MAX_LENGTH} πεζοί λατινικοί χαρακτήρες, αριθμοί, παύλες). Η τελική διεύθυνση domain ενεργοποιείται ξεχωριστά.
             </p>
           </div>
 
@@ -476,7 +472,7 @@ export default function RegisterPage() {
           <div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-cyan-500/20 border-t-cyan-400" />
           <h2 className="text-base font-bold text-slate-100">Αρχικοποίηση Καταστήματος...</h2>
           <p className="text-xs text-slate-400 max-w-xs mx-auto">
-            Δεσμεύουμε το slug, ρυθμίζουμε τα δικαιώματα διαχειριστή (OWNER) και δημιουργούμε το πρόγραμμα βαρδιών σας.
+            Δεσμεύουμε το slug, ρυθμίζουμε την πρόσβαση OWNER και αρχικοποιούμε τις βασικές ρυθμίσεις του καταστήματος.
           </p>
         </div>
       )}

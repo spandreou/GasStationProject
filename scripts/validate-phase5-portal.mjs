@@ -208,28 +208,66 @@ console.log('6. Testing routing decisions and store selector state helpers...');
 
 // Platform Admin routing
 assert.deepEqual(
-  determinePostLoginDestination({ isPlatformAdmin: true, destination: { type: 'stores', url: '/stores' } }),
+  determinePostLoginDestination({
+    isPlatformAdmin: true,
+    authorizedReturnTo: null,
+    centralDestination: { type: 'stores', url: '/stores' },
+  }),
   { type: 'admin', url: '/admin' },
   'Platform Admin must route to /admin',
 );
 
-// returnTo routing
+// Authorized returnTo routing
 assert.deepEqual(
-  determinePostLoginDestination({ isPlatformAdmin: false, returnTo: 'https://tenant-a.homelabshare.gr/app' }),
-  { type: 'returnTo', url: 'https://tenant-a.homelabshare.gr/app' },
+  determinePostLoginDestination({
+    isPlatformAdmin: false,
+    authorizedReturnTo: { allowed: true, url: 'https://bp-kallis.homelabshare.gr/app', access: { tenant: { id: 'bp-kallis' } } },
+    centralDestination: { type: 'stores', url: '/stores' },
+  }),
+  { type: 'authorizedReturnTo', url: 'https://bp-kallis.homelabshare.gr/app', tenantId: 'bp-kallis' },
   'Authorized returnTo must be respected',
 );
 
-// Destination routing
+// Unauthorized returnTo fallback to destination
 assert.deepEqual(
-  determinePostLoginDestination({ isPlatformAdmin: false, destination: { type: 'redirect', url: 'https://tenant-a.homelabshare.gr' } }),
-  { type: 'tenant', url: 'https://tenant-a.homelabshare.gr' },
+  determinePostLoginDestination({
+    isPlatformAdmin: false,
+    authorizedReturnTo: { allowed: false, url: null },
+    centralDestination: { type: 'redirect', url: 'https://bp-kallis.homelabshare.gr', tenant: { id: 'bp-kallis' } },
+  }),
+  { type: 'tenant', url: 'https://bp-kallis.homelabshare.gr', tenantId: 'bp-kallis' },
+  'Unauthorized returnTo must fall back to single tenant destination',
+);
+
+// Single tenant destination routing
+assert.deepEqual(
+  determinePostLoginDestination({
+    isPlatformAdmin: false,
+    authorizedReturnTo: null,
+    centralDestination: { type: 'redirect', url: 'https://bp-kallis.homelabshare.gr', tenant: { id: 'bp-kallis' } },
+  }),
+  { type: 'tenant', url: 'https://bp-kallis.homelabshare.gr', tenantId: 'bp-kallis' },
   'Tenant redirect destination must be respected',
 );
 
-// Fallback to /stores
+// Multi-tenant selection routing
 assert.deepEqual(
-  determinePostLoginDestination({ isPlatformAdmin: false, destination: null }),
+  determinePostLoginDestination({
+    isPlatformAdmin: false,
+    authorizedReturnTo: null,
+    centralDestination: { type: 'select', tenants: [{ tenantId: 't1' }, { tenantId: 't2' }] },
+  }),
+  { type: 'select', url: '/select-tenant' },
+  'Multi-tenant select destination must route to /select-tenant',
+);
+
+// Fallback to /stores (zero memberships)
+assert.deepEqual(
+  determinePostLoginDestination({
+    isPlatformAdmin: false,
+    authorizedReturnTo: null,
+    centralDestination: null,
+  }),
   { type: 'stores', url: '/stores' },
   'Fallback destination must be /stores',
 );
@@ -242,13 +280,18 @@ assert.equal(resolveStoreSelectorState({ user: { uid: 'u1' }, tenants: [{ tenant
 console.log('✓ Routing decision and store selector state helpers passed.');
 
 // ============================================================================
-// 7. REAL PLATFORM ADMIN REPOSITORY CONTRACT
+// 7. REAL PLATFORM ADMIN & AUTH REPOSITORY CONTRACT
 // ============================================================================
-console.log('7. Testing real platform admin repository method contract...');
+console.log('7. Testing real platform admin & auth repository method contracts...');
 assert.equal(
   typeof firebaseAuthRepository.isPlatformAdmin,
   'function',
   'firebaseAuthRepository.isPlatformAdmin must be a defined function',
+);
+assert.equal(
+  typeof firebaseAuthRepository.createUserAccount,
+  'function',
+  'firebaseAuthRepository.createUserAccount must be a defined function',
 );
 
 // Call with invalid/empty input (fail-closed)
@@ -257,6 +300,49 @@ assert.equal(nullResult, false, 'isPlatformAdmin(null) must return false');
 
 const emptyResult = await firebaseAuthRepository.isPlatformAdmin('');
 assert.equal(emptyResult, false, 'isPlatformAdmin("") must return false');
-console.log('✓ Real platform admin repository method contract verified.');
+console.log('✓ Real platform admin & auth repository method contracts verified.');
+
+// ============================================================================
+// 8. REGISTER PAGE UX & DOMAIN CONTRACT ASSERTIONS
+// ============================================================================
+console.log('8. Testing RegisterPage UX and domain boundary contracts...');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const registerPageCode = fs.readFileSync(path.resolve(__dirname, '../src/components/auth/RegisterPage.jsx'), 'utf8');
+
+// Assert no premature .shiftoryx.gr operational construction in RegisterPage
+assert.ok(
+  !registerPageCode.includes('.shiftoryx.gr'),
+  'RegisterPage must NOT construct or imply operational .shiftoryx.gr tenant URLs in Phase 5',
+);
+assert.ok(
+  !registerPageCode.includes('https://'),
+  'RegisterPage slug input must NOT prepend https:// protocol prefix',
+);
+
+// Assert no false schedule generation copy
+assert.ok(
+  !registerPageCode.includes('δημιουργούμε το πρόγραμμα βαρδιών σας'),
+  'RegisterPage must NOT falsely claim that a full work schedule is generated during tenant provisioning',
+);
+assert.ok(
+  registerPageCode.includes('αρχικοποιούμε τις βασικές ρυθμίσεις του καταστήματος'),
+  'RegisterPage must accurately describe initialization of basic store settings',
+);
+
+// Assert direct createUserAccount call
+assert.ok(
+  registerPageCode.includes('authRepository.createUserAccount({'),
+  'RegisterPage must call authRepository.createUserAccount directly without optional chaining',
+);
+assert.ok(
+  !registerPageCode.includes('authRepository.createUserAccount?.('),
+  'RegisterPage must NOT use optional chaining on authRepository.createUserAccount',
+);
+console.log('✓ RegisterPage UX and domain boundary contracts verified.');
 
 console.log('--- ALL PHASE 5 PORTAL PRODUCTION-LINKED VALIDATION TESTS PASSED ---');

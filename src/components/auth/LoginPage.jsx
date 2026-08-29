@@ -35,49 +35,58 @@ export default function LoginPage() {
       return;
     }
 
+    let isPlatformAdmin = false;
     try {
-      const isPlatformAdmin = await authRepository.isPlatformAdmin(user.uid);
-      if (isPlatformAdmin) {
-        window.location.assign('/admin');
-        return;
-      }
+      isPlatformAdmin = await authRepository.isPlatformAdmin(user.uid);
     } catch {
-      // Continue normal tenant resolution
+      // Fail-closed/safe: continue normal tenant resolution
     }
 
+    let authorizedReturnTo = null;
     if (returnTo) {
-      const returnDestination = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
-      if (returnDestination.allowed && returnDestination.url) {
-        if (isAuthBrokerEnabled && hostContext.mode === 'central') {
-          const redirectUrl = await createTenantAuthTicketRedirect({
-            returnTo: returnDestination.url,
-            tenantId: returnDestination.access?.tenant?.id,
-          });
-          window.location.assign(redirectUrl);
-          return;
-        }
-
-        window.location.assign(returnDestination.url);
-        return;
-      }
+      authorizedReturnTo = await resolveAuthorizedReturnTo({ uid: user.uid, returnTo });
     }
 
-    const destination = await resolveCentralTenantDestination(user.uid);
-    if (destination.type === 'redirect' && destination.url) {
+    const centralDestination = await resolveCentralTenantDestination(user.uid);
+
+    const decision = determinePostLoginDestination({
+      isPlatformAdmin,
+      authorizedReturnTo,
+      centralDestination,
+    });
+
+    if (decision.type === 'admin') {
+      window.location.assign(decision.url);
+      return;
+    }
+
+    if (decision.type === 'authorizedReturnTo') {
       if (isAuthBrokerEnabled && hostContext.mode === 'central') {
         const redirectUrl = await createTenantAuthTicketRedirect({
-          returnTo: destination.url,
-          tenantId: destination.tenant?.id,
+          returnTo: decision.url,
+          tenantId: decision.tenantId,
         });
         window.location.assign(redirectUrl);
         return;
       }
-
-      window.location.assign(destination.url);
+      window.location.assign(decision.url);
       return;
     }
 
-    if (destination.type === 'select') {
+    if (decision.type === 'tenant') {
+      if (isAuthBrokerEnabled && hostContext.mode === 'central') {
+        const redirectUrl = await createTenantAuthTicketRedirect({
+          returnTo: decision.url,
+          tenantId: decision.tenantId,
+        });
+        window.location.assign(redirectUrl);
+        return;
+      }
+      window.location.assign(decision.url);
+      return;
+    }
+
+    if (decision.type === 'select') {
       const selectUrl = new URL('/select-tenant', window.location.origin);
       if (returnTo) selectUrl.searchParams.set('returnTo', returnTo);
       window.location.assign(selectUrl.toString());
@@ -85,7 +94,7 @@ export default function LoginPage() {
     }
 
     // Zero memberships -> guidance on /stores
-    window.location.assign('/stores');
+    window.location.assign(decision.url);
   }
 
   async function handleSubmit(event) {

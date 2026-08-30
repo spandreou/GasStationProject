@@ -287,7 +287,7 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
   return {
     employeeId: employee.id,
     fullName: employee.fullName || employee.id,
-    scheduleRole,
+    scheduleRole: scheduleRole || 'AUTO',
     isEnabled: employee.isActive !== false,
     fixedDayOff,
     defaultShiftPreference: mapShiftPreference(employee.defaultShiftPreference),
@@ -297,6 +297,7 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
     extraMode: employee.extraMode || (isExtra ? 'SUBSTITUTE_ONLY' : undefined),
     activeFrom: employee.activeFrom || undefined,
     activeTo: employee.activeTo || undefined,
+    skills: Array.isArray(employee.skills) ? employee.skills : [],
     canCoverLeaves: employee.canCoverLeaves !== false,
     canWorkMorning: employee.canWorkMorning !== false,
     canWorkIntermediate: employee.canWorkIntermediate !== false,
@@ -308,14 +309,9 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
 function toEngineEmployees(employees = [], rules = {}) {
   const activeEmployees = (employees || []).filter((employee) => employee?.isActive !== false && employee?.id);
   const { roleById, valid } = resolveEngineRoleMap(activeEmployees);
-  if (!valid) {
-    return [];
-  }
   return activeEmployees.map((employee) => {
-    const scheduleRole = roleById.get(employee.id);
-    if (!scheduleRole) {
-      throw new Error(`Ανεπαρκής ανάθεση ρόλου για τον εργαζόμενο: ${employee.fullName || employee.id}`);
-    }
+    const legacyRole = valid ? roleById.get(employee.id) : null;
+    const scheduleRole = legacyRole || employee.scheduleRole || employee.roleType || 'AUTO';
     return toEngineEmployee(employee, scheduleRole, rules);
   });
 }
@@ -352,44 +348,65 @@ function toEngineStoredAbsence(absence) {
   };
 }
 
-function toEngineAbsences(shifts = [], visibleDates = []) {
-  const visibleSet = new Set(visibleDates);
-  return (shifts || [])
-    .filter((shift) => visibleSet.has(shift.date))
-    .filter((shift) => shift?.employeeId && (shift.type === SHIFT_TYPES.REST || shift.type === SHIFT_TYPES.LEAVE || shift.type === SHIFT_TYPES.SICK))
-    .map(toEngineAbsence);
+function isStoredAbsenceInRange(absence, startDate, endDate) {
+  if (!absence || absence.status === 'CANCELLED') return false;
+  if (!absence.employeeId || !absence.startDate) return false;
+  const absenceEnd = absence.endDate || absence.startDate;
+  return absence.startDate <= endDate && absenceEnd >= startDate;
+}
+
+function isAbsenceShift(shift) {
+  if (!shift || !shift.employeeId) return false;
+  return (
+    shift.type === SHIFT_TYPES.REST ||
+    shift.type === SHIFT_TYPES.LEAVE ||
+    shift.type === SHIFT_TYPES.SICK
+  );
 }
 
 function toEngineStoredAbsences(absences = [], startDate, endDate) {
   return (absences || [])
-    .filter((absence) => absence?.status !== 'CANCELLED')
-    .filter((absence) => absence?.employeeId && absence?.startDate && absence?.endDate)
-    .filter((absence) => absence.startDate <= endDate && absence.endDate >= startDate)
+    .filter((absence) => isStoredAbsenceInRange(absence, startDate, endDate))
     .map(toEngineStoredAbsence);
 }
 
-function toAppWarning(warning) {
-  if (typeof warning === 'string') return warning;
-  return warning?.message || warning?.code || 'Προειδοποίηση scheduler engine.';
+function toEngineAbsences(shifts = [], dates = []) {
+  const dateSet = new Set(dates);
+  return (shifts || [])
+    .filter((shift) => dateSet.has(shift.date) && isAbsenceShift(shift))
+    .map(toEngineAbsence);
 }
 
 function toAppShift(shift) {
   return {
+    id: shift.id,
     employeeId: shift.employeeId,
+    employeeName: shift.employeeName,
     date: shift.date,
     startTime: shift.startTime,
     endTime: shift.endTime,
-    type: SHIFT_TYPES.WORK,
     label: APP_SHIFT_LABELS[shift.shiftType] || 'Εργασία',
-    shiftType: APP_SHIFT_TYPES[shift.shiftType] || 'custom',
+    shiftType: APP_SHIFT_TYPES[shift.shiftType] || `${shift.shiftType || 'custom'}`.toLowerCase(),
     customLabel: shift.shiftType === 'SUNDAY_12H' ? 'Κυριακή' : '',
     notes: `Auto-generated scheduler engine (${shift.source})`,
     source: shift.source,
+    type: SHIFT_TYPES.WORK,
     isHoliday: false,
     isSpecialDay: false,
     specialDayLabel: '',
     isManualOverride: false,
   };
+}
+
+function toAppWarning(engineWarning) {
+  return typeof engineWarning === 'string' ? engineWarning : engineWarning?.message || engineWarning?.code || 'Warning';
+}
+
+function collectWarnings(engineResult) {
+  return [
+    ...(engineResult.warnings || []).map(toAppWarning),
+    ...((engineResult.validation?.violations || []).map(toAppWarning)),
+  ];
 }
 
 function timeToMinutes(value) {
@@ -425,36 +442,47 @@ function getMonthDays(year, month) {
   return days;
 }
 
-function collectWarnings(engineResult) {
-  return [
-    ...(engineResult.warnings || []).map(toAppWarning),
-    ...((engineResult.validation?.violations || []).map(toAppWarning)),
-  ];
-}
-
 export async function generateEngineWeekSchedule({
   weekDays,
   employees,
   allShifts = [],
   absences = [],
   rules = {},
+  schedulerConfig,
 }) {
   if (!Array.isArray(weekDays) || weekDays.length !== 7) {
     throw new Error('Μη έγκυρες ημέρες εβδομάδας για scheduler engine.');
   }
 
-  const roleConfig = validateSchedulerRoleConfiguration(employees);
-  if (!roleConfig.valid) {
-    return {
-      shifts: [],
-      warnings: [roleConfig.message],
-      meta: {
-        engine: 'scheduler-engine',
-        valid: false,
-        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
-        dayPlans: [],
-      },
-    };
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  const isV2 = Boolean(schedulerConfig?.schemaVersion === 2 || rules?.schemaVersion === 2);
+
+  if (!isV2) {
+    const roleConfig = validateSchedulerRoleConfiguration(employees);
+    if (!roleConfig.valid) {
+      return {
+        shifts: [],
+        warnings: [roleConfig.message],
+        unresolvedGaps: [],
+        validation: {
+          valid: false,
+          violations: [
+            {
+              id: 'role-configuration-violation',
+              code: 'INVALID_ROLE_CONFIGURATION',
+              message: roleConfig.message,
+              severity: 'error',
+            },
+          ],
+        },
+        meta: {
+          engine: 'scheduler-engine',
+          valid: false,
+          resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
+          dayPlans: [],
+        },
+      };
+    }
   }
 
   const engineEmployees = toEngineEmployees(employees, rules);
@@ -467,6 +495,7 @@ export async function generateEngineWeekSchedule({
     endDate: weekDays[weekDays.length - 1],
     employees: engineEmployees,
     absences: engineAbsences,
+    schedulerConfig: schedulerConfig || (rules?.schemaVersion === 2 ? rules : undefined),
     rules: toEngineRules(rules),
   });
 
@@ -492,33 +521,39 @@ export function generateEngineMonthSchedule({
   existingMonthShifts = [],
   absences = [],
   rules = {},
+  schedulerConfig,
 }) {
   const monthDays = getMonthDays(year, month);
-  const roleConfig = validateSchedulerRoleConfiguration(employees);
-  if (!roleConfig.valid) {
-    return {
-      shifts: [],
-      warnings: [roleConfig.message],
-      unresolvedGaps: [],
-      validation: {
-        valid: false,
-        violations: [
-          {
-            id: 'role-configuration-violation',
-            code: 'INVALID_ROLE_CONFIGURATION',
-            message: roleConfig.message,
-            severity: 'error',
-          },
-        ],
-      },
-      meta: {
-        monthDays,
-        engine: 'scheduler-engine',
-        valid: false,
-        resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
-        dayPlans: [],
-      },
-    };
+  const activeEmployees = (employees || []).filter((e) => e?.isActive !== false && e?.id);
+  const isV2 = Boolean(schedulerConfig?.schemaVersion === 2 || rules?.schemaVersion === 2);
+
+  if (!isV2) {
+    const roleConfig = validateSchedulerRoleConfiguration(employees);
+    if (!roleConfig.valid) {
+      return {
+        shifts: [],
+        warnings: [roleConfig.message],
+        unresolvedGaps: [],
+        validation: {
+          valid: false,
+          violations: [
+            {
+              id: 'role-configuration-violation',
+              code: 'INVALID_ROLE_CONFIGURATION',
+              message: roleConfig.message,
+              severity: 'error',
+            },
+          ],
+        },
+        meta: {
+          monthDays,
+          engine: 'scheduler-engine',
+          valid: false,
+          resolvedRoles: { roles: {}, extras: [], baseEmployees: [], warnings: roleConfig.errors || [] },
+          dayPlans: [],
+        },
+      };
+    }
   }
 
   const engineEmployees = toEngineEmployees(employees, rules);
@@ -531,6 +566,7 @@ export function generateEngineMonthSchedule({
     endDate: monthDays[monthDays.length - 1],
     employees: engineEmployees,
     absences: engineAbsences,
+    schedulerConfig: schedulerConfig || (rules?.schemaVersion === 2 ? rules : undefined),
     rules: toEngineRules(rules),
   });
 

@@ -13,7 +13,40 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
   const normalized = normalizeInput(input);
   const enabledEmployees = normalized.employees.filter((e) => e.isEnabled !== false);
 
-  // Check if input matches legacy 4-6 Fuel Station topology
+  // 1. If explicit V2 SchedulerConfig is provided, route directly to V2 Engine
+  const explicitV2Config =
+    normalized.schedulerConfig?.schemaVersion === 2
+      ? normalized.schedulerConfig
+      : normalized.rules?.schemaVersion === 2
+      ? normalized.rules
+      : normalized.schedulerConfig;
+
+  if (explicitV2Config) {
+    const v2Result = generateScheduleV2({
+      startDate: normalized.startDate,
+      endDate: normalized.endDate,
+      employees: normalized.employees,
+      absences: normalized.absences,
+      config: explicitV2Config,
+      manualOverrides: normalized.manualOverrides,
+      previousSundayEmployeeId: normalized.previousSundayEmployeeId,
+    });
+
+    const resolvedRoles = resolveScheduleRoles(normalized.employees);
+
+    return {
+      shifts: v2Result.shifts,
+      warnings: v2Result.warnings,
+      unresolvedGaps: v2Result.unresolvedGaps,
+      validation: v2Result.validation,
+      debug: {
+        resolvedRoles,
+        dayPlans: [],
+      },
+    };
+  }
+
+  // 2. Check if input matches legacy 4-6 Fuel Station topology
   const hasBaseRoles =
     enabledEmployees.length >= 4 &&
     enabledEmployees.length <= 6 &&
@@ -76,7 +109,7 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
     };
   }
 
-  // Generalized V2 Engine Pipeline (supports arbitrary employee counts e.g. 1, 2, 3, 5, 7, 8, 10, 15, 20+)
+  // 3. Generalized V2 Engine Pipeline for Legacy Normalization
   const v2Config = normalizeSchedulerConfig(normalized.rules, normalized.employees);
   const v2Result = generateScheduleV2({
     startDate: normalized.startDate,
@@ -84,6 +117,7 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
     employees: normalized.employees,
     absences: normalized.absences,
     config: v2Config,
+    manualOverrides: normalized.manualOverrides,
     previousSundayEmployeeId: normalized.previousSundayEmployeeId,
   });
 

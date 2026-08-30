@@ -8,6 +8,7 @@ export * from './applyAbsences.ts';
 export * from './fillScheduleGaps.ts';
 export * from './assignSundayShift.ts';
 export * from './validateSchedule.ts';
+export * from './normalizeInput.ts';
 export * from './configV2.ts';
 export * from './eligibility.ts';
 export * from './demandMatrix.ts';

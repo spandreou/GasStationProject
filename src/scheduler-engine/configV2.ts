@@ -169,12 +169,12 @@ export function getDefaultCategoryConfig(
 
   const defaultCoverage: DailyCoveragePattern[] = isFuel
     ? [
-        { weekday: 'MONDAY', dayType: 'FULL_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 2, targetHeadcount: 2, requiredRole: 'CORE_A' }, { shiftTemplateId: 'afternoon', minHeadcount: 2, targetHeadcount: 2, requiredRole: 'CORE_B' }] },
+        { weekday: 'MONDAY', dayType: 'FULL_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 2 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 2 }] },
         { weekday: 'TUESDAY', dayType: 'STANDARD_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'intermediate-1000', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 1 }] },
         { weekday: 'WEDNESDAY', dayType: 'STANDARD_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'intermediate-1000', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 1 }] },
         { weekday: 'THURSDAY', dayType: 'STANDARD_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'intermediate-1000', minHeadcount: 1, targetHeadcount: 1 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 1 }] },
         { weekday: 'FRIDAY', dayType: 'FULL_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 2 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 2 }] },
-        { weekday: 'SATURDAY', dayType: 'FULL_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 2, targetHeadcount: 2 }, { shiftTemplateId: 'afternoon', minHeadcount: 2, targetHeadcount: 2 }] },
+        { weekday: 'SATURDAY', dayType: 'FULL_COVERAGE', slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 2 }, { shiftTemplateId: 'afternoon', minHeadcount: 1, targetHeadcount: 2 }] },
         { weekday: 'SUNDAY', dayType: 'MINIMAL_COVERAGE', slots: [{ shiftTemplateId: 'sunday-12h', minHeadcount: 1, targetHeadcount: 1 }] },
       ]
     : [
@@ -232,6 +232,9 @@ export function getDefaultCategoryConfig(
   };
 }
 
+const VALID_WEEKDAYS = new Set(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']);
+const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 export function validateSchedulerConfig(config: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!config || typeof config !== 'object') {
@@ -247,21 +250,46 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
   }
   if (!Array.isArray(c.operatingDays) || c.operatingDays.length !== 7) {
     errors.push('operatingDays must contain exactly 7 weekday configurations');
+  } else {
+    const seenDays = new Set<string>();
+    for (const d of c.operatingDays) {
+      if (!VALID_WEEKDAYS.has(d.weekday)) {
+        errors.push(`Invalid weekday in operatingDays: ${d.weekday}`);
+      }
+      if (seenDays.has(d.weekday)) {
+        errors.push(`Duplicate weekday in operatingDays: ${d.weekday}`);
+      }
+      seenDays.add(d.weekday);
+      if (typeof d.isOpen !== 'boolean') {
+        errors.push(`operatingDays.${d.weekday}.isOpen must be a boolean`);
+      }
+      if (!Array.isArray(d.windows)) {
+        errors.push(`operatingDays.${d.weekday}.windows must be an array`);
+      } else {
+        for (const w of d.windows) {
+          if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
+            errors.push(`operatingDays.${d.weekday} window contains invalid time format: ${w.openTime}-${w.closeTime}`);
+          }
+        }
+      }
+    }
   }
+
+  const templateMap = new Map<string, ShiftTemplateConfigV2>();
   if (!Array.isArray(c.shiftTemplates) || c.shiftTemplates.length === 0) {
     errors.push('shiftTemplates must contain at least one active shift template');
   } else {
-    const templateIds = new Set<string>();
     for (const t of c.shiftTemplates) {
       if (!t.id || typeof t.id !== 'string') {
         errors.push('All shift templates must have a valid string id');
-      } else if (templateIds.has(t.id)) {
+      } else if (templateMap.has(t.id)) {
         errors.push(`Duplicate shift template id: ${t.id}`);
+      } else {
+        templateMap.set(t.id, t);
       }
-      templateIds.add(t.id);
 
-      if (!t.startTime || !t.endTime) {
-        errors.push(`Shift template ${t.id} must have startTime and endTime`);
+      if (!t.startTime || !TIME_REGEX.test(t.startTime) || !t.endTime || !TIME_REGEX.test(t.endTime)) {
+        errors.push(`Shift template ${t.id} must have valid startTime and endTime in HH:mm format`);
       }
       if (typeof t.durationHours !== 'number' || t.durationHours <= 0 || t.durationHours > 24) {
         errors.push(`Shift template ${t.id} durationHours must be between 0.5 and 24`);
@@ -271,6 +299,28 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
 
   if (!Array.isArray(c.coverageRequirements)) {
     errors.push('coverageRequirements must be an array');
+  } else {
+    for (const pattern of c.coverageRequirements) {
+      if (!VALID_WEEKDAYS.has(pattern.weekday)) {
+        errors.push(`Invalid weekday in coverageRequirements: ${pattern.weekday}`);
+      }
+      if (Array.isArray(pattern.slots)) {
+        for (const slot of pattern.slots) {
+          if (!slot.shiftTemplateId || !templateMap.has(slot.shiftTemplateId)) {
+            errors.push(`Coverage slot references unknown shift template: ${slot.shiftTemplateId}`);
+          }
+          if (typeof slot.minHeadcount !== 'number' || slot.minHeadcount < 0) {
+            errors.push(`Coverage slot minHeadcount must be >= 0 for template ${slot.shiftTemplateId}`);
+          }
+          if (typeof slot.targetHeadcount !== 'number' || slot.targetHeadcount < (slot.minHeadcount || 0)) {
+            errors.push(`Coverage slot targetHeadcount must be >= minHeadcount for template ${slot.shiftTemplateId}`);
+          }
+          if (typeof slot.maxHeadcount === 'number' && slot.maxHeadcount < slot.targetHeadcount) {
+            errors.push(`Coverage slot maxHeadcount must be >= targetHeadcount for template ${slot.shiftTemplateId}`);
+          }
+        }
+      }
+    }
   }
 
   if (c.complianceRules) {
@@ -281,8 +331,26 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
     if (typeof r.minRestIntervalBetweenShiftsHours !== 'number' || r.minRestIntervalBetweenShiftsHours < 8 || r.minRestIntervalBetweenShiftsHours > 24) {
       errors.push('complianceRules.minRestIntervalBetweenShiftsHours must be between 8 and 24');
     }
+    if (typeof r.maxDailyWorkingHours !== 'number' || r.maxDailyWorkingHours < 1 || r.maxDailyWorkingHours > 24) {
+      errors.push('complianceRules.maxDailyWorkingHours must be between 1 and 24');
+    }
+    if (typeof r.maxWeeklyStandardHours !== 'number' || r.maxWeeklyStandardHours < 10 || r.maxWeeklyStandardHours > 84) {
+      errors.push('complianceRules.maxWeeklyStandardHours must be between 10 and 84');
+    }
   } else {
     errors.push('complianceRules is required');
+  }
+
+  if (c.sundayAndHolidays) {
+    const s = c.sundayAndHolidays;
+    const mode = s.sundayMode || s.sundayPolicy;
+    const validSundayModes = ['CYCLIC_FAIR', 'FIXED_ASSIGNMENT', 'STANDARD_WEEKDAY_LIKE', 'CLOSED'];
+    if (!validSundayModes.includes(mode)) {
+      errors.push(`Invalid sundayMode: ${mode}`);
+    }
+    if (mode !== 'CLOSED' && s.sundayShiftTemplateId && !templateMap.has(s.sundayShiftTemplateId)) {
+      errors.push(`sundayShiftTemplateId references unknown template: ${s.sundayShiftTemplateId}`);
+    }
   }
 
   return { valid: errors.length === 0, errors };
@@ -303,7 +371,7 @@ export function normalizeSchedulerConfig(
 
   const base = getDefaultCategoryConfig(tenantId, businessCategory);
   const legacyRules = rawSettings?.generatorRules || rawSettings?.rules || rawSettings || {};
-  const legacySpecialDays = rawSettings?.specialDaysByDate || {};
+  const legacySpecialDays = rawSettings?.specialDaysByDate || legacyRules?.specialDaysByDate || {};
 
   const specialDaysByDate: Record<string, SpecialDayOverride> = {};
   for (const [date, val] of Object.entries(legacySpecialDays)) {

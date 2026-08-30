@@ -55,3 +55,57 @@ export function timeToMinutes(timeStr: string): number {
   return h * 60 + m;
 }
 
+export function shiftToTimestampInterval(date: string, startTime: string, endTime: string, crossMidnight = false): { startMs: number; endMs: number } {
+  const startD = parseIsoDate(date);
+  const startM = timeToMinutes(startTime);
+  startD.setUTCMinutes(startM);
+  const startMs = startD.getTime();
+
+  let endD = parseIsoDate(date);
+  const endM = timeToMinutes(endTime);
+  if (crossMidnight || endM <= startM) {
+    endD = parseIsoDate(addDays(date, 1));
+  }
+  endD.setUTCMinutes(endM);
+  const endMs = endD.getTime();
+
+  return { startMs, endMs };
+}
+
+export function calculateRestHoursBetweenShifts(
+  prevDate: string,
+  prevStart: string,
+  prevEnd: string,
+  prevCrossMidnight: boolean,
+  currDate: string,
+  currStart: string,
+  currEnd: string,
+  currCrossMidnight = false,
+): number {
+  const prev = shiftToTimestampInterval(prevDate, prevStart, prevEnd, prevCrossMidnight);
+  const curr = shiftToTimestampInterval(currDate, currStart, currEnd, currCrossMidnight);
+  const restMs = curr.startMs - prev.endMs;
+  return restMs / (1000 * 60 * 60);
+}
+
+export function isShiftContainedInWindow(
+  shiftStart: string,
+  shiftEnd: string,
+  windowOpenOrWindows: string | Array<{ openTime: string; closeTime: string; crossMidnight?: boolean }>,
+  windowClose?: string,
+  shiftCrossMidnight = false,
+  windowCrossMidnight = false,
+): boolean {
+  if (Array.isArray(windowOpenOrWindows)) {
+    if (windowOpenOrWindows.length === 0) return false;
+    return windowOpenOrWindows.some((w) =>
+      isShiftContainedInWindow(shiftStart, shiftEnd, w.openTime, w.closeTime, shiftCrossMidnight, Boolean(w.crossMidnight))
+    );
+  }
+  const refDate = '2026-01-01';
+  const shift = shiftToTimestampInterval(refDate, shiftStart, shiftEnd, shiftCrossMidnight);
+  const win = shiftToTimestampInterval(refDate, windowOpenOrWindows, windowClose || '24:00', windowCrossMidnight);
+  return shift.startMs >= win.startMs && shift.endMs <= win.endMs;
+}
+
+

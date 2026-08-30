@@ -7,10 +7,13 @@ export type NormalizedScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
+  schedulerConfig?: any;
+  manualOverrides?: any[];
   rules: {
     weeklyRotationEnabled: boolean;
     avoidConsecutiveSundays: boolean;
     startWithCoreAMorning: boolean;
+    [key: string]: any;
   };
 };
 
@@ -19,19 +22,20 @@ export function normalizeInput(input: GenerateScheduleInput): NormalizedSchedule
     .map((employee) => ({
       ...employee,
       fullName: employee.fullName || employee.employeeId,
-      fixedDayOff: employee.fixedDayOff || DEFAULT_DAYS_OFF[employee.scheduleRole],
+      fixedDayOff: employee.fixedDayOff || (DEFAULT_DAYS_OFF as any)[employee.scheduleRole],
       defaultShiftPreference: employee.defaultShiftPreference || 'AUTO',
       participatesInWeeklyRotation: employee.participatesInWeeklyRotation !== false,
       participatesInSundayRotation: employee.participatesInSundayRotation !== false,
       weeklyFixedShiftSideRotation: employee.weeklyFixedShiftSideRotation === true,
-      extraMode: employee.extraMode || (employee.scheduleRole.startsWith('EXTRA') ? 'DISABLED' : undefined),
+      extraMode: employee.extraMode || (employee.scheduleRole?.startsWith('EXTRA') ? 'DISABLED' : undefined),
+      skills: Array.isArray(employee.skills) ? employee.skills : [],
       canCoverLeaves: employee.canCoverLeaves !== false,
       canWorkMorning: employee.canWorkMorning !== false,
       canWorkIntermediate: employee.canWorkIntermediate !== false,
       canWorkAfternoon: employee.canWorkAfternoon !== false,
       canWorkSunday: employee.canWorkSunday !== false,
     }))
-    .sort((a, b) => a.scheduleRole.localeCompare(b.scheduleRole) || a.employeeId.localeCompare(b.employeeId));
+    .sort((a, b) => (a.scheduleRole || '').localeCompare(b.scheduleRole || '') || a.employeeId.localeCompare(b.employeeId));
 
   return {
     startDate: input.startDate,
@@ -39,7 +43,10 @@ export function normalizeInput(input: GenerateScheduleInput): NormalizedSchedule
     employees,
     absences: [...(input.absences || [])].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)),
     previousSundayEmployeeId: input.previousSundayEmployeeId,
+    schedulerConfig: input.schedulerConfig,
+    manualOverrides: input.manualOverrides,
     rules: {
+      ...(input.rules || {}),
       weeklyRotationEnabled: input.rules?.weeklyRotationEnabled !== false,
       avoidConsecutiveSundays: input.rules?.avoidConsecutiveSundays !== false,
       startWithCoreAMorning: input.rules?.startWithCoreAMorning !== false,

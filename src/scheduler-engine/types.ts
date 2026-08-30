@@ -1,6 +1,6 @@
 export type BaseScheduleRole = 'CORE_A' | 'CORE_B' | 'FLEX_A' | 'FLEX_B';
 export type ExtraScheduleRole = 'EXTRA_A' | 'EXTRA_B';
-export type ScheduleRole = BaseScheduleRole | ExtraScheduleRole;
+export type ScheduleRole = BaseScheduleRole | ExtraScheduleRole | string;
 
 export type Weekday =
   | 'MONDAY'
@@ -15,7 +15,11 @@ export type ShiftType =
   | 'MORNING'
   | 'INTERMEDIATE'
   | 'AFTERNOON'
-  | 'SUNDAY_12H';
+  | 'NIGHT'
+  | 'SPLIT'
+  | 'SUNDAY_12H'
+  | 'SPECIAL'
+  | string;
 
 export type ExtraEmployeeMode =
   | 'DISABLED'
@@ -42,13 +46,14 @@ export type EmployeeScheduleConfig = {
   scheduleRole: ScheduleRole;
   isEnabled: boolean;
   fixedDayOff?: Weekday;
-  defaultShiftPreference?: 'AUTO' | 'MORNING' | 'INTERMEDIATE' | 'INTERMEDIATE_0900' | 'INTERMEDIATE_1000' | 'AFTERNOON';
-  participatesInWeeklyRotation: boolean;
-  participatesInSundayRotation: boolean;
+  defaultShiftPreference?: string;
+  participatesInWeeklyRotation?: boolean;
+  participatesInSundayRotation?: boolean;
   weeklyFixedShiftSideRotation?: boolean;
   extraMode?: ExtraEmployeeMode;
   activeFrom?: string;
   activeTo?: string;
+  skills?: string[];
   canCoverLeaves?: boolean;
   canWorkMorning?: boolean;
   canWorkIntermediate?: boolean;
@@ -138,11 +143,16 @@ export type GenerateScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences?: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
+  schedulerConfig?: any;
   rules?: {
     weeklyRotationEnabled?: boolean;
     avoidConsecutiveSundays?: boolean;
     startWithCoreAMorning?: boolean;
+    fixedDaysOff?: Record<string, Weekday>;
+    specialDaysByDate?: Record<string, any>;
+    [key: string]: any;
   };
+  manualOverrides?: GeneratedShift[];
 };
 
 export type GenerateScheduleResult = {

@@ -27,6 +27,7 @@ import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
 import { verifyTenantAccessForHost, TENANT_ACCESS_MESSAGES } from '../services/tenantAccessService';
 import { formatDateGreek, getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 import { getCurrentTenantHostContext } from '../utils/tenantHostContext';
+import { validateSchedulerConfig } from '../scheduler-engine';
 
 const isFirebaseConfigured = authRepository.isPersistenceConfigured();
 const firebaseConfigErrorMessage = authRepository.getPersistenceErrorMessage?.() || '';
@@ -418,6 +419,7 @@ export const useSchedulerStore = create((set, get) => ({
   publicEmployees: [],
   publicAnnouncements: [],
   generatorRules: { ...defaultGeneratorRules },
+  schedulerConfigV2: null,
   specialDaysByDate: {},
   selectedHistoryWeekId: '',
   selectedTemplateId: '',
@@ -719,11 +721,12 @@ export const useSchedulerStore = create((set, get) => ({
       getTenantArgs(),
       (settingsDoc) => {
         const generatorRules = normalizeGeneratorRules(settingsDoc?.generatorRules);
+        const schedulerConfigV2 = settingsDoc?.schedulerConfigV2 || null;
         const specialDaysByDate =
           settingsDoc?.specialDaysByDate && typeof settingsDoc.specialDaysByDate === 'object'
             ? settingsDoc.specialDaysByDate
             : {};
-        set({ generatorRules, specialDaysByDate });
+        set({ generatorRules, schedulerConfigV2, specialDaysByDate });
       },
       () => set({ warningMessage: 'Αποτυχία φόρτωσης ρυθμίσεων προγραμματισμού.' }),
     );
@@ -1291,6 +1294,35 @@ export const useSchedulerStore = create((set, get) => ({
       return true;
     } catch (error) {
       set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης ρυθμίσεων generator.' });
+      return false;
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  saveSchedulerConfigV2: async (config) => {
+    if (!requireAdmin(get, set)) return false;
+    const validation = validateSchedulerConfig(config);
+    if (!validation.valid) {
+      set({ warningMessage: `Μη έγκυρες ρυθμίσεις V2: ${validation.errors.join(' | ')}` });
+      return false;
+    }
+    set({ isSaving: true });
+    try {
+      await upsertSchedulerSettings({ tenantId: getPublicTenantId(), schedulerConfigV2: config });
+      await recordAuditLog(get, {
+        action: 'settings.scheduler_config_v2.update',
+        target: { collection: 'scheduler_settings', id: 'default' },
+        before: get().schedulerConfigV2,
+        after: config,
+      });
+      set({
+        schedulerConfigV2: config,
+        warningMessage: 'Οι ρυθμίσεις προγραμματισμού V2 αποθηκεύτηκαν.',
+      });
+      return true;
+    } catch (error) {
+      set({ warningMessage: error?.message || 'Αποτυχία αποθήκευσης ρυθμίσεων V2.' });
       return false;
     } finally {
       set({ isSaving: false });
@@ -2557,6 +2589,7 @@ export const useSchedulerStore = create((set, get) => ({
         allShifts: get().shifts,
         absences: getAbsencesForRange(get().absences, weekDays[0], weekDays[weekDays.length - 1]),
         rules: weeklyRules,
+        schedulerConfig: get().schedulerConfigV2 || undefined,
       });
 
       if (validation && validation.valid === false) {
@@ -2640,10 +2673,13 @@ export const useSchedulerStore = create((set, get) => ({
       return false;
     }
 
-    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
-    if (!roleValidation.valid) {
-      set({ warningMessage: roleValidation.message });
-      return false;
+    const isV2 = Boolean(get().schedulerConfigV2 || rules?.schemaVersion === 2);
+    if (!isV2) {
+      const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+      if (!roleValidation.valid) {
+        set({ warningMessage: roleValidation.message });
+        return false;
+      }
     }
 
     const monthDateSet = getMonthDateSet(year, month);
@@ -2687,6 +2723,7 @@ export const useSchedulerStore = create((set, get) => ({
         ),
         rules: mergedRules,
         roleConfig,
+        schedulerConfig: get().schedulerConfigV2 || undefined,
       });
 
       if (validation && validation.valid === false) {

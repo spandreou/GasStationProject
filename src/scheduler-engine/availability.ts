@@ -14,10 +14,11 @@ export function getAffectingAbsence(params: {
   employeeId: string;
   date: string;
   shiftType: ShiftType;
-  absences: EmployeeAbsence[];
+  absences?: EmployeeAbsence[];
 }): EmployeeAbsence | undefined {
-  return params.absences.find(
+  return (params.absences || []).find(
     (absence) =>
+      absence &&
       absence.employeeId === params.employeeId &&
       isDateInRange(params.date, absence.startDate, absence.endDate) &&
       absenceAffectsShift(absence.scope, params.shiftType),

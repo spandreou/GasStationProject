@@ -1,4 +1,5 @@
 import type { EmployeeScheduleConfig, Weekday } from './types.ts';
+import { isShiftContainedInWindow, shiftToTimestampInterval } from './dateUtils.ts';
 
 export type BusinessCategory =
   | 'FUEL_STATION'
@@ -85,6 +86,7 @@ export interface RestAndComplianceRules {
 export interface SundayAndHolidayRules {
   sundayMode: SundayRotationMode;
   sundayShiftTemplateId: string;
+  fixedSundayEmployeeIds?: string[];
   avoidConsecutiveSundays: boolean;
   participatingRoleTypes: string[];
   holidaysTreatedAsSundays: boolean;
@@ -144,15 +146,35 @@ export function getDefaultCategoryConfig(
   const isFuel = category === 'FUEL_STATION';
   const isSalon = category === 'HAIR_SALON';
 
-  const defaultOperatingDays: OperatingDayConfig[] = [
-    { weekday: 'MONDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '20:00' : '22:00' }] },
-    { weekday: 'TUESDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '20:00' : '22:00' }] },
-    { weekday: 'WEDNESDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '20:00' : '22:00' }] },
-    { weekday: 'THURSDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '20:00' : '22:00' }] },
-    { weekday: 'FRIDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '20:00' : '22:00' }] },
-    { weekday: 'SATURDAY', isOpen: true, windows: [{ openTime: isSalon ? '09:00' : '06:00', closeTime: isSalon ? '18:00' : '22:00' }] },
-    { weekday: 'SUNDAY', isOpen: !isSalon, windows: [{ openTime: '08:00', closeTime: '20:00' }] },
-  ];
+  const defaultOperatingDays: OperatingDayConfig[] = isSalon
+    ? [
+        { weekday: 'MONDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '20:00' }] },
+        { weekday: 'TUESDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '20:00' }] },
+        { weekday: 'WEDNESDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '20:00' }] },
+        { weekday: 'THURSDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '20:00' }] },
+        { weekday: 'FRIDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '20:00' }] },
+        { weekday: 'SATURDAY', isOpen: true, windows: [{ openTime: '09:00', closeTime: '18:00' }] },
+        { weekday: 'SUNDAY', isOpen: false, windows: [] },
+      ]
+    : isFuel
+    ? [
+        { weekday: 'MONDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'TUESDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'WEDNESDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'THURSDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'FRIDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'SATURDAY', isOpen: true, windows: [{ openTime: '06:00', closeTime: '22:00' }] },
+        { weekday: 'SUNDAY', isOpen: true, windows: [{ openTime: '08:00', closeTime: '20:00' }] },
+      ]
+    : [
+        { weekday: 'MONDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'TUESDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'WEDNESDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'THURSDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'FRIDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'SATURDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+        { weekday: 'SUNDAY', isOpen: true, windows: [{ openTime: '07:00', closeTime: '23:00' }] },
+      ];
 
   const defaultTemplates: ShiftTemplateConfigV2[] = isFuel
     ? [
@@ -162,10 +184,16 @@ export function getDefaultCategoryConfig(
         { id: 'afternoon', label: 'Απογευματινή', shortCode: 'ΑΠΟ', shiftType: 'AFTERNOON', startTime: '14:00', endTime: '22:00', durationHours: 8.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#4338CA', isActive: true },
         { id: 'sunday-12h', label: 'Κυριακή 12ωρη', shortCode: 'ΚΥΡ', shiftType: 'SPECIAL', startTime: '08:00', endTime: '20:00', durationHours: 12.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#BE185D', isActive: true },
       ]
+    : isSalon
+    ? [
+        { id: 'morning', label: 'Πρωινή', shortCode: 'ΠΡ', shiftType: 'MORNING', startTime: '09:00', endTime: '15:00', durationHours: 6.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#1D4ED8', isActive: true },
+        { id: 'afternoon', label: 'Απογευματινή', shortCode: 'ΑΠΟ', shiftType: 'AFTERNOON', startTime: '14:00', endTime: '18:00', durationHours: 4.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#4338CA', isActive: true },
+      ]
     : [
-        { id: 'morning', label: 'Πρωινή', shortCode: 'ΠΡ', shiftType: 'MORNING', startTime: isSalon ? '09:00' : '07:00', endTime: isSalon ? '15:00' : '15:00', durationHours: isSalon ? 6.0 : 8.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#1D4ED8', isActive: true },
-        { id: 'afternoon', label: 'Απογευματινή', shortCode: 'ΑΠΟ', shiftType: 'AFTERNOON', startTime: isSalon ? '14:00' : '15:00', endTime: isSalon ? '20:00' : '23:00', durationHours: isSalon ? 6.0 : 8.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#4338CA', isActive: true },
+        { id: 'morning', label: 'Πρωινή', shortCode: 'ΠΡ', shiftType: 'MORNING', startTime: '07:00', endTime: '15:00', durationHours: 8.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#1D4ED8', isActive: true },
+        { id: 'afternoon', label: 'Απογευματινή', shortCode: 'ΑΠΟ', shiftType: 'AFTERNOON', startTime: '15:00', endTime: '23:00', durationHours: 8.0, unpaidBreakMinutes: 0, crossMidnight: false, color: '#4338CA', isActive: true },
       ];
+
 
   const defaultCoverage: DailyCoveragePattern[] = isFuel
     ? [
@@ -235,6 +263,29 @@ export function getDefaultCategoryConfig(
 const VALID_WEEKDAYS = new Set(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']);
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+export function deriveShiftDurationHours(
+  startTime: string,
+  endTime: string,
+  crossMidnight = false,
+  unpaidBreakMinutes = 0
+): number {
+  if (!TIME_REGEX.test(startTime) || !TIME_REGEX.test(endTime)) {
+    return 0;
+  }
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  const startTotalMinutes = sh * 60 + sm;
+  const endTotalMinutes = eh * 60 + em;
+
+  let spanMinutes = endTotalMinutes - startTotalMinutes;
+  if (crossMidnight || endTotalMinutes <= startTotalMinutes) {
+    spanMinutes = (24 * 60 - startTotalMinutes) + endTotalMinutes;
+  }
+  const breakMins = typeof unpaidBreakMinutes === 'number' && unpaidBreakMinutes >= 0 ? unpaidBreakMinutes : 0;
+  const netMinutes = Math.max(0, spanMinutes - breakMins);
+  return Math.round((netMinutes / 60) * 100) / 100;
+}
+
 export function validateSchedulerConfig(config: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!config || typeof config !== 'object') {
@@ -248,6 +299,8 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
   if (!c.tenantId || typeof c.tenantId !== 'string') {
     errors.push('tenantId is required and must be a string');
   }
+
+  const operatingDayMap = new Map<string, OperatingDayConfig>();
   if (!Array.isArray(c.operatingDays) || c.operatingDays.length !== 7) {
     errors.push('operatingDays must contain exactly 7 weekday configurations');
   } else {
@@ -260,15 +313,39 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
         errors.push(`Duplicate weekday in operatingDays: ${d.weekday}`);
       }
       seenDays.add(d.weekday);
+      operatingDayMap.set(d.weekday, d);
+
       if (typeof d.isOpen !== 'boolean') {
         errors.push(`operatingDays.${d.weekday}.isOpen must be a boolean`);
       }
       if (!Array.isArray(d.windows)) {
         errors.push(`operatingDays.${d.weekday}.windows must be an array`);
       } else {
+        if (d.isOpen && d.windows.length === 0) {
+          errors.push(`operatingDays.${d.weekday} is marked open but has no operating windows configured`);
+        }
         for (const w of d.windows) {
           if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
             errors.push(`operatingDays.${d.weekday} window contains invalid time format: ${w.openTime}-${w.closeTime}`);
+          }
+          if (w.openTime === w.closeTime) {
+            errors.push(`operatingDays.${d.weekday} window has zero duration: ${w.openTime}-${w.closeTime}`);
+          }
+          if (!w.crossMidnight && w.openTime > w.closeTime) {
+            errors.push(`operatingDays.${d.weekday} window openTime (${w.openTime}) > closeTime (${w.closeTime}) without crossMidnight flag`);
+          }
+        }
+
+        if (d.windows.length > 1) {
+          const intervals = d.windows
+            .filter((w) => TIME_REGEX.test(w.openTime) && TIME_REGEX.test(w.closeTime))
+            .map((w) => shiftToTimestampInterval('2026-01-01', w.openTime, w.closeTime, Boolean(w.crossMidnight)));
+          for (let i = 0; i < intervals.length; i++) {
+            for (let j = i + 1; j < intervals.length; j++) {
+              if (intervals[i].startMs < intervals[j].endMs && intervals[j].startMs < intervals[i].endMs) {
+                errors.push(`operatingDays.${d.weekday} has overlapping operating windows: ${d.windows[i].openTime}-${d.windows[i].closeTime} and ${d.windows[j].openTime}-${d.windows[j].closeTime}`);
+              }
+            }
           }
         }
       }
@@ -288,11 +365,33 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
         templateMap.set(t.id, t);
       }
 
-      if (!t.startTime || !TIME_REGEX.test(t.startTime) || !t.endTime || !TIME_REGEX.test(t.endTime)) {
+      const validStart = t.startTime && TIME_REGEX.test(t.startTime);
+      const validEnd = t.endTime && TIME_REGEX.test(t.endTime);
+      if (!validStart || !validEnd) {
         errors.push(`Shift template ${t.id} must have valid startTime and endTime in HH:mm format`);
       }
-      if (typeof t.durationHours !== 'number' || t.durationHours <= 0 || t.durationHours > 24) {
-        errors.push(`Shift template ${t.id} durationHours must be between 0.5 and 24`);
+
+      if (typeof t.unpaidBreakMinutes === 'number' && t.unpaidBreakMinutes < 0) {
+        errors.push(`Shift template ${t.id} unpaidBreakMinutes must be >= 0`);
+      }
+
+      if (validStart && validEnd) {
+        if (t.startTime === t.endTime) {
+          errors.push(`Shift template ${t.id} startTime cannot equal endTime (${t.startTime})`);
+        }
+        if (t.startTime < t.endTime && t.crossMidnight === true) {
+          errors.push(`Shift template ${t.id} has crossMidnight: true but startTime (${t.startTime}) is before endTime (${t.endTime})`);
+        }
+        if (t.startTime > t.endTime && t.crossMidnight === false) {
+          errors.push(`Shift template ${t.id} spans past midnight (${t.startTime}-${t.endTime}) but crossMidnight is false`);
+        }
+
+        const derivedDuration = deriveShiftDurationHours(t.startTime, t.endTime, Boolean(t.crossMidnight), t.unpaidBreakMinutes || 0);
+        if (typeof t.durationHours !== 'number' || t.durationHours < 0.5 || t.durationHours > 24) {
+          errors.push(`Shift template ${t.id} durationHours must be between 0.5 and 24`);
+        } else if (Math.abs(t.durationHours - derivedDuration) > 0.05) {
+          errors.push(`Shift template ${t.id} durationHours (${t.durationHours}) does not match derived duration (${derivedDuration}h) from start/end times and break.`);
+        }
       }
     }
   }
@@ -304,11 +403,36 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
       if (!VALID_WEEKDAYS.has(pattern.weekday)) {
         errors.push(`Invalid weekday in coverageRequirements: ${pattern.weekday}`);
       }
+      const opDay = operatingDayMap.get(pattern.weekday);
       if (Array.isArray(pattern.slots)) {
         for (const slot of pattern.slots) {
           if (!slot.shiftTemplateId || !templateMap.has(slot.shiftTemplateId)) {
             errors.push(`Coverage slot references unknown shift template: ${slot.shiftTemplateId}`);
+          } else {
+            const tpl = templateMap.get(slot.shiftTemplateId)!;
+            const minCount = typeof slot.minHeadcount === 'number' ? slot.minHeadcount : 0;
+            const targetCount = typeof slot.targetHeadcount === 'number' ? slot.targetHeadcount : minCount;
+
+            if (minCount > 0 || targetCount > 0) {
+              if (opDay && !opDay.isOpen) {
+                errors.push(`Cannot require coverage on closed operating day ${pattern.weekday}`);
+              } else if (opDay && (!Array.isArray(opDay.windows) || opDay.windows.length === 0)) {
+                errors.push(`Coverage slot shift template "${slot.shiftTemplateId}" on ${pattern.weekday} cannot be scheduled because the operating day has no operating windows.`);
+              } else if (opDay && Array.isArray(opDay.windows) && opDay.windows.length > 0) {
+                const fits = isShiftContainedInWindow(
+                  tpl.startTime,
+                  tpl.endTime,
+                  opDay.windows,
+                  undefined,
+                  Boolean(tpl.crossMidnight)
+                );
+                if (!fits) {
+                  errors.push(`Coverage slot shift template "${slot.shiftTemplateId}" on ${pattern.weekday} (${tpl.startTime}-${tpl.endTime}) does not fit within any configured operating window for that day.`);
+                }
+              }
+            }
           }
+
           if (typeof slot.minHeadcount !== 'number' || slot.minHeadcount < 0) {
             errors.push(`Coverage slot minHeadcount must be >= 0 for template ${slot.shiftTemplateId}`);
           }
@@ -325,6 +449,12 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
 
   if (c.complianceRules) {
     const r = c.complianceRules;
+    if (typeof r.minDaysOffPerWeek !== 'number' || r.minDaysOffPerWeek < 1 || r.minDaysOffPerWeek > 6) {
+      errors.push('complianceRules.minDaysOffPerWeek must be between 1 and 6');
+    }
+    if (typeof r.targetDaysOffPerWeek !== 'number' || r.targetDaysOffPerWeek < (r.minDaysOffPerWeek || 1) || r.targetDaysOffPerWeek > 6) {
+      errors.push('complianceRules.targetDaysOffPerWeek must be >= minDaysOffPerWeek and <= 6');
+    }
     if (typeof r.maxConsecutiveWorkingDays !== 'number' || r.maxConsecutiveWorkingDays < 1 || r.maxConsecutiveWorkingDays > 14) {
       errors.push('complianceRules.maxConsecutiveWorkingDays must be between 1 and 14');
     }
@@ -343,13 +473,36 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
 
   if (c.sundayAndHolidays) {
     const s = c.sundayAndHolidays;
-    const mode = s.sundayMode || s.sundayPolicy;
+    const mode = s.sundayMode || (s as any).sundayPolicy;
     const validSundayModes = ['CYCLIC_FAIR', 'FIXED_ASSIGNMENT', 'STANDARD_WEEKDAY_LIKE', 'CLOSED'];
     if (!validSundayModes.includes(mode)) {
       errors.push(`Invalid sundayMode: ${mode}`);
     }
-    if (mode !== 'CLOSED' && s.sundayShiftTemplateId && !templateMap.has(s.sundayShiftTemplateId)) {
-      errors.push(`sundayShiftTemplateId references unknown template: ${s.sundayShiftTemplateId}`);
+    if (mode !== 'CLOSED') {
+      if (!s.sundayShiftTemplateId || !templateMap.has(s.sundayShiftTemplateId)) {
+        errors.push(`sundayShiftTemplateId references unknown template: ${s.sundayShiftTemplateId || 'none'}`);
+      }
+    }
+    if (mode === 'FIXED_ASSIGNMENT') {
+      if (!Array.isArray(s.fixedSundayEmployeeIds) || s.fixedSundayEmployeeIds.length === 0) {
+        errors.push('fixedSundayEmployeeIds must contain at least one employee ID when sundayMode is FIXED_ASSIGNMENT');
+      }
+    }
+  }
+
+  if (c.specialDaysByDate && typeof c.specialDaysByDate === 'object') {
+    const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+    for (const [dateKey, override] of Object.entries(c.specialDaysByDate)) {
+      if (!DATE_REGEX.test(dateKey)) {
+        errors.push(`specialDaysByDate key "${dateKey}" is not a valid YYYY-MM-DD date`);
+      }
+      if (override && Array.isArray(override.operatingWindows)) {
+        for (const w of override.operatingWindows) {
+          if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
+            errors.push(`specialDaysByDate[${dateKey}] operating window contains invalid time format: ${w.openTime}-${w.closeTime}`);
+          }
+        }
+      }
     }
   }
 

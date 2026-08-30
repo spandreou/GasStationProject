@@ -15,6 +15,8 @@ export interface DemandSlot {
   participatingRoles?: string[];
   isLockedManualOverride?: boolean;
   assignedEmployeeId?: string;
+  fixedEmployeeId?: string;
+  sundayMode?: string;
 }
 
 export function buildDemandSlots(
@@ -25,10 +27,10 @@ export function buildDemandSlots(
 ): DemandSlot[] {
   const slots: DemandSlot[] = [];
   const templateMap = new Map<string, ShiftTemplateConfigV2>(
-    config.shiftTemplates.map((t) => [t.id, t])
+    (config.shiftTemplates || []).map((t) => [t.id, t])
   );
-  const operatingDayMap = new Map(config.operatingDays.map((d) => [d.weekday, d]));
-  const coverageMap = new Map(config.coverageRequirements.map((c) => [c.weekday, c]));
+  const operatingDayMap = new Map((config.operatingDays || []).map((d) => [d.weekday, d]));
+  const coverageMap = new Map((config.coverageRequirements || []).map((c) => [c.weekday, c]));
 
   let slotCounter = 0;
 
@@ -83,10 +85,39 @@ export function buildDemandSlots(
         if (sundayCoverage && Array.isArray(sundayCoverage.slots) && sundayCoverage.slots.length > 0) {
           for (const slotReq of sundayCoverage.slots) {
             const tpl = templateMap.get(slotReq.shiftTemplateId);
-            if (!tpl || tpl.isActive === false || !fitsAnyWindow(tpl)) continue;
-
             const minCount = Math.max(0, slotReq.minHeadcount ?? 1);
             const targetCount = Math.max(minCount, slotReq.targetHeadcount ?? minCount);
+
+            if (!tpl || tpl.isActive === false || !fitsAnyWindow(tpl)) {
+              // If template is missing or out-of-window, ensure hard minimum slots still generate gaps
+              for (let i = 0; i < minCount; i++) {
+                slotCounter++;
+                slots.push({
+                  slotId: `slot-${date}-${slotReq.shiftTemplateId}-${i + 1}-${slotCounter}`,
+                  date,
+                  weekday,
+                  template: tpl || {
+                    id: slotReq.shiftTemplateId,
+                    label: `Ανενεργό Πρότυπο (${slotReq.shiftTemplateId})`,
+                    shortCode: 'GAP',
+                    shiftType: 'CUSTOM',
+                    startTime: '08:00',
+                    endTime: '16:00',
+                    durationHours: 8.0,
+                    unpaidBreakMinutes: 0,
+                    crossMidnight: false,
+                    color: '#EF4444',
+                    isActive: false,
+                  },
+                  priority: 1,
+                  isHardMinimum: true,
+                  requiredRole: slotReq.requiredRole,
+                  optionalCandidateRoles: slotReq.optionalCandidateRoles,
+                });
+              }
+              continue;
+            }
+
             for (let i = 0; i < targetCount; i++) {
               slotCounter++;
               slots.push({
@@ -110,16 +141,16 @@ export function buildDemandSlots(
       const sundayTemplateId = config.sundayAndHolidays?.sundayShiftTemplateId;
       const sundayTemplate =
         (sundayTemplateId ? templateMap.get(sundayTemplateId) : undefined) ||
-        config.shiftTemplates.find((t) => t.shiftType === 'SPECIAL' || t.id.includes('sunday')) ||
-        config.shiftTemplates[0];
+        config.shiftTemplates?.find((t) => t.shiftType === 'SPECIAL' || t.id.includes('sunday')) ||
+        config.shiftTemplates?.[0];
+
+      const fixedEmpId =
+        sundayMode === 'FIXED_ASSIGNMENT' && Array.isArray(config.sundayAndHolidays?.fixedSundayEmployeeIds) && config.sundayAndHolidays.fixedSundayEmployeeIds.length > 0
+          ? config.sundayAndHolidays.fixedSundayEmployeeIds[0]
+          : undefined;
 
       if (sundayTemplate && sundayTemplate.isActive !== false && fitsAnyWindow(sundayTemplate)) {
         slotCounter++;
-        const fixedEmpId =
-          sundayMode === 'FIXED_ASSIGNMENT' && Array.isArray((config.sundayAndHolidays as any)?.fixedSundayEmployeeIds)
-            ? (config.sundayAndHolidays as any).fixedSundayEmployeeIds[0]
-            : undefined;
-
         slots.push({
           slotId: `slot-${date}-${sundayTemplate.id}-${slotCounter}`,
           date,
@@ -127,10 +158,35 @@ export function buildDemandSlots(
           template: sundayTemplate,
           priority: 1,
           isHardMinimum: true,
-          assignedEmployeeId: fixedEmpId,
-          isLockedManualOverride: Boolean(fixedEmpId),
+          fixedEmployeeId: fixedEmpId,
+          sundayMode,
           requiredSkillsOrRoles: sundayTemplate.requiredSkillsOrRoles,
           participatingRoles: config.sundayAndHolidays?.participatingRoleTypes,
+        });
+      } else {
+        // Fallback placeholder to generate hard gap rather than dropping slot silently
+        slotCounter++;
+        slots.push({
+          slotId: `slot-${date}-sunday-gap-${slotCounter}`,
+          date,
+          weekday,
+          template: sundayTemplate || {
+            id: 'sunday-gap',
+            label: 'Κυριακάτικη Βάρδια',
+            shortCode: 'ΚΥΡ',
+            shiftType: 'SPECIAL',
+            startTime: '08:00',
+            endTime: '20:00',
+            durationHours: 12.0,
+            unpaidBreakMinutes: 0,
+            crossMidnight: false,
+            color: '#BE185D',
+            isActive: false,
+          },
+          priority: 1,
+          isHardMinimum: true,
+          fixedEmployeeId: fixedEmpId,
+          sundayMode,
         });
       }
       continue;
@@ -141,10 +197,39 @@ export function buildDemandSlots(
     if (coverage && Array.isArray(coverage.slots) && coverage.slots.length > 0) {
       for (const slotReq of coverage.slots) {
         const tpl = templateMap.get(slotReq.shiftTemplateId);
-        if (!tpl || tpl.isActive === false || !fitsAnyWindow(tpl)) continue;
-
         const minCount = Math.max(0, slotReq.minHeadcount ?? 1);
         const targetCount = Math.max(minCount, slotReq.targetHeadcount ?? minCount);
+
+        if (!tpl || tpl.isActive === false || !fitsAnyWindow(tpl)) {
+          // If template is missing or out-of-window, ensure hard minimum slots still generate gaps
+          for (let i = 0; i < minCount; i++) {
+            slotCounter++;
+            slots.push({
+              slotId: `slot-${date}-${slotReq.shiftTemplateId}-${i + 1}-${slotCounter}`,
+              date,
+              weekday,
+              template: tpl || {
+                id: slotReq.shiftTemplateId,
+                label: `Ανενεργό Πρότυπο (${slotReq.shiftTemplateId})`,
+                shortCode: 'GAP',
+                shiftType: 'CUSTOM',
+                startTime: '08:00',
+                endTime: '16:00',
+                durationHours: 8.0,
+                unpaidBreakMinutes: 0,
+                crossMidnight: false,
+                color: '#EF4444',
+                isActive: false,
+              },
+              priority: 1,
+              isHardMinimum: true,
+              requiredRole: slotReq.requiredRole,
+              optionalCandidateRoles: slotReq.optionalCandidateRoles,
+            });
+          }
+          continue;
+        }
+
         for (let i = 0; i < targetCount; i++) {
           slotCounter++;
           slots.push({
@@ -162,7 +247,7 @@ export function buildDemandSlots(
       }
     } else {
       // Fallback: 1 of each active shift template that fits open windows
-      for (const tpl of config.shiftTemplates.filter((t) => t.isActive !== false && t.shiftType !== 'SPECIAL')) {
+      for (const tpl of (config.shiftTemplates || []).filter((t) => t.isActive !== false && t.shiftType !== 'SPECIAL')) {
         if (!fitsAnyWindow(tpl)) continue;
         slotCounter++;
         slots.push({
@@ -178,7 +263,7 @@ export function buildDemandSlots(
     }
   }
 
-  // Bind Manual Overrides to matching slots or add manual slots
+  // Bind Manual Overrides to matching slots
   for (const manual of manualOverrides) {
     const matchingSlot = slots.find(
       (s) =>

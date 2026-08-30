@@ -105,7 +105,21 @@ export function isShiftContainedInWindow(
   const refDate = '2026-01-01';
   const shift = shiftToTimestampInterval(refDate, shiftStart, shiftEnd, shiftCrossMidnight);
   const win = shiftToTimestampInterval(refDate, windowOpenOrWindows, windowClose || '24:00', windowCrossMidnight);
-  return shift.startMs >= win.startMs && shift.endMs <= win.endMs;
+
+  if (shift.startMs >= win.startMs && shift.endMs <= win.endMs) {
+    return true;
+  }
+
+  // If window crosses midnight, check if a non-cross-midnight subshift falls into the post-midnight portion
+  if (windowCrossMidnight && !shiftCrossMidnight) {
+    const nextDayShift = shiftToTimestampInterval(addDays(refDate, 1), shiftStart, shiftEnd, false);
+    if (nextDayShift.startMs >= win.startMs && nextDayShift.endMs <= win.endMs) {
+      return true;
+    }
+  }
+
+  return false;
 }
+
 
 

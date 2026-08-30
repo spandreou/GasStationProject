@@ -21,6 +21,7 @@ export type EligibilityResult =
         | 'DOUBLE_SHIFT'
         | 'REST_VIOLATION'
         | 'MAX_CONSECUTIVE_DAYS_EXCEEDED'
+        | 'MIN_DAYS_OFF_VIOLATION'
         | 'DAILY_HOURS_EXCEEDED'
         | 'WEEKLY_HOURS_EXCEEDED';
       details?: string;
@@ -36,6 +37,7 @@ export function evaluateEmployeeEligibility(params: {
   complianceRules?: RestAndComplianceRules;
   consecutiveDaysWorked?: number;
   weeklyHoursWorked?: number;
+  weeklyDaysWorked?: number;
 }): EligibilityResult {
   const {
     employee,
@@ -46,6 +48,7 @@ export function evaluateEmployeeEligibility(params: {
     complianceRules,
     consecutiveDaysWorked = 0,
     weeklyHoursWorked = 0,
+    weeklyDaysWorked,
   } = params;
   const shiftTemplate = slot?.template || params.shiftTemplate;
   if (!employee || !shiftTemplate) {
@@ -134,7 +137,7 @@ export function evaluateEmployeeEligibility(params: {
 
   // 9. Legacy Role Restriction (Core A/B cannot work Intermediate only if legacy rule requested)
   if (
-    complianceRules?.enforceLegacyCoreRoleRestrictions === true &&
+    (complianceRules as any)?.enforceLegacyCoreRoleRestrictions === true &&
     (employee.scheduleRole === 'CORE_A' || employee.scheduleRole === 'CORE_B') &&
     shiftTemplate.shiftType === 'INTERMEDIATE'
   ) {
@@ -158,7 +161,20 @@ export function evaluateEmployeeEligibility(params: {
     };
   }
 
-  // 12. Hard Compliance: Max Daily Working Hours
+  // 12. Hard Compliance: Min Days Off Per Week (workingDays <= 7 - minDaysOffPerWeek)
+  if (
+    complianceRules?.minDaysOffPerWeek &&
+    typeof weeklyDaysWorked === 'number' &&
+    weeklyDaysWorked + 1 > 7 - complianceRules.minDaysOffPerWeek
+  ) {
+    return {
+      eligible: false,
+      reason: 'MIN_DAYS_OFF_VIOLATION',
+      details: `Working ${weeklyDaysWorked + 1} days in week would exceed maximum allowed working days (${7 - complianceRules.minDaysOffPerWeek}) for minDaysOffPerWeek (${complianceRules.minDaysOffPerWeek})`,
+    };
+  }
+
+  // 13. Hard Compliance: Max Daily Working Hours
   if (complianceRules?.maxDailyWorkingHours && shiftTemplate.durationHours > complianceRules.maxDailyWorkingHours) {
     return {
       eligible: false,
@@ -167,7 +183,7 @@ export function evaluateEmployeeEligibility(params: {
     };
   }
 
-  // 13. Hard Compliance: Max Weekly Standard Hours
+  // 14. Hard Compliance: Max Weekly Standard Hours
   if (complianceRules?.maxWeeklyStandardHours && (weeklyHoursWorked + shiftTemplate.durationHours) > complianceRules.maxWeeklyStandardHours) {
     return {
       eligible: false,
@@ -176,19 +192,18 @@ export function evaluateEmployeeEligibility(params: {
     };
   }
 
-  // 14. Hard Compliance: Turnaround Rest Interval
+  // 15. Hard Compliance: Turnaround Rest Interval (Past & Pre-assigned Future)
   if (complianceRules?.minRestIntervalBetweenShiftsHours && complianceRules.preventClashingTurnaround !== false) {
     const minRequiredRest = complianceRules.minRestIntervalBetweenShiftsHours;
 
-    // Check against prior shifts
-    for (const priorShift of existingShifts) {
-      if (priorShift.employeeId !== employee.employeeId) continue;
-      if (priorShift.date < date) {
+    for (const adjacentShift of existingShifts) {
+      if (adjacentShift.employeeId !== employee.employeeId) continue;
+      if (adjacentShift.date < date) {
         const restHours = calculateRestHoursBetweenShifts(
-          priorShift.date,
-          priorShift.startTime,
-          priorShift.endTime,
-          Boolean((priorShift as any).crossMidnight),
+          adjacentShift.date,
+          adjacentShift.startTime,
+          adjacentShift.endTime,
+          Boolean((adjacentShift as any).crossMidnight),
           date,
           shiftTemplate.startTime,
           shiftTemplate.endTime,
@@ -198,7 +213,25 @@ export function evaluateEmployeeEligibility(params: {
           return {
             eligible: false,
             reason: 'REST_VIOLATION',
-            details: `${restHours.toFixed(1)}h rest < required ${minRequiredRest}h after shift on ${priorShift.date}`,
+            details: `${restHours.toFixed(1)}h rest < required ${minRequiredRest}h after shift on ${adjacentShift.date}`,
+          };
+        }
+      } else if (adjacentShift.date > date) {
+        const restHours = calculateRestHoursBetweenShifts(
+          date,
+          shiftTemplate.startTime,
+          shiftTemplate.endTime,
+          Boolean(shiftTemplate.crossMidnight),
+          adjacentShift.date,
+          adjacentShift.startTime,
+          adjacentShift.endTime,
+          Boolean((adjacentShift as any).crossMidnight),
+        );
+        if (restHours < minRequiredRest) {
+          return {
+            eligible: false,
+            reason: 'REST_VIOLATION',
+            details: `${restHours.toFixed(1)}h rest < required ${minRequiredRest}h before pre-assigned shift on ${adjacentShift.date}`,
           };
         }
       }

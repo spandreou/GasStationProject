@@ -1302,22 +1302,26 @@ export const useSchedulerStore = create((set, get) => ({
 
   saveSchedulerConfigV2: async (config) => {
     if (!requireAdmin(get, set)) return false;
-    const validation = validateSchedulerConfig(config);
+    const sanitizedConfig = {
+      ...config,
+      tenantId: getPublicTenantId(),
+    };
+    const validation = validateSchedulerConfig(sanitizedConfig);
     if (!validation.valid) {
       set({ warningMessage: `Μη έγκυρες ρυθμίσεις V2: ${validation.errors.join(' | ')}` });
       return false;
     }
     set({ isSaving: true });
     try {
-      await upsertSchedulerSettings({ tenantId: getPublicTenantId(), schedulerConfigV2: config });
+      await upsertSchedulerSettings({ tenantId: getPublicTenantId(), schedulerConfigV2: sanitizedConfig });
       await recordAuditLog(get, {
         action: 'settings.scheduler_config_v2.update',
         target: { collection: 'scheduler_settings', id: 'default' },
         before: get().schedulerConfigV2,
-        after: config,
+        after: sanitizedConfig,
       });
       set({
-        schedulerConfigV2: config,
+        schedulerConfigV2: sanitizedConfig,
         warningMessage: 'Οι ρυθμίσεις προγραμματισμού V2 αποθηκεύτηκαν.',
       });
       return true;
@@ -2560,12 +2564,15 @@ export const useSchedulerStore = create((set, get) => ({
   },
 
   generateMagicWeek: async () => {
-    if (!requireAdmin(get, set)) return;
+    if (!requireAdmin(get, set)) return false;
 
-    const roleValidation = validateSchedulerRoleConfiguration(get().employees);
-    if (!roleValidation.valid) {
-      set({ warningMessage: roleValidation.message });
-      return;
+    const isV2 = Boolean(get().schedulerConfigV2);
+    if (!isV2) {
+      const roleValidation = validateSchedulerRoleConfiguration(get().employees);
+      if (!roleValidation.valid) {
+        set({ warningMessage: roleValidation.message });
+        return false;
+      }
     }
 
     const weekDays = getWeekDays(get().weekStart);
@@ -2592,8 +2599,8 @@ export const useSchedulerStore = create((set, get) => ({
         schedulerConfig: get().schedulerConfigV2 || undefined,
       });
 
-      if (validation && validation.valid === false) {
-        const errorMessages = validation.violations?.map((v) => v.message).filter(Boolean) || [];
+      if (!validation || validation.valid !== true) {
+        const errorMessages = validation?.violations?.map((v) => v.message).filter(Boolean) || [];
         set({
           warningMessage: errorMessages.length
             ? errorMessages.join(' | ')
@@ -2726,8 +2733,8 @@ export const useSchedulerStore = create((set, get) => ({
         schedulerConfig: get().schedulerConfigV2 || undefined,
       });
 
-      if (validation && validation.valid === false) {
-        const errorMessages = validation.violations?.map((v) => v.message).filter(Boolean) || [];
+      if (!validation || validation.valid !== true) {
+        const errorMessages = validation?.violations?.map((v) => v.message).filter(Boolean) || [];
         set({
           warningMessage: errorMessages.length
             ? errorMessages.join(' | ')
@@ -2851,3 +2858,5 @@ export const useSchedulerStore = create((set, get) => ({
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   window.__gasStationSchedulerStore = useSchedulerStore;
 }
+
+export default useSchedulerStore;

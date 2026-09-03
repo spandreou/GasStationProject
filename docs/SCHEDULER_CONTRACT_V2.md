@@ -4,8 +4,9 @@
 - **Document Version:** `2.0.0`
 - **Schema Version:** `2`
 - **Date:** 30 August 2026
-- **Status:** **AUTHORITATIVE SCHEDULER PRODUCT SPECIFICATION**
-- **Supersedes:** Legacy fixed 4–6 fuel-station topology contracts for general SaaS scheduling, while preserving 100% backward compatibility for existing BP Kallis pilot data.
+- **Status:** **IMPLEMENTED_TESTED WITH EXPLICIT DEFERRED FIELDS**
+- **Roadmap position:** approved cross-cutting scheduler hardening; it is not a new numbered roadmap phase.
+- **Compatibility:** the legacy scheduler path and PR #41 regression suite remain active and passing for existing BP Kallis inputs. V2 is selected only when V2 configuration is present or generalized normalization is required.
 
 ---
 
@@ -20,6 +21,23 @@ ShiftOryx is a multi-tenant business operating system serving diverse business c
 - `OTHER` (safe generic customizable scheduling)
 
 The scheduling engine evolves from a narrowly fixed 4–6 employee topology into a **tenant-configurable constraint and assignment engine**.
+
+## Implementation Status Matrix
+
+| Capability | Status | Evidence boundary |
+| --- | --- | --- |
+| Tenant-scoped `SchedulerConfigV2` normalization and validation | `IMPLEMENTED_TESTED` | deterministic contract suite and production store integration |
+| Scheduler-local operating windows, shift templates and coverage slots | `IMPLEMENTED_TESTED` | OWNER UI, config validation and engine tests |
+| `minHeadcount` / `maxHeadcount` | `IMPLEMENTED_TESTED` hard constraints | independent post-generation validator |
+| `targetHeadcount` | `SOFT_OBJECTIVE` | valid schedule with `TARGET_COVERAGE_NOT_MET` warning |
+| `minDaysOffPerWeek` | `IMPLEMENTED_TESTED` hard constraint | eligibility plus independent validator |
+| `targetDaysOffPerWeek` | `SOFT_OBJECTIVE` | candidate scoring after all hard filters |
+| `shiftTemplateId` / `demandSlotId` | `IMPLEMENTED_TESTED` | every generated V2 shift carries explicit identity |
+| Manual work overrides during auto-generation | `IMPLEMENTED_TESTED` hard validation | the real app adapter includes preserved manual work in the final week/month candidate and blocks automatic persistence on hard violations |
+| Week/month zero-write persistence | `IMPLEMENTED_TESTED` | one shared production helper gates replace, history, public projection and audit boundaries |
+| `substituteRules.replacementStrategy` enum | `DEFERRED_NOT_ACTIVE` | retained for forward-compatible schema only; no UI or scheduling effect |
+| Phase 9 general SaaS template catalog | `DEFERRED_TO_PHASE_9` | V2 shift templates are scheduler-local and do not implement the catalog/admin system |
+| Billing, entitlements and multistore lifecycle | `DEFERRED_TO_OWNING_PHASES` | not implemented or changed by Scheduler V2 |
 
 ---
 
@@ -67,15 +85,15 @@ Each tenant defines its own:
 - Skill / role requirements where applicable.
 - Rest and compliance rules (minimum rest interval between shifts, target days off, maximum consecutive working days).
 - Sunday and holiday participation policies.
-- Absence replacement and substitute policies.
+- Absence/unavailability constraints. Strategy selection remains schema-only and deferred in this release.
 
 No fuel-station-specific topology is assumed globally.
 
 ### Contract 2: General Employee Capacity Model
 - The engine removes the universal 4–6 employee limit.
 - Small teams (1, 2, 3 employees) are fully supported if their tenant rules are mathematically satisfiable (or produce explicit, clear coverage gap diagnostics if unsatisfiable).
-- Larger teams (7, 8, 10, 15, 20, 30+ employees) scale smoothly with sub-millisecond execution.
-- Technical maximum is bounded at 50 active employees per tenant workspace based on Firestore document limits and UI grid rendering performance, not algorithmic limitations.
+- Larger teams (7, 8, 10, 15, 20, 30+ employees) are covered by deterministic tests.
+- The current benchmark suite is tested up to 50 employees over 30 days. Observed local runs are in the tens of milliseconds; this is evidence of the tested range, not a claimed Firestore or product maximum.
 
 ### Contract 3: Automatic Employee Addition Lifecycle
 - When an employee is `ACTIVE`, scheduling-enabled, and within their employment/seasonal range, the employee **must automatically participate** in subsequent schedule generation.
@@ -85,7 +103,7 @@ No fuel-station-specific topology is assumed globally.
 ### Contract 4: Non-Destructive Employee Removal & Deactivation
 - Deactivating or archiving an employee:
   1. Excludes them from all future schedule generation pools (0 future shifts).
-  2. **100% preserves historical schedules, exports, and attendance records**. Historical shifts are never deleted.
+  2. Preserves historical schedule fixtures, exports, and attendance records; deactivation changes future eligibility and does not delete history.
 - If future persisted schedules contain shifts for a deactivated employee:
   - The system surfaces an explicit conflict diagnostic (`DEACTIVATED_EMPLOYEE_FUTURE_ASSIGNMENT`).
   - It requires admin regeneration or reassignment.
@@ -112,7 +130,7 @@ No fuel-station-specific topology is assumed globally.
 ### Contract 8: Absence & Availability Precedence
 - Approved absences (`LEAVE`, `SICK`, `UNPAID_REST`, `OTHER`) and fixed days off take absolute precedence over shift generation.
 - An absent or unavailable employee cannot receive an overlapping work assignment.
-- Gap replacement follows tenant policy (`EXTRA_FIRST`, `EQUAL_HOURS`, `ROLE_MATCH`, `MANUAL_ONLY`).
+- The schema retains `EXTRA_FIRST`, `EQUAL_HOURS`, `ROLE_MATCH` and `MANUAL_ONLY` for forward compatibility, but these strategies are `DEFERRED_NOT_ACTIVE` in this release and are not exposed as an active tenant control.
 - Substitutes on standby receive `-`, never false statutory rest `ΑΝ`.
 
 ### Contract 9: Full Validation Before Persistence (Zero Partial Persistence)
@@ -133,6 +151,7 @@ No fuel-station-specific topology is assumed globally.
   2. Sunday / weekend rotation balance (penalizes consecutive Sundays).
   3. Continuous stretch spacing (prevents fatigue from 5+ consecutive days).
   4. Minimum rest turnaround protection ($\ge 11\text{h}$ mandatory, $\ge 14\text{h}$ preferred).
+- `targetDaysOffPerWeek` adds a soft cost when a candidate would exceed the preferred working-day count. It never bypasses hard coverage, role, skill, rest, hours or minimum-days-off constraints.
 - Fairness is subordinate to hard labor and coverage constraints.
 
 ### Contract 12: Visible & Safe Failure (No Silent Fallback)
@@ -240,5 +259,13 @@ export interface SchedulerConfigV2 {
 ## Backward Compatibility & Migration Guarantee
 
 1. **Zero-Mutation Migration:** Legacy settings documents in `tenants/bp-kallis/settings/scheduler` and employee records are normalized in-memory via `normalizeSchedulerConfig`.
-2. **BP Kallis Equivalence:** The normalized V2 configuration produces identical shift allocations, Sunday rotations, and gap replacement behavior as the legacy baseline.
+2. **BP Kallis Regression Boundary:** the unchanged legacy path is verified by `npm run test:new-employee-scheduler` and the scheduler regression suites. This is the exact tested compatibility claim; no unproved mathematical-equivalence claim is made.
 3. **Opportunistic V2 Persistence:** When an owner saves settings via the UI, the record is written with `schemaVersion: 2` containing the canonical V2 structure.
+
+## Scope And Authorization Boundary
+
+- Scheduler configuration is stored under the tenant-scoped scheduler settings document. In the current data model a store workspace is a tenant; Phase 8 owns any later store-lifecycle changes.
+- Scheduler settings writes remain protected by active `OWNER` membership and reject active Platform Admin identities. Hostname selects tenant context and never authorizes access.
+- Direct OWNER manual editing remains available by product contract; violations stay visible. The hard-validation claim in this document is specifically the automatic week/month generation candidate, which includes preserved manual work and performs zero generation writes when that final candidate is invalid.
+- Scheduler-local `shiftTemplates` are staffing definitions only. They do not implement or claim ownership of the Phase 9 presentation/template catalog.
+- This work requires no Firebase deployment, Vercel production deployment, DNS change, production data write, production auth change or production scheduler-settings mutation.

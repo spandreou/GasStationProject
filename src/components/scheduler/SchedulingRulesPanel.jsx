@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import StateNotice from '../feedback/StateNotice';
 import {
   deriveShiftDurationHours,
+  createSchedulerItemId,
   getDefaultCategoryConfig,
   normalizeSchedulerConfig,
   validateSchedulerConfig,
@@ -51,6 +52,38 @@ const SUNDAY_MODE_OPTIONS = [
   { value: 'CLOSED', label: 'Κλειστά την Κυριακή' },
 ];
 
+const SHIFT_TYPE_OPTIONS = [
+  'MORNING',
+  'INTERMEDIATE',
+  'AFTERNOON',
+  'NIGHT',
+  'SPLIT',
+  'CUSTOM',
+  'SPECIAL',
+];
+
+const DEFAULT_SCHEDULING_ROLES = [
+  'AUTO',
+  'CORE_A',
+  'CORE_B',
+  'FLEX_A',
+  'FLEX_B',
+  'INTERMEDIATE',
+  'CUSTOM',
+  'EXTRA_A',
+  'EXTRA_B',
+];
+
+const AUTHORIZATION_ROLES = new Set(['OWNER', 'ADMIN', 'MANAGER', 'SUPER_ADMIN', 'PLATFORM_ADMIN']);
+
+function normalizeBusinessRole(value) {
+  return `${value || ''}`.trim().toUpperCase().replace(/[\s-]+/g, '_');
+}
+
+function parseTokenList(value) {
+  return [...new Set(`${value || ''}`.split(',').map((token) => token.trim()).filter(Boolean))];
+}
+
 function buildEmployeeRuleDraft(employee) {
   const legacyRole = employee.scheduleRole || employee.roleType || 'custom';
   return {
@@ -96,6 +129,13 @@ export default function SchedulingRulesPanel({
     () => (employees || []).filter((employee) => employee?.isActive !== false),
     [employees],
   );
+
+  const businessRoleOptions = useMemo(() => {
+    const discovered = activeEmployees
+      .map((employee) => normalizeBusinessRole(employee.scheduleRole || employee.roleType))
+      .filter((role) => role && !AUTHORIZATION_ROLES.has(role));
+    return [...new Set([...DEFAULT_SCHEDULING_ROLES, ...discovered])].sort();
+  }, [activeEmployees]);
 
   useEffect(() => {
     if (storeV2Config) {
@@ -243,6 +283,7 @@ export default function SchedulingRulesPanel({
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
+            data-testid={`scheduler-tab-${tab.id}`}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
               activeTab === tab.id
                 ? 'bg-brand-500 text-white shadow-sm'
@@ -284,9 +325,11 @@ export default function SchedulingRulesPanel({
                 {day.isOpen ? (
                   <div className="mt-2 space-y-2">
                     {(day.windows || []).map((w, wIdx) => (
-                      <div key={wIdx} className="flex items-center gap-1 text-xs">
+                      <div key={wIdx} className="rounded-lg border border-slate-200 p-2 text-xs dark:border-slate-700">
+                        <div className="flex flex-wrap items-center gap-1">
                         <input
                           type="time"
+                          aria-label={`${WEEKDAY_NAMES_GR[day.weekday] || day.weekday} παράθυρο ${wIdx + 1} έναρξη`}
                           value={w.openTime}
                           onChange={(e) => {
                             const nextDays = [...v2Draft.operatingDays];
@@ -300,6 +343,7 @@ export default function SchedulingRulesPanel({
                         <span>έως</span>
                         <input
                           type="time"
+                          aria-label={`${WEEKDAY_NAMES_GR[day.weekday] || day.weekday} παράθυρο ${wIdx + 1} λήξη`}
                           value={w.closeTime}
                           onChange={(e) => {
                             const nextDays = [...v2Draft.operatingDays];
@@ -310,8 +354,54 @@ export default function SchedulingRulesPanel({
                           }}
                           className="rounded border border-slate-300 px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
                         />
+                        <button
+                          type="button"
+                          aria-label={`Αφαίρεση ${WEEKDAY_NAMES_GR[day.weekday] || day.weekday} παραθύρου ${wIdx + 1}`}
+                          onClick={() => {
+                            const nextDays = [...v2Draft.operatingDays];
+                            const nextWindows = day.windows.filter((_, index) => index !== wIdx);
+                            nextDays[dIdx] = { ...day, windows: nextWindows };
+                            setV2Draft({ ...v2Draft, operatingDays: nextDays });
+                          }}
+                          className="ml-auto text-xs font-semibold text-red-600 hover:text-red-800"
+                        >
+                          Αφαίρεση
+                        </button>
+                        </div>
+                        <label className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            aria-label={`${WEEKDAY_NAMES_GR[day.weekday] || day.weekday} παράθυρο ${wIdx + 1} περνά τα μεσάνυχτα`}
+                            checked={Boolean(w.crossMidnight)}
+                            onChange={(e) => {
+                              const nextDays = [...v2Draft.operatingDays];
+                              const nextWindows = [...day.windows];
+                              nextWindows[wIdx] = { ...w, crossMidnight: e.target.checked };
+                              nextDays[dIdx] = { ...day, windows: nextWindows };
+                              setV2Draft({ ...v2Draft, operatingDays: nextDays });
+                            }}
+                          />
+                          Περνά τα μεσάνυχτα
+                        </label>
                       </div>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextDays = [...v2Draft.operatingDays];
+                        nextDays[dIdx] = {
+                          ...day,
+                          windows: [
+                            ...(day.windows || []),
+                            { openTime: '09:00', closeTime: '17:00', crossMidnight: false },
+                          ],
+                        };
+                        setV2Draft({ ...v2Draft, operatingDays: nextDays });
+                      }}
+                      className="rounded-md border border-brand-300 px-2 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-700 dark:text-brand-200 dark:hover:bg-brand-950/30"
+                    >
+                      + Προσθήκη παραθύρου
+                    </button>
                   </div>
                 ) : (
                   <p className="mt-2 text-xs italic text-slate-500">Κλειστά</p>
@@ -332,7 +422,7 @@ export default function SchedulingRulesPanel({
             <button
               type="button"
               onClick={() => {
-                const newId = `shift-custom-${Date.now()}`;
+                const newId = createSchedulerItemId('shift');
                 const newTpl = {
                   id: newId,
                   label: 'Νέα Βάρδια',
@@ -392,6 +482,7 @@ export default function SchedulingRulesPanel({
                     <div className="mt-1 flex items-center gap-1">
                       <input
                         type="time"
+                        aria-label="Έναρξη βάρδιας"
                         value={tpl.startTime}
                         onChange={(e) => {
                           const nextTemplates = [...v2Draft.shiftTemplates];
@@ -405,6 +496,7 @@ export default function SchedulingRulesPanel({
                       <span>-</span>
                       <input
                         type="time"
+                        aria-label="Λήξη βάρδιας"
                         value={tpl.endTime}
                         onChange={(e) => {
                           const nextTemplates = [...v2Draft.shiftTemplates];
@@ -421,6 +513,7 @@ export default function SchedulingRulesPanel({
                     <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Διάρκεια (Ώρες)</label>
                     <input
                       type="number"
+                      aria-label="Διάρκεια (Ώρες)"
                       step="0.5"
                       value={tpl.durationHours}
                       readOnly
@@ -442,6 +535,7 @@ export default function SchedulingRulesPanel({
                     </label>
                     <button
                       type="button"
+                      aria-label={`Διαγραφή προτύπου ${tpl.label || tpl.id}`}
                       onClick={() => {
                         setV2Draft({
                           ...v2Draft,
@@ -454,6 +548,89 @@ export default function SchedulingRulesPanel({
                     </button>
                   </div>
                 </div>
+                <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4 dark:border-slate-700">
+                  <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Τύπος βάρδιας
+                    <select
+                      value={tpl.shiftType}
+                      onChange={(e) => {
+                        const nextTemplates = [...v2Draft.shiftTemplates];
+                        nextTemplates[tIdx] = { ...tpl, shiftType: e.target.value };
+                        setV2Draft({ ...v2Draft, shiftTemplates: nextTemplates });
+                      }}
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                    >
+                      {SHIFT_TYPE_OPTIONS.map((shiftType) => (
+                        <option key={shiftType} value={shiftType}>{shiftType}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Μη αμειβόμενο διάλειμμα (λεπτά)
+                    <input
+                      type="number"
+                      min="0"
+                      max="720"
+                      step="5"
+                      value={tpl.unpaidBreakMinutes || 0}
+                      onChange={(e) => {
+                        const nextTemplates = [...v2Draft.shiftTemplates];
+                        const unpaidBreakMinutes = Number(e.target.value);
+                        nextTemplates[tIdx] = {
+                          ...tpl,
+                          unpaidBreakMinutes,
+                          durationHours: deriveShiftDurationHours(
+                            tpl.startTime,
+                            tpl.endTime,
+                            Boolean(tpl.crossMidnight),
+                            unpaidBreakMinutes,
+                          ),
+                        };
+                        setV2Draft({ ...v2Draft, shiftTemplates: nextTemplates });
+                      }}
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-2 self-end rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(tpl.crossMidnight)}
+                      onChange={(e) => {
+                        const nextTemplates = [...v2Draft.shiftTemplates];
+                        const crossMidnight = e.target.checked;
+                        nextTemplates[tIdx] = {
+                          ...tpl,
+                          crossMidnight,
+                          durationHours: deriveShiftDurationHours(
+                            tpl.startTime,
+                            tpl.endTime,
+                            crossMidnight,
+                            tpl.unpaidBreakMinutes,
+                          ),
+                        };
+                        setV2Draft({ ...v2Draft, shiftTemplates: nextTemplates });
+                      }}
+                    />
+                    Περνά τα μεσάνυχτα
+                  </label>
+                  <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Απαιτούμενα skills/roles (με κόμμα)
+                    <input
+                      type="text"
+                      value={(tpl.requiredSkillsOrRoles || []).join(', ')}
+                      onChange={(e) => {
+                        const nextTemplates = [...v2Draft.shiftTemplates];
+                        nextTemplates[tIdx] = { ...tpl, requiredSkillsOrRoles: parseTokenList(e.target.value) };
+                        setV2Draft({ ...v2Draft, shiftTemplates: nextTemplates });
+                      }}
+                      placeholder="BARISTA_CERTIFIED, CASHIER"
+                      className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 break-all text-[10px] text-slate-500">
+                  Stable ID: <code>{tpl.id}</code>
+                </p>
               </div>
             ))}
           </div>
@@ -469,17 +646,58 @@ export default function SchedulingRulesPanel({
           <div className="space-y-3">
             {(v2Draft.coverageRequirements || []).map((pattern, pIdx) => (
               <div key={pattern.weekday} className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
-                <div className="mb-2 font-bold text-slate-900 dark:text-white">
-                  {WEEKDAY_NAMES_GR[pattern.weekday] || pattern.weekday}
+                <div className="mb-2 flex items-center justify-between gap-2 font-bold text-slate-900 dark:text-white">
+                  <span>{WEEKDAY_NAMES_GR[pattern.weekday] || pattern.weekday}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstTemplate = (v2Draft.shiftTemplates || []).find((template) => template.isActive !== false);
+                      if (!firstTemplate) return;
+                      const nextPatterns = [...v2Draft.coverageRequirements];
+                      nextPatterns[pIdx] = {
+                        ...pattern,
+                        slots: [
+                          ...(pattern.slots || []),
+                          {
+                            shiftTemplateId: firstTemplate.id,
+                            minHeadcount: 1,
+                            targetHeadcount: 1,
+                            maxHeadcount: 1,
+                            optionalCandidateRoles: [],
+                          },
+                        ],
+                      };
+                      setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                    }}
+                    className="rounded border border-brand-300 px-2 py-1 text-[11px] font-semibold text-brand-700 dark:border-brand-700 dark:text-brand-200"
+                  >
+                    + Προσθήκη slot
+                  </button>
                 </div>
                 <div className="space-y-2">
                   {(pattern.slots || []).map((slot, sIdx) => (
-                    <div key={sIdx} className="flex flex-wrap items-center gap-3 text-xs">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {v2Draft.shiftTemplates?.find((t) => t.id === slot.shiftTemplateId)?.label || slot.shiftTemplateId}
-                      </span>
-                      <label className="inline-flex items-center gap-1">
-                        <span>Ελάχιστοι:</span>
+                    <div key={`${slot.shiftTemplateId}-${sIdx}`} className="grid gap-2 rounded-lg border border-slate-200 p-2 text-xs md:grid-cols-2 xl:grid-cols-4 dark:border-slate-700">
+                      <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                        Πρότυπο βάρδιας
+                        <select
+                          value={slot.shiftTemplateId}
+                          onChange={(e) => {
+                            const nextPatterns = [...v2Draft.coverageRequirements];
+                            const nextSlots = [...pattern.slots];
+                            nextSlots[sIdx] = { ...slot, shiftTemplateId: e.target.value };
+                            nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
+                            setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                          }}
+                          className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          {(v2Draft.shiftTemplates || []).map((template) => (
+                            <option key={template.id} value={template.id}>{template.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="grid grid-cols-3 gap-1">
+                      <label className="text-[11px]">
+                        <span>Min (HARD)</span>
                         <input
                           type="number"
                           min="0"
@@ -492,11 +710,11 @@ export default function SchedulingRulesPanel({
                             nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
                             setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
                           }}
-                          className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-800"
+                          className="mt-1 w-full rounded border border-slate-300 px-1 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
                         />
                       </label>
-                      <label className="inline-flex items-center gap-1">
-                        <span>Στόχος:</span>
+                      <label className="text-[11px]">
+                        <span>Target (SOFT)</span>
                         <input
                           type="number"
                           min="0"
@@ -509,9 +727,81 @@ export default function SchedulingRulesPanel({
                             nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
                             setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
                           }}
-                          className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-800"
+                          className="mt-1 w-full rounded border border-slate-300 px-1 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
                         />
                       </label>
+                      <label className="text-[11px]">
+                        <span>Max (HARD)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={slot.maxHeadcount ?? ''}
+                          onChange={(e) => {
+                            const nextPatterns = [...v2Draft.coverageRequirements];
+                            const nextSlots = [...pattern.slots];
+                            nextSlots[sIdx] = {
+                              ...slot,
+                              maxHeadcount: e.target.value === '' ? undefined : Number(e.target.value),
+                            };
+                            nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
+                            setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                          }}
+                          className="mt-1 w-full rounded border border-slate-300 px-1 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                        />
+                      </label>
+                      </div>
+                      <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                        Απαιτούμενος scheduling role
+                        <select
+                          value={slot.requiredRole || ''}
+                          onChange={(e) => {
+                            const nextPatterns = [...v2Draft.coverageRequirements];
+                            const nextSlots = [...pattern.slots];
+                            nextSlots[sIdx] = { ...slot, requiredRole: e.target.value || undefined };
+                            nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
+                            setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                          }}
+                          className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          <option value="">Χωρίς περιορισμό</option>
+                          {businessRoleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                        Προαιρετικοί scheduling roles
+                        <select
+                          multiple
+                          value={slot.optionalCandidateRoles || []}
+                          onChange={(e) => {
+                            const nextPatterns = [...v2Draft.coverageRequirements];
+                            const nextSlots = [...pattern.slots];
+                            nextSlots[sIdx] = {
+                              ...slot,
+                              optionalCandidateRoles: Array.from(e.target.selectedOptions, (option) => option.value),
+                            };
+                            nextPatterns[pIdx] = { ...pattern, slots: nextSlots };
+                            setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                          }}
+                          className="mt-1 h-20 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          {businessRoleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextPatterns = [...v2Draft.coverageRequirements];
+                          nextPatterns[pIdx] = {
+                            ...pattern,
+                            slots: pattern.slots.filter((_, index) => index !== sIdx),
+                          };
+                          setV2Draft({ ...v2Draft, coverageRequirements: nextPatterns });
+                        }}
+                        className="justify-self-start text-xs font-semibold text-red-600 hover:text-red-800"
+                      >
+                        Αφαίρεση slot
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -528,12 +818,37 @@ export default function SchedulingRulesPanel({
             Κανόνες Συμμόρφωσης & Εργατικής Νομοθεσίας
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+            <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-700 dark:bg-sky-950/20">
               <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                Ελάχιστα Ρεπό ανά Εβδομάδα
+                Στόχος Ρεπό ανά Εβδομάδα (SOFT)
               </label>
               <input
                 type="number"
+                aria-label="Στόχος Ρεπό ανά Εβδομάδα (SOFT)"
+                min="1"
+                max="6"
+                value={v2Draft.complianceRules?.targetDaysOffPerWeek || 1}
+                onChange={(e) =>
+                  setV2Draft({
+                    ...v2Draft,
+                    complianceRules: {
+                      ...v2Draft.complianceRules,
+                      targetDaysOffPerWeek: Number(e.target.value),
+                    },
+                  })
+                }
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800"
+              />
+              <p className="mt-1 text-[10px] text-slate-600 dark:text-slate-400">Προτίμηση fairness· δεν υπερισχύει hard κάλυψης ή συμμόρφωσης.</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                Ελάχιστα Ρεπό ανά Εβδομάδα (HARD)
+              </label>
+              <input
+                type="number"
+                aria-label="Ελάχιστα Ρεπό ανά Εβδομάδα (HARD)"
                 min="1"
                 max="6"
                 value={v2Draft.complianceRules?.minDaysOffPerWeek || 1}
@@ -556,6 +871,7 @@ export default function SchedulingRulesPanel({
               </label>
               <input
                 type="number"
+                aria-label="Μέγιστες Συνεχόμενες Ημέρες Εργασίας"
                 min="1"
                 max="14"
                 value={v2Draft.complianceRules?.maxConsecutiveWorkingDays || 6}
@@ -578,6 +894,7 @@ export default function SchedulingRulesPanel({
               </label>
               <input
                 type="number"
+                aria-label="Ελάχιστη Ανάπαυση μεταξύ Βαρδιών (Ώρες)"
                 min="8"
                 max="24"
                 step="0.5"
@@ -601,6 +918,7 @@ export default function SchedulingRulesPanel({
               </label>
               <input
                 type="number"
+                aria-label="Μέγιστες Ημερήσιες Ώρες"
                 min="1"
                 max="24"
                 value={v2Draft.complianceRules?.maxDailyWorkingHours || 12.0}
@@ -623,6 +941,7 @@ export default function SchedulingRulesPanel({
               </label>
               <input
                 type="number"
+                aria-label="Μέγιστες Εβδομαδιαίες Ώρες"
                 min="10"
                 max="84"
                 value={v2Draft.complianceRules?.maxWeeklyStandardHours || 48.0}
@@ -654,6 +973,7 @@ export default function SchedulingRulesPanel({
                 Λειτουργία Κυριακής
               </label>
               <select
+                aria-label="Λειτουργία Κυριακής"
                 value={v2Draft.sundayAndHolidays?.sundayMode || 'CYCLIC_FAIR'}
                 onChange={(e) =>
                   setV2Draft({
@@ -674,12 +994,39 @@ export default function SchedulingRulesPanel({
               </select>
             </div>
 
+            {v2Draft.sundayAndHolidays?.sundayMode !== 'CLOSED' && (
+              <div className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+                <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Πρότυπο βάρδιας Κυριακής/Αργίας
+                </label>
+                <select
+                  aria-label="Πρότυπο βάρδιας Κυριακής/Αργίας"
+                  value={v2Draft.sundayAndHolidays?.sundayShiftTemplateId || ''}
+                  onChange={(e) =>
+                    setV2Draft({
+                      ...v2Draft,
+                      sundayAndHolidays: {
+                        ...v2Draft.sundayAndHolidays,
+                        sundayShiftTemplateId: e.target.value,
+                      },
+                    })
+                  }
+                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800"
+                >
+                  {(v2Draft.shiftTemplates || []).map((template) => (
+                    <option key={template.id} value={template.id}>{template.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {v2Draft.sundayAndHolidays?.sundayMode === 'FIXED_ASSIGNMENT' && (
               <div className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
                 <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Σταθερός Υπάλληλος Κυριακής
                 </label>
                 <select
+                  aria-label="Σταθερός Υπάλληλος Κυριακής"
                   value={v2Draft.sundayAndHolidays?.fixedSundayEmployeeIds?.[0] || ''}
                   onChange={(e) =>
                     setV2Draft({
@@ -702,6 +1049,29 @@ export default function SchedulingRulesPanel({
               </div>
             )}
 
+            <div className="rounded-xl border border-slate-200 bg-white/60 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                Συμμετέχοντες scheduling roles
+              </label>
+              <select
+                multiple
+                aria-label="Συμμετέχοντες scheduling roles"
+                value={v2Draft.sundayAndHolidays?.participatingRoleTypes || []}
+                onChange={(e) =>
+                  setV2Draft({
+                    ...v2Draft,
+                    sundayAndHolidays: {
+                      ...v2Draft.sundayAndHolidays,
+                      participatingRoleTypes: Array.from(e.target.selectedOptions, (option) => option.value),
+                    },
+                  })
+                }
+                className="mt-1 h-28 w-full rounded border border-slate-300 px-2 py-1.5 text-xs dark:border-slate-600 dark:bg-slate-800"
+              >
+                {businessRoleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+              </select>
+            </div>
+
             <div className="rounded-xl border border-slate-200 bg-white/60 p-3 sm:col-span-2 dark:border-slate-700 dark:bg-slate-900/50">
               <label className="inline-flex items-center gap-2 text-xs text-slate-800 dark:text-slate-200">
                 <input
@@ -718,6 +1088,38 @@ export default function SchedulingRulesPanel({
                   }
                 />
                 Αποφυγή συνεχόμενων Κυριακών στον ίδιο εργαζόμενο
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-800 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={Boolean(v2Draft.sundayAndHolidays?.holidaysTreatedAsSundays)}
+                  onChange={(e) =>
+                    setV2Draft({
+                      ...v2Draft,
+                      sundayAndHolidays: {
+                        ...v2Draft.sundayAndHolidays,
+                        holidaysTreatedAsSundays: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                Οι δημόσιες αργίες ακολουθούν την πολιτική Κυριακής
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-800 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={Boolean(v2Draft.sundayAndHolidays?.closedOnPublicHolidays)}
+                  onChange={(e) =>
+                    setV2Draft({
+                      ...v2Draft,
+                      sundayAndHolidays: {
+                        ...v2Draft.sundayAndHolidays,
+                        closedOnPublicHolidays: e.target.checked,
+                      },
+                    })
+                  }
+                />
+                Κλειστά στις δημόσιες αργίες
               </label>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import type { SchedulerConfigV2 } from './configV2.ts';
+
 export type BaseScheduleRole = 'CORE_A' | 'CORE_B' | 'FLEX_A' | 'FLEX_B';
 export type ExtraScheduleRole = 'EXTRA_A' | 'EXTRA_B';
 export type ScheduleRole = BaseScheduleRole | ExtraScheduleRole | string;
@@ -82,8 +84,12 @@ export type GeneratedShift = {
   employeeName: string;
   scheduleRole: ScheduleRole;
   shiftType: ShiftType;
+  shiftTemplateId?: string;
+  demandSlotId?: string;
   startTime: string;
   endTime: string;
+  crossMidnight?: boolean;
+  durationHours?: number;
   source:
     | 'BASE'
     | 'SUNDAY_ROTATION'
@@ -143,7 +149,7 @@ export type GenerateScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences?: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
-  schedulerConfig?: any;
+  schedulerConfig?: SchedulerConfigV2;
   rules?: {
     weeklyRotationEnabled?: boolean;
     avoidConsecutiveSundays?: boolean;

@@ -30,6 +30,8 @@ export type ReplacementStrategy =
   | 'ROLE_MATCH'
   | 'MANUAL_ONLY';
 
+export const REPLACEMENT_STRATEGY_STATUS = 'DEFERRED_NOT_ACTIVE' as const;
+
 export interface TimeWindow {
   openTime: string;
   closeTime: string;
@@ -139,6 +141,72 @@ export interface SchedulerConfigV2 {
   updatedBy?: string;
 }
 
+const AUTHORIZATION_ROLE_TOKENS = new Set([
+  'OWNER',
+  'ADMIN',
+  'MANAGER',
+  'SUPER_ADMIN',
+  'PLATFORM_ADMIN',
+  'SHIFTORYX_ADMIN',
+]);
+let fallbackSchedulerItemIdCounter = 0;
+
+function normalizeSchedulingToken(value: unknown): string {
+  return `${value || ''}`.trim().toUpperCase().replace(/[\s-]+/g, '_');
+}
+
+function isAuthorizationRoleToken(value: unknown): boolean {
+  return AUTHORIZATION_ROLE_TOKENS.has(normalizeSchedulingToken(value));
+}
+
+export function createSchedulerItemId(prefix = 'item'): string {
+  const safePrefix = `${prefix || 'item'}`
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return `${safePrefix}-${randomUuid}`;
+
+  fallbackSchedulerItemIdCounter += 1;
+  return `${safePrefix}-${Date.now().toString(36)}-${fallbackSchedulerItemIdCounter.toString(36)}`;
+}
+
+export function mergeSchedulerConfigSpecialDays(
+  config: SchedulerConfigV2,
+  rawSpecialDays: Record<string, unknown> = {},
+): SchedulerConfigV2 {
+  const normalizedSpecialDays: Record<string, SpecialDayOverride> = {
+    ...(config?.specialDaysByDate || {}),
+  };
+  for (const [date, value] of Object.entries(rawSpecialDays || {})) {
+    const raw = (value || {}) as Partial<SpecialDayOverride> & {
+      isSpecialDay?: boolean;
+      operatingStartTime?: string;
+      operatingEndTime?: string;
+    };
+    const operatingWindows = Array.isArray(raw.operatingWindows)
+      ? raw.operatingWindows.map((window) => ({ ...window }))
+      : raw.operatingStartTime && raw.operatingEndTime
+        ? [{ openTime: raw.operatingStartTime, closeTime: raw.operatingEndTime }]
+        : undefined;
+    normalizedSpecialDays[date] = {
+      date,
+      isHoliday: Boolean(raw.isHoliday),
+      isSpecialOperatingHours: Boolean(raw.isSpecialOperatingHours ?? raw.isSpecialDay),
+      label: raw.label || (raw.isHoliday ? 'Αργία' : 'Ειδικό Ωράριο'),
+      operatingWindows,
+      customShiftTemplateIds: raw.customShiftTemplateIds,
+      notes: raw.notes,
+    };
+  }
+
+  return {
+    ...config,
+    specialDaysByDate: normalizedSpecialDays,
+  };
+}
+
 export function getDefaultCategoryConfig(
   tenantId = 'default',
   category: BusinessCategory = 'FUEL_STATION'
@@ -239,7 +307,9 @@ export function getDefaultCategoryConfig(
       sundayMode: isSalon ? 'CLOSED' : 'CYCLIC_FAIR',
       sundayShiftTemplateId: isFuel ? 'sunday-12h' : 'morning',
       avoidConsecutiveSundays: true,
-      participatingRoleTypes: ['CORE_A', 'CORE_B', 'FLEX_A', 'FLEX_B', 'EXTRA_A', 'EXTRA_B'],
+      participatingRoleTypes: isFuel
+        ? ['CORE_A', 'CORE_B', 'FLEX_A', 'FLEX_B', 'EXTRA_A', 'EXTRA_B']
+        : ['CORE_A', 'CORE_B', 'FLEX_A', 'FLEX_B', 'EXTRA_A', 'EXTRA_B', 'STAFF', 'BARISTA', 'WAITER', 'CHEF', 'CASHIER', 'REGULAR_WORKER', 'ROLE_A', 'ROLE_B', 'ROLE_C', 'AUTO'],
       holidaysTreatedAsSundays: false,
       closedOnPublicHolidays: false,
     },
@@ -331,6 +401,9 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
           if (w.openTime === w.closeTime) {
             errors.push(`operatingDays.${d.weekday} window has zero duration: ${w.openTime}-${w.closeTime}`);
           }
+          if (w.crossMidnight && w.openTime < w.closeTime) {
+            errors.push(`operatingDays.${d.weekday} window has crossMidnight: true but openTime (${w.openTime}) is before closeTime (${w.closeTime})`);
+          }
           if (!w.crossMidnight && w.openTime > w.closeTime) {
             errors.push(`operatingDays.${d.weekday} window openTime (${w.openTime}) > closeTime (${w.closeTime}) without crossMidnight flag`);
           }
@@ -371,8 +444,13 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
         errors.push(`Shift template ${t.id} must have valid startTime and endTime in HH:mm format`);
       }
 
-      if (typeof t.unpaidBreakMinutes === 'number' && t.unpaidBreakMinutes < 0) {
-        errors.push(`Shift template ${t.id} unpaidBreakMinutes must be >= 0`);
+      if (!Number.isFinite(t.unpaidBreakMinutes) || !Number.isInteger(t.unpaidBreakMinutes) || t.unpaidBreakMinutes < 0) {
+        errors.push(`Shift template ${t.id} unpaidBreakMinutes must be a finite integer >= 0`);
+      }
+      for (const requiredToken of t.requiredSkillsOrRoles || []) {
+        if (isAuthorizationRoleToken(requiredToken)) {
+          errors.push(`Shift template ${t.id} cannot use authorization role ${requiredToken} as a scheduling skill or role`);
+        }
       }
 
       if (validStart && validEnd) {
@@ -387,7 +465,7 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
         }
 
         const derivedDuration = deriveShiftDurationHours(t.startTime, t.endTime, Boolean(t.crossMidnight), t.unpaidBreakMinutes || 0);
-        if (typeof t.durationHours !== 'number' || t.durationHours < 0.5 || t.durationHours > 24) {
+        if (!Number.isFinite(t.durationHours) || t.durationHours < 0.5 || t.durationHours > 24) {
           errors.push(`Shift template ${t.id} durationHours must be between 0.5 and 24`);
         } else if (Math.abs(t.durationHours - derivedDuration) > 0.05) {
           errors.push(`Shift template ${t.id} durationHours (${t.durationHours}) does not match derived duration (${derivedDuration}h) from start/end times and break.`);
@@ -399,13 +477,23 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
   if (!Array.isArray(c.coverageRequirements)) {
     errors.push('coverageRequirements must be an array');
   } else {
+    const seenCoverageWeekdays = new Set<string>();
     for (const pattern of c.coverageRequirements) {
       if (!VALID_WEEKDAYS.has(pattern.weekday)) {
         errors.push(`Invalid weekday in coverageRequirements: ${pattern.weekday}`);
       }
+      if (seenCoverageWeekdays.has(pattern.weekday)) {
+        errors.push(`Duplicate weekday in coverageRequirements: ${pattern.weekday}`);
+      }
+      seenCoverageWeekdays.add(pattern.weekday);
       const opDay = operatingDayMap.get(pattern.weekday);
       if (Array.isArray(pattern.slots)) {
+        const seenCoverageTemplates = new Set<string>();
         for (const slot of pattern.slots) {
+          if (seenCoverageTemplates.has(slot.shiftTemplateId)) {
+            errors.push(`Duplicate coverage slot template ${slot.shiftTemplateId} on ${pattern.weekday}`);
+          }
+          seenCoverageTemplates.add(slot.shiftTemplateId);
           if (!slot.shiftTemplateId || !templateMap.has(slot.shiftTemplateId)) {
             errors.push(`Coverage slot references unknown shift template: ${slot.shiftTemplateId}`);
           } else {
@@ -433,14 +521,25 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
             }
           }
 
-          if (typeof slot.minHeadcount !== 'number' || slot.minHeadcount < 0) {
-            errors.push(`Coverage slot minHeadcount must be >= 0 for template ${slot.shiftTemplateId}`);
+          if (!Number.isFinite(slot.minHeadcount) || !Number.isInteger(slot.minHeadcount) || slot.minHeadcount < 0 || slot.minHeadcount > 30) {
+            errors.push(`Coverage slot minHeadcount must be a finite integer between 0 and 30 for template ${slot.shiftTemplateId}`);
           }
-          if (typeof slot.targetHeadcount !== 'number' || slot.targetHeadcount < (slot.minHeadcount || 0)) {
-            errors.push(`Coverage slot targetHeadcount must be >= minHeadcount for template ${slot.shiftTemplateId}`);
+          if (!Number.isFinite(slot.targetHeadcount) || !Number.isInteger(slot.targetHeadcount) || slot.targetHeadcount < (slot.minHeadcount || 0) || slot.targetHeadcount > 30) {
+            errors.push(`Coverage slot targetHeadcount must be a finite integer between minHeadcount and 30 for template ${slot.shiftTemplateId}`);
           }
-          if (typeof slot.maxHeadcount === 'number' && slot.maxHeadcount < slot.targetHeadcount) {
-            errors.push(`Coverage slot maxHeadcount must be >= targetHeadcount for template ${slot.shiftTemplateId}`);
+          if (
+            typeof slot.maxHeadcount !== 'undefined' &&
+            (!Number.isFinite(slot.maxHeadcount) || !Number.isInteger(slot.maxHeadcount) || slot.maxHeadcount < slot.targetHeadcount || slot.maxHeadcount > 30)
+          ) {
+            errors.push(`Coverage slot maxHeadcount must be a finite integer between targetHeadcount and 30 for template ${slot.shiftTemplateId}`);
+          }
+          if (slot.requiredRole && isAuthorizationRoleToken(slot.requiredRole)) {
+            errors.push(`Coverage slot cannot use authorization role ${slot.requiredRole} as requiredRole`);
+          }
+          for (const optionalRole of slot.optionalCandidateRoles || []) {
+            if (isAuthorizationRoleToken(optionalRole)) {
+              errors.push(`Coverage slot cannot use authorization role ${optionalRole} as optionalCandidateRole`);
+            }
           }
         }
       }
@@ -449,22 +548,22 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
 
   if (c.complianceRules) {
     const r = c.complianceRules;
-    if (typeof r.minDaysOffPerWeek !== 'number' || r.minDaysOffPerWeek < 1 || r.minDaysOffPerWeek > 6) {
+    if (!Number.isFinite(r.minDaysOffPerWeek) || !Number.isInteger(r.minDaysOffPerWeek) || r.minDaysOffPerWeek < 1 || r.minDaysOffPerWeek > 6) {
       errors.push('complianceRules.minDaysOffPerWeek must be between 1 and 6');
     }
-    if (typeof r.targetDaysOffPerWeek !== 'number' || r.targetDaysOffPerWeek < (r.minDaysOffPerWeek || 1) || r.targetDaysOffPerWeek > 6) {
+    if (!Number.isFinite(r.targetDaysOffPerWeek) || !Number.isInteger(r.targetDaysOffPerWeek) || r.targetDaysOffPerWeek < (r.minDaysOffPerWeek || 1) || r.targetDaysOffPerWeek > 6) {
       errors.push('complianceRules.targetDaysOffPerWeek must be >= minDaysOffPerWeek and <= 6');
     }
-    if (typeof r.maxConsecutiveWorkingDays !== 'number' || r.maxConsecutiveWorkingDays < 1 || r.maxConsecutiveWorkingDays > 14) {
+    if (!Number.isFinite(r.maxConsecutiveWorkingDays) || !Number.isInteger(r.maxConsecutiveWorkingDays) || r.maxConsecutiveWorkingDays < 1 || r.maxConsecutiveWorkingDays > 14) {
       errors.push('complianceRules.maxConsecutiveWorkingDays must be between 1 and 14');
     }
-    if (typeof r.minRestIntervalBetweenShiftsHours !== 'number' || r.minRestIntervalBetweenShiftsHours < 8 || r.minRestIntervalBetweenShiftsHours > 24) {
+    if (!Number.isFinite(r.minRestIntervalBetweenShiftsHours) || r.minRestIntervalBetweenShiftsHours < 8 || r.minRestIntervalBetweenShiftsHours > 24) {
       errors.push('complianceRules.minRestIntervalBetweenShiftsHours must be between 8 and 24');
     }
-    if (typeof r.maxDailyWorkingHours !== 'number' || r.maxDailyWorkingHours < 1 || r.maxDailyWorkingHours > 24) {
+    if (!Number.isFinite(r.maxDailyWorkingHours) || r.maxDailyWorkingHours < 1 || r.maxDailyWorkingHours > 24) {
       errors.push('complianceRules.maxDailyWorkingHours must be between 1 and 24');
     }
-    if (typeof r.maxWeeklyStandardHours !== 'number' || r.maxWeeklyStandardHours < 10 || r.maxWeeklyStandardHours > 84) {
+    if (!Number.isFinite(r.maxWeeklyStandardHours) || r.maxWeeklyStandardHours < 10 || r.maxWeeklyStandardHours > 84) {
       errors.push('complianceRules.maxWeeklyStandardHours must be between 10 and 84');
     }
   } else {
@@ -486,6 +585,11 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
     if (mode === 'FIXED_ASSIGNMENT') {
       if (!Array.isArray(s.fixedSundayEmployeeIds) || s.fixedSundayEmployeeIds.length === 0) {
         errors.push('fixedSundayEmployeeIds must contain at least one employee ID when sundayMode is FIXED_ASSIGNMENT');
+      }
+    }
+    for (const participatingRole of s.participatingRoleTypes || []) {
+      if (isAuthorizationRoleToken(participatingRole)) {
+        errors.push(`Sunday policy cannot use authorization role ${participatingRole} as a participatingRoleType`);
       }
     }
   }

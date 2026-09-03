@@ -18,6 +18,9 @@ import {
 import {
   generateEngineMonthSchedule,
   generateEngineWeekSchedule,
+  allPersistenceResultsSucceeded,
+  persistValidatedSchedule,
+  revalidateScheduleCandidate,
   validateSchedulerEmployeeCapacity,
   validateSchedulerRoleConfiguration,
 } from '../utils/schedulerEngineAdapter';
@@ -27,7 +30,7 @@ import { getMonthDays, inferShiftTypeFromTimes } from '../utils/scheduleUtils';
 import { verifyTenantAccessForHost, TENANT_ACCESS_MESSAGES } from '../services/tenantAccessService';
 import { formatDateGreek, getIsoDate, getMonday, getWeekDays, isValidTimeLabel, timeToMinutes } from '../utils/time';
 import { getCurrentTenantHostContext } from '../utils/tenantHostContext';
-import { validateSchedulerConfig } from '../scheduler-engine';
+import { mergeSchedulerConfigSpecialDays, validateSchedulerConfig } from '../scheduler-engine';
 
 const isFirebaseConfigured = authRepository.isPersistenceConfigured();
 const firebaseConfigErrorMessage = authRepository.getPersistenceErrorMessage?.() || '';
@@ -1032,11 +1035,15 @@ export const useSchedulerStore = create((set, get) => ({
         employees: get().employees,
       });
 
-      await Promise.all(
+      const publicWeekResults = await Promise.all(
         weekStarts.map((weekStart) =>
           get().refreshPublicWeekSnapshot({ weekStart, shifts: publicWeekShifts, silent: true }),
         ),
       );
+      if (!allPersistenceResultsSucceeded(publicWeekResults)) {
+        set({ warningMessage: 'Το μηνιαίο πρόγραμμα αποθηκεύτηκε, αλλά μία ή περισσότερες εβδομαδιαίες δημόσιες προβολές δεν ενημερώθηκαν.' });
+        return false;
+      }
       return true;
     } catch {
       set({ warningMessage: 'Το μηνιαίο πρόγραμμα αποθηκεύτηκε, αλλά η δημόσια προβολή δεν ενημερώθηκε.' });
@@ -2590,25 +2597,17 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const generationRunId = createGenerationRunId('week_generation');
+      const schedulerConfig = get().schedulerConfigV2
+        ? mergeSchedulerConfigSpecialDays(get().schedulerConfigV2, get().specialDaysByDate)
+        : undefined;
       const { shifts: generatedShifts, warnings, validation } = await generateEngineWeekSchedule({
         weekDays,
         employees: get().employees,
         allShifts: get().shifts,
         absences: getAbsencesForRange(get().absences, weekDays[0], weekDays[weekDays.length - 1]),
         rules: weeklyRules,
-        schedulerConfig: get().schedulerConfigV2 || undefined,
+        schedulerConfig,
       });
-
-      if (!validation || validation.valid !== true) {
-        const errorMessages = validation?.violations?.map((v) => v.message).filter(Boolean) || [];
-        set({
-          warningMessage: errorMessages.length
-            ? errorMessages.join(' | ')
-            : 'Αποτυχία επικύρωσης προγράμματος. Δεν αποθηκεύτηκαν βάρδιες.',
-          isSaving: false,
-        });
-        return false;
-      }
 
       const manualKey = new Set(manualWeekShifts.map((shift) => `${shift.employeeId}_${shift.date}`));
       const safeGeneratedShifts = generatedShifts.filter((shift) => {
@@ -2617,33 +2616,69 @@ export const useSchedulerStore = create((set, get) => ({
       });
 
       const shiftsToCreate = safeGeneratedShifts.map((shift) => ({ ...shift, generationRunId }));
-      await replaceShiftsBatch({
-        tenantId: getPublicTenantId(),
-        shiftsToRemove: autoWeekShifts,
-        shiftsToCreate,
+      const finalCandidate = [...manualWeekShifts, ...shiftsToCreate];
+      const finalValidation = revalidateScheduleCandidate({
+        candidateShifts: finalCandidate,
+        employees: get().employees,
+        allShifts: get().shifts,
+        absences: getAbsencesForRange(get().absences, weekDays[0], weekDays[weekDays.length - 1]),
+        rules: weeklyRules,
+        schedulerConfig,
+        startDate: weekDays[0],
+        endDate: weekDays[weekDays.length - 1],
+        dates: weekDays,
       });
-      await recordAuditLog(get, {
-        action: 'schedule.generate_week',
-        target: { collection: 'shifts', scope: `${weekDays[0]}_${weekDays[6]}` },
-        before: autoWeekShifts,
-        after: shiftsToCreate,
-        generationRunId,
-        metadata: {
-          generatedShiftCount: shiftsToCreate.length,
-          removedAutoShiftCount: autoWeekShifts.length,
-          manualOverrideCount: manualWeekShifts.length,
-          warningCount: warnings.length,
+
+      const persistenceResult = await persistValidatedSchedule({
+        generationResult: {
+          shifts: shiftsToCreate,
+          finalCandidate,
+          warnings,
+          validation: finalValidation,
+        },
+        persist: async () => {
+          await replaceShiftsBatch({
+            tenantId: getPublicTenantId(),
+            shiftsToRemove: autoWeekShifts,
+            shiftsToCreate,
+          });
+          await recordAuditLog(get, {
+            action: 'schedule.generate_week',
+            target: { collection: 'shifts', scope: `${weekDays[0]}_${weekDays[6]}` },
+            before: autoWeekShifts,
+            after: shiftsToCreate,
+            generationRunId,
+            metadata: {
+              generatedShiftCount: shiftsToCreate.length,
+              removedAutoShiftCount: autoWeekShifts.length,
+              manualOverrideCount: manualWeekShifts.length,
+              warningCount: warnings.length,
+            },
+          });
+          const savedWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
+          set((state) => ({
+            shifts: sortShiftsByDateAndStart([
+              ...state.shifts.filter((shift) => !weekSet.has(shift.date)),
+              ...savedWeekShifts,
+            ]),
+          }));
+          const snapshotResult = await get().saveCurrentWeekSnapshot('magic_wand');
+          await get().loadWeekHistory();
+          return { snapshotResult };
         },
       });
-      const savedWeekShifts = await fetchShiftsByDates(weekDays, getTenantArgs());
-      set((state) => ({
-        shifts: sortShiftsByDateAndStart([
-          ...state.shifts.filter((shift) => !weekSet.has(shift.date)),
-          ...savedWeekShifts,
-        ]),
-      }));
-      const snapshotResult = await get().saveCurrentWeekSnapshot('magic_wand');
-      await get().loadWeekHistory();
+
+      if (!persistenceResult.ok) {
+        const errorMessages = persistenceResult.violations?.map((v) => v.message).filter(Boolean) || [];
+        set({
+          warningMessage: errorMessages.length
+            ? errorMessages.join(' | ')
+            : 'Αποτυχία επικύρωσης προγράμματος. Δεν αποθηκεύτηκαν βάρδιες.',
+        });
+        return false;
+      }
+
+      const snapshotResult = persistenceResult.value?.snapshotResult;
 
       if (warnings.length) {
         const messages = [...warnings];
@@ -2663,6 +2698,7 @@ export const useSchedulerStore = create((set, get) => ({
           ].filter(Boolean).join(' | '),
         });
       }
+      return true;
     } finally {
       set({ isSaving: false });
     }
@@ -2717,6 +2753,10 @@ export const useSchedulerStore = create((set, get) => ({
     set({ isSaving: true });
     try {
       const generationRunId = createGenerationRunId('month_generation');
+      const schedulerConfigSource = get().schedulerConfigV2 || (rules?.schemaVersion === 2 ? rules : undefined);
+      const schedulerConfig = schedulerConfigSource
+        ? mergeSchedulerConfigSpecialDays(schedulerConfigSource, get().specialDaysByDate)
+        : undefined;
       const { shifts: generatedShifts, warnings, validation, meta } = generateEngineMonthSchedule({
         month,
         year,
@@ -2730,52 +2770,83 @@ export const useSchedulerStore = create((set, get) => ({
         ),
         rules: mergedRules,
         roleConfig,
-        schedulerConfig: get().schedulerConfigV2 || undefined,
+        schedulerConfig,
       });
 
-      if (!validation || validation.valid !== true) {
-        const errorMessages = validation?.violations?.map((v) => v.message).filter(Boolean) || [];
+      const shiftsToCreate = generatedShifts.map((shift) => ({ ...shift, generationRunId }));
+      const finalMonthCandidate = [...manualOverrides, ...shiftsToCreate];
+      const monthDaysList = meta?.monthDays || monthDatesForGeneration;
+      const finalValidation = revalidateScheduleCandidate({
+        candidateShifts: finalMonthCandidate,
+        employees: get().employees,
+        allShifts: allShiftsForGeneration,
+        absences: getAbsencesForRange(
+          get().absences,
+          monthDatesForGeneration[0],
+          monthDatesForGeneration[monthDatesForGeneration.length - 1],
+        ),
+        rules: mergedRules,
+        schedulerConfig,
+        startDate: monthDaysList[0],
+        endDate: monthDaysList[monthDaysList.length - 1],
+        dates: monthDaysList,
+      });
+
+      const persistenceResult = await persistValidatedSchedule({
+        generationResult: {
+          shifts: shiftsToCreate,
+          finalCandidate: finalMonthCandidate,
+          warnings,
+          validation: finalValidation,
+        },
+        persist: async () => {
+          await replaceShiftsBatch({
+            tenantId: getPublicTenantId(),
+            shiftsToRemove: autoGenerated,
+            shiftsToCreate,
+          });
+          await recordAuditLog(get, {
+            action: 'schedule.generate_month',
+            target: { collection: 'shifts', scope: `${year}-${String(month + 1).padStart(2, '0')}` },
+            before: autoGenerated,
+            after: shiftsToCreate,
+            generationRunId,
+            metadata: {
+              generatedShiftCount: shiftsToCreate.length,
+              removedAutoShiftCount: autoGenerated.length,
+              manualOverrideCount: manualOverrides.length,
+              warningCount: warnings?.length || 0,
+            },
+          });
+          const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet], getTenantArgs());
+          set((state) => ({
+            shifts: sortShiftsByDateAndStart([
+              ...state.shifts.filter((shift) => !monthDateSet.has(shift.date)),
+              ...savedMonthShifts,
+            ]),
+          }));
+          const publicMonthUpdated = await get().refreshPublicMonthSnapshot({
+            year,
+            month,
+            monthDays: meta?.monthDays || monthDatesForGeneration,
+            shifts: savedMonthShifts,
+          });
+          return { savedMonthShifts, publicMonthUpdated };
+        },
+      });
+
+      if (!persistenceResult.ok) {
+        const errorMessages = persistenceResult.violations?.map((v) => v.message).filter(Boolean) || [];
         set({
           warningMessage: errorMessages.length
             ? errorMessages.join(' | ')
             : 'Αποτυχία επικύρωσης προγράμματος μήνα. Δεν αποθηκεύτηκαν βάρδιες.',
-          isSaving: false,
         });
         return false;
       }
 
-      const shiftsToCreate = generatedShifts.map((shift) => ({ ...shift, generationRunId }));
-      await replaceShiftsBatch({
-        tenantId: getPublicTenantId(),
-        shiftsToRemove: autoGenerated,
-        shiftsToCreate,
-      });
-      await recordAuditLog(get, {
-        action: 'schedule.generate_month',
-        target: { collection: 'shifts', scope: `${year}-${String(month + 1).padStart(2, '0')}` },
-        before: autoGenerated,
-        after: shiftsToCreate,
-        generationRunId,
-        metadata: {
-          generatedShiftCount: shiftsToCreate.length,
-          removedAutoShiftCount: autoGenerated.length,
-          manualOverrideCount: manualOverrides.length,
-          warningCount: warnings?.length || 0,
-        },
-      });
-      const savedMonthShifts = await fetchShiftsByDates(meta?.monthDays || [...monthDateSet], getTenantArgs());
-      set((state) => ({
-        shifts: sortShiftsByDateAndStart([
-          ...state.shifts.filter((shift) => !monthDateSet.has(shift.date)),
-          ...savedMonthShifts,
-        ]),
-      }));
-      const publicMonthUpdated = await get().refreshPublicMonthSnapshot({
-        year,
-        month,
-        monthDays: meta?.monthDays || monthDatesForGeneration,
-        shifts: savedMonthShifts,
-      });
+      const savedMonthShifts = persistenceResult.value?.savedMonthShifts || [];
+      const publicMonthUpdated = persistenceResult.value?.publicMonthUpdated;
 
       const warningMessages = [];
       if (warnings?.length) warningMessages.push(...warnings);

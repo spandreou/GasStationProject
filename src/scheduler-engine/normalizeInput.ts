@@ -1,5 +1,6 @@
 import { DEFAULT_DAYS_OFF } from './constants.ts';
-import type { EmployeeAbsence, EmployeeScheduleConfig, GenerateScheduleInput } from './types.ts';
+import type { SchedulerConfigV2 } from './configV2.ts';
+import type { EmployeeAbsence, EmployeeScheduleConfig, GeneratedShift, GenerateScheduleInput } from './types.ts';
 
 export type NormalizedScheduleInput = {
   startDate: string;
@@ -7,8 +8,8 @@ export type NormalizedScheduleInput = {
   employees: EmployeeScheduleConfig[];
   absences: EmployeeAbsence[];
   previousSundayEmployeeId?: string;
-  schedulerConfig?: any;
-  manualOverrides?: any[];
+  schedulerConfig?: SchedulerConfigV2;
+  manualOverrides?: GeneratedShift[];
   rules: {
     weeklyRotationEnabled: boolean;
     avoidConsecutiveSundays: boolean;

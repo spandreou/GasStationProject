@@ -106,6 +106,12 @@ export function evaluateEmployeeEligibility(params: {
   if ((shiftTemplate.shiftType === 'SPECIAL' || weekday === 'SUNDAY') && employee.canWorkSunday === false) {
     return { eligible: false, reason: 'INCAPABLE' };
   }
+  if (
+    employee.participatesInSundayRotation === false &&
+    (slot?.sundayMode === 'CYCLIC_FAIR' || (!slot?.sundayMode && weekday === 'SUNDAY'))
+  ) {
+    return { eligible: false, reason: 'SUNDAY_ROLE_EXCLUDED', details: 'Employee opted out of Sunday rotation' };
+  }
 
   // 6. Hard Role Requirement
   if (slot?.requiredRole) {
@@ -130,7 +136,8 @@ export function evaluateEmployeeEligibility(params: {
 
   // 8. Sunday Participating Roles Constraint
   if (slot?.participatingRoles && slot.participatingRoles.length > 0) {
-    if (!slot.participatingRoles.includes(employee.scheduleRole)) {
+    const role = employee.scheduleRole || 'AUTO';
+    if (!slot.participatingRoles.includes(role) && role !== 'AUTO') {
       return { eligible: false, reason: 'SUNDAY_ROLE_EXCLUDED', details: `Role ${employee.scheduleRole} not in Sunday rotation` };
     }
   }
@@ -203,7 +210,7 @@ export function evaluateEmployeeEligibility(params: {
           adjacentShift.date,
           adjacentShift.startTime,
           adjacentShift.endTime,
-          Boolean((adjacentShift as any).crossMidnight),
+          Boolean(adjacentShift.crossMidnight),
           date,
           shiftTemplate.startTime,
           shiftTemplate.endTime,
@@ -225,7 +232,7 @@ export function evaluateEmployeeEligibility(params: {
           adjacentShift.date,
           adjacentShift.startTime,
           adjacentShift.endTime,
-          Boolean((adjacentShift as any).crossMidnight),
+          Boolean(adjacentShift.crossMidnight),
         );
         if (restHours < minRequiredRest) {
           return {

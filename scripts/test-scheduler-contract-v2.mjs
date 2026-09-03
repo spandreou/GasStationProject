@@ -39,6 +39,8 @@ import {
   deriveShiftDurationHours,
   validateGeneratedScheduleCompliance,
 } from '../src/scheduler-engine/index.ts';
+import * as schedulerEngineModule from '../src/scheduler-engine/index.ts';
+import * as schedulerAdapterModule from '../src/utils/schedulerEngineAdapter.js';
 
 // ---------------------------------------------------------------------------
 // 1. DETERMINISTIC SEEDED PRNG (Mulberry32)
@@ -63,6 +65,177 @@ class Mulberry32 {
   pick(arr) {
     return arr[this.nextInt(0, arr.length - 1)];
   }
+}
+
+const FUZZ_WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+const FUZZ_ROLE_TYPES = ['ROLE_A', 'ROLE_B', 'ROLE_C', 'EXTRA_A'];
+
+function createVariableFuzzConfig(prng, run, category, employees, intent) {
+  const config = getDefaultCategoryConfig(`fuzz-tenant-${run}`, category);
+  const windowMode = prng.pick(['DAY', 'SPLIT', 'CROSS_MIDNIGHT']);
+  const windowDefinitions = {
+    DAY: [{ openTime: '06:00', closeTime: '22:00', crossMidnight: false }],
+    SPLIT: [
+      { openTime: '06:00', closeTime: '14:00', crossMidnight: false },
+      { openTime: '16:00', closeTime: '23:00', crossMidnight: false },
+    ],
+    CROSS_MIDNIGHT: [{ openTime: '20:00', closeTime: '08:00', crossMidnight: true }],
+  };
+  const templateDefinitions = {
+    DAY: [
+      ['06:00', '10:00', false, 'MORNING'],
+      ['10:00', '14:00', false, 'INTERMEDIATE'],
+      ['14:00', '18:00', false, 'AFTERNOON'],
+      ['18:00', '22:00', false, 'NIGHT'],
+      ['06:00', '14:00', false, 'CUSTOM'],
+    ],
+    SPLIT: [
+      ['06:00', '10:00', false, 'MORNING'],
+      ['10:00', '14:00', false, 'INTERMEDIATE'],
+      ['16:00', '20:00', false, 'AFTERNOON'],
+      ['20:00', '23:00', false, 'NIGHT'],
+      ['06:00', '14:00', false, 'CUSTOM'],
+    ],
+    CROSS_MIDNIGHT: [
+      ['20:00', '04:00', true, 'NIGHT'],
+      ['21:00', '05:00', true, 'NIGHT'],
+      ['22:00', '06:00', true, 'NIGHT'],
+      ['23:00', '07:00', true, 'NIGHT'],
+      ['20:00', '08:00', true, 'SPECIAL'],
+    ],
+  };
+  const templateCount = prng.nextInt(1, 5);
+  config.shiftTemplates = templateDefinitions[windowMode].slice(0, templateCount).map(
+    ([startTime, endTime, crossMidnight, shiftType], index) => {
+      const unpaidBreakMinutes = prng.pick([0, 0, 30]);
+      return {
+        id: `fuzz-template-${run}-${index + 1}`,
+        label: `Fuzz ${shiftType} ${index + 1}`,
+        shortCode: `F${index + 1}`,
+        shiftType,
+        startTime,
+        endTime,
+        durationHours: deriveShiftDurationHours(startTime, endTime, crossMidnight, unpaidBreakMinutes),
+        unpaidBreakMinutes,
+        crossMidnight,
+        color: '#1D4ED8',
+        isActive: true,
+        requiredSkillsOrRoles: prng.nextBoolean(0.2) ? ['SKILL_A'] : [],
+      };
+    },
+  );
+
+  const sundayOpen = prng.nextBoolean(0.75);
+  config.operatingDays = FUZZ_WEEKDAYS.map((weekday, index) => {
+    const isOpen = weekday === 'MONDAY' || (weekday === 'SUNDAY' ? sundayOpen : prng.nextBoolean(0.82));
+    const windows = isOpen
+      ? windowDefinitions[windowMode].slice(0, prng.nextBoolean(0.35) && windowDefinitions[windowMode].length > 1 ? 2 : 1)
+      : [];
+    return { weekday, isOpen, windows: windows.map((window) => ({ ...window, label: `window-${index + 1}` })) };
+  });
+
+  const activeEmployeeCount = employees.filter((employee) => employee.isEnabled !== false).length;
+  config.coverageRequirements = config.operatingDays.map((operatingDay) => {
+    if (!operatingDay.isOpen) {
+      return { weekday: operatingDay.weekday, dayType: 'CUSTOM', slots: [] };
+    }
+    const availableTemplates = config.shiftTemplates.filter((template) =>
+      isShiftContainedInWindow(
+        template.startTime,
+        template.endTime,
+        operatingDay.windows,
+        undefined,
+        template.crossMidnight,
+      ),
+    );
+    const slotCount = Math.min(availableTemplates.length, prng.nextInt(1, Math.min(2, availableTemplates.length)));
+    return {
+      weekday: operatingDay.weekday,
+      dayType: prng.pick(['STANDARD_COVERAGE', 'SPLIT_COVERAGE', 'CUSTOM']),
+      slots: availableTemplates.slice(0, slotCount).map((template, index) => {
+        const forcedUnsatisfiable = intent === 'VALID_BUT_UNSATISFIABLE_CONFIG' && operatingDay.weekday === 'MONDAY' && index === 0;
+        const minHeadcount = forcedUnsatisfiable
+          ? Math.min(30, activeEmployeeCount + 1)
+          : prng.nextInt(0, Math.min(2, Math.max(0, activeEmployeeCount)));
+        const targetHeadcount = Math.min(30, minHeadcount + prng.nextInt(0, 1));
+        return {
+          shiftTemplateId: template.id,
+          minHeadcount,
+          targetHeadcount,
+          maxHeadcount: Math.min(30, targetHeadcount + prng.nextInt(0, 1)),
+          requiredRole: forcedUnsatisfiable ? 'UNSATISFIABLE_ROLE' : (prng.nextBoolean(0.2) ? 'ROLE_A' : undefined),
+          optionalCandidateRoles: forcedUnsatisfiable ? [] : (prng.nextBoolean(0.25) ? ['ROLE_B'] : []),
+        };
+      }),
+    };
+  });
+
+  const minDaysOffPerWeek = prng.pick([1, 2]);
+  config.complianceRules = {
+    ...config.complianceRules,
+    minDaysOffPerWeek,
+    targetDaysOffPerWeek: prng.nextInt(minDaysOffPerWeek, Math.min(4, minDaysOffPerWeek + 2)),
+    maxConsecutiveWorkingDays: prng.nextInt(3, 7),
+    minRestIntervalBetweenShiftsHours: prng.pick([8, 10, 11, 12]),
+    maxDailyWorkingHours: prng.pick([8, 10, 12, 16, 24]),
+    maxWeeklyStandardHours: prng.pick([32, 40, 48, 60, 84]),
+  };
+  const longestTemplateHours = Math.max(...config.shiftTemplates.map((template) => template.durationHours));
+  config.complianceRules.maxDailyWorkingHours = Math.max(config.complianceRules.maxDailyWorkingHours, longestTemplateHours);
+
+  const sundayMode = sundayOpen
+    ? prng.pick(['CYCLIC_FAIR', 'FIXED_ASSIGNMENT', 'STANDARD_WEEKDAY_LIKE'])
+    : 'CLOSED';
+  config.sundayAndHolidays = {
+    ...config.sundayAndHolidays,
+    sundayMode,
+    sundayShiftTemplateId: config.shiftTemplates[0].id,
+    fixedSundayEmployeeIds:
+      sundayMode === 'FIXED_ASSIGNMENT' && employees.length > 0 ? [prng.pick(employees).employeeId] : [],
+    participatingRoleTypes: prng.nextBoolean(0.3) ? ['ROLE_A', 'ROLE_B'] : [...FUZZ_ROLE_TYPES],
+    avoidConsecutiveSundays: prng.nextBoolean(0.8),
+    holidaysTreatedAsSundays: prng.nextBoolean(0.4),
+    closedOnPublicHolidays: prng.nextBoolean(0.25),
+  };
+
+  const specialOperatingDay = config.operatingDays.find((day) => day.weekday === 'WEDNESDAY');
+  config.specialDaysByDate = prng.nextBoolean(0.45)
+    ? {
+        '2026-06-03': {
+          date: '2026-06-03',
+          isHoliday: prng.nextBoolean(0.5),
+          isSpecialOperatingHours: true,
+          label: 'Fuzz special day',
+          operatingWindows: specialOperatingDay?.windows?.length
+            ? specialOperatingDay.windows.map((window) => ({ ...window }))
+            : windowDefinitions[windowMode].map((window) => ({ ...window })),
+        },
+      }
+    : {};
+
+  if (intent === 'INVALID_CONFIG') {
+    const mutationType = prng.pick(['BAD_DURATION', 'UNKNOWN_TEMPLATE_SLOT', 'OUT_OF_WINDOW', 'INVALID_HOURS', 'AUTH_ROLE']);
+    if (mutationType === 'BAD_DURATION') {
+      config.shiftTemplates[0].durationHours = 99;
+    } else if (mutationType === 'UNKNOWN_TEMPLATE_SLOT') {
+      config.coverageRequirements[0].slots.push({ shiftTemplateId: 'missing-template', minHeadcount: 1, targetHeadcount: 1 });
+    } else if (mutationType === 'OUT_OF_WINDOW') {
+      config.operatingDays[0].windows = [{ openTime: '12:00', closeTime: '13:00', crossMidnight: false }];
+      if (config.coverageRequirements[0].slots[0]) {
+        config.coverageRequirements[0].slots[0].minHeadcount = 1;
+        config.coverageRequirements[0].slots[0].targetHeadcount = 1;
+        config.coverageRequirements[0].slots[0].maxHeadcount = 1;
+      }
+    } else if (mutationType === 'INVALID_HOURS') {
+      config.complianceRules.maxDailyWorkingHours = 0;
+    } else {
+      const firstSlot = config.coverageRequirements.find((pattern) => pattern.slots.length)?.slots[0];
+      if (firstSlot) firstSlot.requiredRole = 'OWNER';
+      else config.shiftTemplates[0].requiredSkillsOrRoles = ['OWNER'];
+    }
+  }
+
+  return { config, windowMode };
 }
 
 function createTestEmployee(idIndex, overrides = {}) {
@@ -194,6 +367,97 @@ async function runAllTests() {
   totalAssertions += 2;
   console.log('  ✓ Verified 0 future shifts for deactivated employees and preserved history.\n');
 
+  // 3b. Real application employee shape -> adapter -> V2 eligibility pool.
+  if (typeof schedulerAdapterModule.mapAppEmployeesToSchedulerPool !== 'function') {
+    throw new Error('Real app employee lifecycle mapping is not exported or shared with the scheduler adapter.');
+  }
+  const createAppEmployee = (index, overrides = {}) => ({
+    id: `app-emp-${index}`,
+    fullName: `App Employee ${index}`,
+    scheduleRole: 'auto',
+    isActive: true,
+    participatesInRotation: true,
+    participatesInSundayRotation: true,
+    ...overrides,
+  });
+  const additionPairs = [[4, 5], [5, 6], [6, 7], [7, 8], [10, 11], [20, 21]];
+  const lifecycleAdapterConfig = getDefaultCategoryConfig('lifecycle-adapter-tenant', 'FUEL_STATION');
+  lifecycleAdapterConfig.operatingDays = lifecycleAdapterConfig.operatingDays.map((day) =>
+    day.weekday === 'MONDAY' ? day : { ...day, isOpen: false, windows: [] },
+  );
+  lifecycleAdapterConfig.coverageRequirements = lifecycleAdapterConfig.coverageRequirements.map((pattern) => ({
+    ...pattern,
+    slots: pattern.weekday === 'MONDAY'
+      ? [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 1, maxHeadcount: 1 }]
+      : [],
+  }));
+  lifecycleAdapterConfig.sundayAndHolidays = {
+    ...lifecycleAdapterConfig.sundayAndHolidays,
+    sundayMode: 'CLOSED',
+  };
+  for (const [beforeCount, afterCount] of additionPairs) {
+    const before = Array.from({ length: beforeCount }, (_, index) => createAppEmployee(index + 1));
+    const added = createAppEmployee(afterCount);
+    const mapped = schedulerAdapterModule.mapAppEmployeesToSchedulerPool([...before, added]);
+    if (mapped.length !== afterCount || !mapped.some((employee) => employee.employeeId === added.id && employee.isEnabled !== false)) {
+      throw new Error(`Real app mapping omitted newly active employee in ${beforeCount}->${afterCount} transition.`);
+    }
+    const generatedThroughAdapter = await schedulerAdapterModule.generateEngineWeekSchedule({
+      weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+      employees: [...before, added],
+      allShifts: [],
+      schedulerConfig: lifecycleAdapterConfig,
+    });
+    const resolvedPool = [
+      ...Object.values(generatedThroughAdapter.meta?.resolvedRoles?.roles || {}),
+      ...(generatedThroughAdapter.meta?.resolvedRoles?.baseEmployees || []),
+      ...(generatedThroughAdapter.meta?.resolvedRoles?.extras || []),
+    ];
+    if (
+      !generatedThroughAdapter.validation.valid ||
+      !resolvedPool.some((employee) => employee?.employeeId === added.id)
+    ) {
+      throw new Error(
+        `Real adapter/generation path omitted active employee in ${beforeCount}->${afterCount}: ${JSON.stringify(generatedThroughAdapter.meta)}`,
+      );
+    }
+
+    const generatedMonthThroughAdapter = schedulerAdapterModule.generateEngineMonthSchedule({
+      month: 5,
+      year: 2026,
+      employees: [...before, added],
+      allShifts: [],
+      schedulerConfig: lifecycleAdapterConfig,
+    });
+    const resolvedMonthPool = [
+      ...Object.values(generatedMonthThroughAdapter.meta?.resolvedRoles?.roles || {}),
+      ...(generatedMonthThroughAdapter.meta?.resolvedRoles?.baseEmployees || []),
+      ...(generatedMonthThroughAdapter.meta?.resolvedRoles?.extras || []),
+    ];
+    if (
+      !generatedMonthThroughAdapter.validation.valid ||
+      !resolvedMonthPool.some((employee) => employee?.employeeId === added.id)
+    ) {
+      throw new Error(
+        `Real adapter/generation month path omitted active employee in ${beforeCount}->${afterCount}: ${JSON.stringify(generatedMonthThroughAdapter.meta)}`,
+      );
+    }
+    totalAssertions += 1;
+  }
+
+  const deactivatedAppEmployees = [
+    createAppEmployee(1, { isActive: false }),
+    createAppEmployee(2),
+    createAppEmployee(3),
+    createAppEmployee(4),
+  ];
+  const mappedDeactivated = schedulerAdapterModule.mapAppEmployeesToSchedulerPool(deactivatedAppEmployees);
+  const inactiveMappedEmployee = mappedDeactivated.find((employee) => employee.employeeId === 'app-emp-1');
+  if (!inactiveMappedEmployee || inactiveMappedEmployee.isEnabled !== false) {
+    throw new Error('Deactivated app employee was dropped before the V2 validator could surface future conflicts.');
+  }
+  totalAssertions += additionPairs.length * 2 + 1;
+
   // -------------------------------------------------------------------------
   // SECTION 4: HARD CONSTRAINTS SUITE
   // -------------------------------------------------------------------------
@@ -233,6 +497,11 @@ async function runAllTests() {
   });
   if (!roleRes.validation.valid || roleRes.shifts.length !== 1 || roleRes.shifts[0].employeeId !== 'emp-3') {
     throw new Error(`Hard role constraint failed: expected emp-3 assigned to CASHIER_LEAD, got ${roleRes.shifts[0]?.employeeId}`);
+  }
+  if (!roleRes.shifts[0].shiftTemplateId || !roleRes.shifts[0].demandSlotId) {
+    throw new Error(
+      `Demand identity missing from generated shift: ${JSON.stringify(roleRes.shifts[0])}`,
+    );
   }
   totalAssertions += 1;
 
@@ -331,6 +600,384 @@ async function runAllTests() {
 
   console.log('  ✓ Hard constraints suite fully validated.\n');
 
+  // 4g. Generated V2 shifts preserve unambiguous demand identity.
+  const identityConfig = {
+    ...getDefaultCategoryConfig('identity-tenant', 'FUEL_STATION'),
+    coverageRequirements: [
+      {
+        weekday: 'MONDAY',
+        dayType: 'STANDARD_COVERAGE',
+        slots: [{ shiftTemplateId: 'morning', minHeadcount: 1, targetHeadcount: 1, maxHeadcount: 1 }],
+      },
+    ],
+  };
+  const identityResult = generateScheduleV2({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: [createTestEmployee(1), createTestEmployee(2)],
+    config: identityConfig,
+  });
+  if (!identityResult.validation.valid || identityResult.shifts.length !== 1) {
+    throw new Error(`Demand identity fixture did not generate one valid shift: ${JSON.stringify(identityResult.validation)}`);
+  }
+  if (!identityResult.shifts[0].shiftTemplateId || !identityResult.shifts[0].demandSlotId) {
+    throw new Error('Generated V2 shift lost shiftTemplateId or demandSlotId identity.');
+  }
+  totalAssertions += 2;
+
+  // 4k. The real app adapter must route manual work entries through the same hard validator.
+  const realManualConfig = {
+    ...identityConfig,
+    coverageRequirements: [
+      {
+        weekday: 'MONDAY',
+        dayType: 'STANDARD_COVERAGE',
+        slots: [{
+          shiftTemplateId: 'morning',
+          minHeadcount: 1,
+          targetHeadcount: 1,
+          maxHeadcount: 1,
+          requiredRole: 'CASHIER_LEAD',
+        }],
+      },
+    ],
+  };
+  const realManualResult = await schedulerAdapterModule.generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: [createAppEmployee(1, { scheduleRole: 'REGULAR_WORKER' })],
+    allShifts: [{
+      id: 'persisted-manual-role-mismatch',
+      employeeId: 'app-emp-1',
+      employeeName: 'App Employee 1',
+      date: '2026-06-01',
+      startTime: '06:00',
+      endTime: '14:00',
+      shiftType: 'morning',
+      type: 'work',
+      isManualOverride: true,
+      shiftTemplateId: 'morning',
+    }],
+    schedulerConfig: realManualConfig,
+  });
+  if (
+    realManualResult.validation.valid ||
+    !realManualResult.validation.violations.some((violation) => violation.code === 'ROLE_REQUIREMENT_UNMET')
+  ) {
+    throw new Error(`Real app manual override bypassed V2 hard validation: ${JSON.stringify(realManualResult.validation)}`);
+  }
+
+  const deactivatedFutureResult = await schedulerAdapterModule.generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: deactivatedAppEmployees,
+    allShifts: [{
+      id: 'persisted-future-deactivated',
+      employeeId: 'app-emp-1',
+      employeeName: 'App Employee 1',
+      date: '2026-06-01',
+      startTime: '06:00',
+      endTime: '14:00',
+      shiftType: 'morning',
+      type: 'work',
+      isManualOverride: true,
+      shiftTemplateId: 'morning',
+    }],
+    schedulerConfig: identityConfig,
+  });
+  if (!deactivatedFutureResult.validation.violations.some((violation) => violation.code === 'DEACTIVATED_EMPLOYEE_FUTURE_ASSIGNMENT')) {
+    throw new Error(`Future deactivated-employee assignment was not surfaced: ${JSON.stringify(deactivatedFutureResult.validation)}`);
+  }
+
+  const manualCoverageConfig = structuredClone(identityConfig);
+  manualCoverageConfig.operatingDays = manualCoverageConfig.operatingDays.map((day) =>
+    day.weekday === 'MONDAY' ? day : { ...day, isOpen: false, windows: [] },
+  );
+  manualCoverageConfig.coverageRequirements = manualCoverageConfig.coverageRequirements.map((pattern) => ({
+    ...pattern,
+    slots: pattern.weekday === 'MONDAY'
+      ? [{ shiftTemplateId: 'morning', minHeadcount: 2, targetHeadcount: 2, maxHeadcount: 2 }]
+      : [],
+  }));
+  manualCoverageConfig.sundayAndHolidays = {
+    ...manualCoverageConfig.sundayAndHolidays,
+    sundayMode: 'CLOSED',
+  };
+  const manualCoverageResult = await schedulerAdapterModule.generateEngineWeekSchedule({
+    weekDays: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+    employees: [createAppEmployee(1), createAppEmployee(2)],
+    allShifts: [{
+      id: 'manual-coverage-worker-1',
+      employeeId: 'app-emp-1',
+      employeeName: 'App Employee 1',
+      date: '2026-06-01',
+      startTime: '06:00',
+      endTime: '14:00',
+      shiftType: 'morning',
+      type: 'work',
+      isManualOverride: true,
+      shiftTemplateId: 'morning',
+    }],
+    schedulerConfig: manualCoverageConfig,
+  });
+  if (
+    !manualCoverageResult.validation.valid ||
+    manualCoverageResult.shifts.length !== 1 ||
+    manualCoverageResult.shifts[0].employeeId !== 'app-emp-2'
+  ) {
+    throw new Error(
+      `Post-validation adapter filtering removed required final coverage: ${JSON.stringify(manualCoverageResult)}`,
+    );
+  }
+  totalAssertions += 3;
+
+  // 4h. Independent final-candidate coverage semantics: min=2, target=3, max=4.
+  const coverageConfig = {
+    ...getDefaultCategoryConfig('coverage-validator-tenant', 'FUEL_STATION'),
+    coverageRequirements: [
+      {
+        weekday: 'MONDAY',
+        dayType: 'STANDARD_COVERAGE',
+        slots: [{ shiftTemplateId: 'morning', minHeadcount: 2, targetHeadcount: 3, maxHeadcount: 4 }],
+      },
+    ],
+  };
+  const coverageEmployees = Array.from({ length: 5 }, (_, i) => createTestEmployee(i + 1));
+  const makeCoverageShifts = (count) =>
+    coverageEmployees.slice(0, count).map((employee, index) => ({
+      id: `coverage-shift-${index + 1}`,
+      date: '2026-06-01',
+      employeeId: employee.employeeId,
+      employeeName: employee.fullName,
+      scheduleRole: employee.scheduleRole,
+      shiftType: 'MORNING',
+      shiftTemplateId: 'morning',
+      demandSlotId: `coverage-slot-${index + 1}`,
+      startTime: '06:00',
+      endTime: '14:00',
+      crossMidnight: false,
+      durationHours: 8,
+      source: 'MANUAL_OVERRIDE',
+    }));
+  const expectedCoverage = [
+    { count: 1, valid: false, targetWarning: false },
+    { count: 2, valid: true, targetWarning: true },
+    { count: 3, valid: true, targetWarning: false },
+    { count: 4, valid: true, targetWarning: false },
+    { count: 5, valid: false, targetWarning: false },
+  ];
+  for (const expected of expectedCoverage) {
+    const check = validateGeneratedScheduleCompliance({
+      config: coverageConfig,
+      employees: coverageEmployees,
+      shifts: makeCoverageShifts(expected.count),
+      startDate: '2026-06-01',
+      endDate: '2026-06-01',
+    });
+    const targetWarning = check.violations.some((violation) => violation.code === 'TARGET_COVERAGE_NOT_MET');
+    if (check.valid !== expected.valid || targetWarning !== expected.targetWarning) {
+      throw new Error(
+        `Coverage validator mismatch for ${expected.count} workers: expected valid=${expected.valid}, targetWarning=${expected.targetWarning}; got ${JSON.stringify(check)}`,
+      );
+    }
+  }
+  totalAssertions += expectedCoverage.length;
+
+  // 4i. Manual work overrides remain soft-preference overrides only; hard role/template checks still apply.
+  const manualRoleConfig = {
+    ...coverageConfig,
+    coverageRequirements: [
+      {
+        weekday: 'MONDAY',
+        dayType: 'STANDARD_COVERAGE',
+        slots: [
+          {
+            shiftTemplateId: 'morning',
+            minHeadcount: 1,
+            targetHeadcount: 1,
+            maxHeadcount: 1,
+            requiredRole: 'CASHIER_LEAD',
+          },
+        ],
+      },
+    ],
+  };
+  const invalidManual = {
+    id: 'manual-role-mismatch',
+    date: '2026-06-01',
+    employeeId: 'emp-1',
+    employeeName: 'Εργαζόμενος 1',
+    scheduleRole: 'REGULAR_WORKER',
+    shiftType: 'MORNING',
+    shiftTemplateId: 'morning',
+    startTime: '06:00',
+    endTime: '14:00',
+    source: 'MANUAL_OVERRIDE',
+  };
+  const manualRoleResult = generateScheduleV2({
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+    employees: [createTestEmployee(1, { scheduleRole: 'REGULAR_WORKER' })],
+    manualOverrides: [invalidManual],
+    config: manualRoleConfig,
+  });
+  if (manualRoleResult.validation.valid || !manualRoleResult.validation.violations.some((v) => v.code === 'ROLE_REQUIREMENT_UNMET')) {
+    throw new Error(`Manual override bypassed requiredRole hard validation: ${JSON.stringify(manualRoleResult.validation)}`);
+  }
+
+  const unknownTemplateCheck = validateGeneratedScheduleCompliance({
+    config: coverageConfig,
+    employees: [createTestEmployee(1)],
+    shifts: [{ ...invalidManual, scheduleRole: 'CORE_A', shiftTemplateId: 'unknown-template' }],
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+  });
+  if (unknownTemplateCheck.valid || !unknownTemplateCheck.violations.some((v) => v.code === 'UNKNOWN_SHIFT_TEMPLATE')) {
+    throw new Error(`Unknown manual shift template did not fail closed: ${JSON.stringify(unknownTemplateCheck)}`);
+  }
+
+  const mismatchedTemplateCheck = validateGeneratedScheduleCompliance({
+    config: coverageConfig,
+    employees: [createTestEmployee(1)],
+    shifts: [{
+      ...invalidManual,
+      scheduleRole: 'CORE_A',
+      shiftTemplateId: 'morning',
+      startTime: '08:00',
+      endTime: '20:00',
+      durationHours: 1,
+    }],
+    startDate: '2026-06-01',
+    endDate: '2026-06-01',
+  });
+  if (
+    mismatchedTemplateCheck.valid ||
+    !mismatchedTemplateCheck.violations.some((v) => v.code === 'SHIFT_TEMPLATE_IDENTITY_MISMATCH')
+  ) {
+    throw new Error(
+      `Manual shift times did not fail closed against their claimed template identity: ${JSON.stringify(mismatchedTemplateCheck)}`,
+    );
+  }
+  totalAssertions += 3;
+
+  // 4j. targetDaysOffPerWeek is a soft scoring objective and never a hard eligibility gate.
+  if (typeof schedulerEngineModule.calculateTargetDaysOffPenalty !== 'function') {
+    throw new Error('Scheduler V2 does not expose the targetDaysOffPerWeek soft-objective penalty used by candidate scoring.');
+  }
+  if (schedulerEngineModule.calculateTargetDaysOffPenalty(4, 2) !== 0) {
+    throw new Error('targetDaysOff soft penalty applied before the configured target would be exceeded.');
+  }
+  if (schedulerEngineModule.calculateTargetDaysOffPenalty(5, 2) <= 0) {
+    throw new Error('targetDaysOff soft penalty did not discourage a sixth working day.');
+  }
+  totalAssertions += 2;
+
+  // 4l. UI-created IDs are immutable/system-generated and auth roles cannot enter scheduling demand.
+  if (typeof schedulerEngineModule.createSchedulerItemId !== 'function') {
+    throw new Error('Scheduler configuration lacks a system-generated stable ID helper for UI-created items.');
+  }
+  const generatedTemplateIds = new Set([
+    schedulerEngineModule.createSchedulerItemId('shift'),
+    schedulerEngineModule.createSchedulerItemId('shift'),
+  ]);
+  if (generatedTemplateIds.size !== 2 || [...generatedTemplateIds].some((id) => !id.startsWith('shift-'))) {
+    throw new Error(`Scheduler item IDs were not unique and prefix-scoped: ${JSON.stringify([...generatedTemplateIds])}`);
+  }
+
+  const authRoleConfig = structuredClone(coverageConfig);
+  authRoleConfig.coverageRequirements[0].slots[0].requiredRole = 'OWNER';
+  const authRoleValidation = validateSchedulerConfig(authRoleConfig);
+  if (authRoleValidation.valid || !authRoleValidation.errors.some((error) => error.includes('authorization role'))) {
+    throw new Error(`Authorization role leaked into scheduling configuration: ${JSON.stringify(authRoleValidation)}`);
+  }
+
+  const invalidCrossMidnightWindowConfig = structuredClone(getDefaultCategoryConfig('window-direction-tenant', 'FUEL_STATION'));
+  invalidCrossMidnightWindowConfig.shiftTemplates.push({
+    id: 'day-window-shift',
+    label: 'Day Window Shift',
+    shortCode: 'DAY',
+    shiftType: 'CUSTOM',
+    startTime: '10:00',
+    endTime: '14:00',
+    durationHours: 4,
+    unpaidBreakMinutes: 0,
+    crossMidnight: false,
+    color: '#1D4ED8',
+    isActive: true,
+  });
+  invalidCrossMidnightWindowConfig.operatingDays.find((day) => day.weekday === 'MONDAY').windows = [
+    { openTime: '09:00', closeTime: '17:00', crossMidnight: true },
+  ];
+  invalidCrossMidnightWindowConfig.coverageRequirements.find((pattern) => pattern.weekday === 'MONDAY').slots = [
+    { shiftTemplateId: 'day-window-shift', minHeadcount: 1, targetHeadcount: 1, maxHeadcount: 1 },
+  ];
+  const invalidCrossMidnightWindowValidation = validateSchedulerConfig(invalidCrossMidnightWindowConfig);
+  if (
+    invalidCrossMidnightWindowValidation.valid ||
+    !invalidCrossMidnightWindowValidation.errors.some((error) => error.includes('crossMidnight'))
+  ) {
+    throw new Error(
+      `Daytime operating window incorrectly accepted crossMidnight=true: ${JSON.stringify(invalidCrossMidnightWindowValidation)}`,
+    );
+  }
+
+  if (typeof schedulerEngineModule.mergeSchedulerConfigSpecialDays !== 'function') {
+    throw new Error('V2 generation lacks a shared normalization path for the live special-days settings map.');
+  }
+  const specialDayBaseConfig = getDefaultCategoryConfig('special-day-merge-tenant', 'FUEL_STATION');
+  specialDayBaseConfig.sundayAndHolidays.closedOnPublicHolidays = true;
+  const specialDayMergedConfig = schedulerEngineModule.mergeSchedulerConfigSpecialDays(
+    specialDayBaseConfig,
+    {
+      '2026-12-25': {
+        isHoliday: true,
+        isSpecialDay: true,
+        label: 'Χριστούγεννα',
+        operatingStartTime: '',
+        operatingEndTime: '',
+      },
+    },
+  );
+  const specialDayMergedResult = generateScheduleV2({
+    startDate: '2026-12-25',
+    endDate: '2026-12-25',
+    employees: Array.from({ length: 6 }, (_, index) => createTestEmployee(index + 1, { fixedDayOff: undefined })),
+    config: specialDayMergedConfig,
+  });
+  if (!specialDayMergedResult.validation.valid || specialDayMergedResult.shifts.length !== 0) {
+    throw new Error(
+      `Root special-day settings were not honored by V2 generation: ${JSON.stringify(specialDayMergedResult)}`,
+    );
+  }
+
+  const nonFiniteCoverageConfig = structuredClone(coverageConfig);
+  nonFiniteCoverageConfig.coverageRequirements[0].slots[0].minHeadcount = Number.NaN;
+  nonFiniteCoverageConfig.coverageRequirements[0].slots[0].targetHeadcount = Number.NaN;
+  const nonFiniteCoverageValidation = validateSchedulerConfig(nonFiniteCoverageConfig);
+  if (
+    nonFiniteCoverageValidation.valid ||
+    !nonFiniteCoverageValidation.errors.some((error) => error.includes('finite integer'))
+  ) {
+    throw new Error(`Non-finite coverage counts were accepted: ${JSON.stringify(nonFiniteCoverageValidation)}`);
+  }
+
+  const duplicateCoverageWeekdayConfig = structuredClone(getDefaultCategoryConfig('duplicate-coverage-day', 'FUEL_STATION'));
+  const mondayCoveragePattern = duplicateCoverageWeekdayConfig.coverageRequirements.find(
+    (pattern) => pattern.weekday === 'MONDAY',
+  );
+  duplicateCoverageWeekdayConfig.coverageRequirements.push({
+    ...structuredClone(mondayCoveragePattern),
+    slots: [],
+  });
+  const duplicateCoverageWeekdayValidation = validateSchedulerConfig(duplicateCoverageWeekdayConfig);
+  if (
+    duplicateCoverageWeekdayValidation.valid ||
+    !duplicateCoverageWeekdayValidation.errors.some((error) => error.includes('Duplicate weekday in coverageRequirements'))
+  ) {
+    throw new Error(
+      `Duplicate coverage weekday silently replaced prior demand: ${JSON.stringify(duplicateCoverageWeekdayValidation)}`,
+    );
+  }
+  totalAssertions += 7;
+
   // -------------------------------------------------------------------------
   // SECTION 5: SUNDAY & HOLIDAY CONTRACTS
   // -------------------------------------------------------------------------
@@ -370,6 +1017,29 @@ async function runAllTests() {
     totalAssertions++;
   }
 
+  const sundayOptOutConfig = getDefaultCategoryConfig('sunday-opt-out-tenant', 'FUEL_STATION');
+  sundayOptOutConfig.sundayAndHolidays = {
+    ...sundayOptOutConfig.sundayAndHolidays,
+    sundayMode: 'CYCLIC_FAIR',
+    participatingRoleTypes: ['CORE_A'],
+  };
+  const sundayOptOutResult = generateScheduleV2({
+    startDate: '2026-06-07',
+    endDate: '2026-06-07',
+    employees: [createTestEmployee(1, { participatesInSundayRotation: false })],
+    config: sundayOptOutConfig,
+  });
+  if (
+    sundayOptOutResult.validation.valid ||
+    sundayOptOutResult.shifts.length !== 0 ||
+    !sundayOptOutResult.unresolvedGaps.length
+  ) {
+    throw new Error(
+      `Sunday opt-out employee remained eligible for cyclic rotation: ${JSON.stringify(sundayOptOutResult)}`,
+    );
+  }
+  totalAssertions += 1;
+
   // 5b. FIXED_ASSIGNMENT with Missing / Non-existent Employee -> Hard Gap & valid=false
   const missingFixedConf = {
     ...getDefaultCategoryConfig('sun-tenant-missing', 'FUEL_STATION'),
@@ -400,66 +1070,104 @@ async function runAllTests() {
   // SECTION 6: REAL PERSISTENCE ZERO-WRITE GATING & POSITIVE CONTROL
   // -------------------------------------------------------------------------
   console.log('[SECTION 6] Proving Zero Persistence Writes on Invalid Schedules & Valid Positive Control...');
-  let invalidWeekWriteCount = 0;
-  let invalidMonthWriteCount = 0;
-  let validControlWriteCount = 0;
-  let expectedWritePathCalled = 'NO';
-
-  // Mock repository layer
-  const mockRepo = {
-    replaceShiftsBatch: async ({ shiftsToCreate }) => {
-      return shiftsToCreate.length;
-    },
-  };
-
-  // Production-like persistence orchestration function
-  async function orchestrateSchedulePersistence({ startDate, endDate, employees, config, isMonth = false }) {
-    const result = generateScheduleV2({ startDate, endDate, employees, config });
-
-    // Strict fail-closed check
-    if (!result.validation || result.validation.valid !== true) {
-      return { ok: false, writtenCount: 0, violations: result.validation?.violations || [] };
-    }
-
-    const written = await mockRepo.replaceShiftsBatch({ shiftsToCreate: result.shifts });
-    if (isMonth) {
-      validControlWriteCount += written;
-    } else {
-      validControlWriteCount += written;
-    }
-    expectedWritePathCalled = 'YES';
-    return { ok: true, writtenCount: written, shifts: result.shifts };
+  if (typeof schedulerAdapterModule.persistValidatedSchedule !== 'function') {
+    throw new Error('The real week/month application path does not expose a shared production validation-to-persistence gate.');
+  }
+  if (
+    typeof schedulerAdapterModule.allPersistenceResultsSucceeded !== 'function' ||
+    schedulerAdapterModule.allPersistenceResultsSucceeded([true, false, true]) !== false ||
+    schedulerAdapterModule.allPersistenceResultsSucceeded([true, true]) !== true
+  ) {
+    throw new Error('Public projection result aggregation does not fail closed when one week projection fails.');
   }
 
-  // 6a. Negative test: understaffed pool (2 employees for 4-person station)
-  const invalidResWeek = await orchestrateSchedulePersistence({
+  const createWriteCounters = () => ({ replaceShiftsBatch: 0, historyWrite: 0, publicProjectionWrite: 0, auditWrite: 0 });
+  const executePersistenceBoundary = async (generationResult, counters, { includeHistory = false } = {}) =>
+    schedulerAdapterModule.persistValidatedSchedule({
+      generationResult,
+      persist: async () => {
+        counters.replaceShiftsBatch += 1;
+        if (includeHistory) counters.historyWrite += 1;
+        counters.publicProjectionWrite += 1;
+        counters.auditWrite += 1;
+        return { writtenCount: generationResult.shifts.length };
+      },
+    });
+
+  const invalidGeneration = generateScheduleV2({
     startDate: '2026-06-01',
     endDate: '2026-06-07',
     employees: [createTestEmployee(1), createTestEmployee(2)],
     config: getDefaultCategoryConfig('gate-tenant', 'FUEL_STATION'),
-    isMonth: false,
   });
-  if (invalidResWeek.ok !== false || invalidResWeek.writtenCount !== 0) {
-    invalidWeekWriteCount += invalidResWeek.writtenCount;
-    throw new Error(`Persistence gate failed: wrote ${invalidWeekWriteCount} shifts on invalid week!`);
-  }
-
-  // 6b. Positive control: fully staffed pool (6 employees)
-  const validResWeek = await orchestrateSchedulePersistence({
+  const validGeneration = generateScheduleV2({
     startDate: '2026-06-01',
     endDate: '2026-06-07',
     employees: Array.from({ length: 6 }, (_, i) => createTestEmployee(i + 1)),
     config: getDefaultCategoryConfig('gate-tenant', 'FUEL_STATION'),
-    isMonth: false,
   });
-  if (validResWeek.ok !== true || validResWeek.writtenCount === 0 || expectedWritePathCalled !== 'YES') {
-    throw new Error('Positive control persistence test failed: valid schedule did not trigger expected repository write path!');
+
+  const invalidWeekCounters = createWriteCounters();
+  const invalidWeekResult = await executePersistenceBoundary(invalidGeneration, invalidWeekCounters, { includeHistory: true });
+  if (invalidWeekResult.ok !== false || Object.values(invalidWeekCounters).some((count) => count !== 0)) {
+    throw new Error(`Invalid week crossed a real persistence boundary: ${JSON.stringify(invalidWeekCounters)}`);
   }
 
-  totalAssertions += 3;
-  console.log(`  ✓ INVALID_WEEK_WRITE_COUNT=${invalidWeekWriteCount}`);
-  console.log(`  ✓ INVALID_MONTH_WRITE_COUNT=${invalidMonthWriteCount}`);
-  console.log(`  ✓ VALID_CONTROL_WRITE_COUNT=${validControlWriteCount} (EXPECTED_WRITE_PATH_CALLED=${expectedWritePathCalled})\n`);
+  const invalidMonthCounters = createWriteCounters();
+  const invalidMonthResult = await executePersistenceBoundary(invalidGeneration, invalidMonthCounters);
+  if (invalidMonthResult.ok !== false || Object.values(invalidMonthCounters).some((count) => count !== 0)) {
+    throw new Error(`Invalid month crossed a real persistence boundary: ${JSON.stringify(invalidMonthCounters)}`);
+  }
+
+  const validWeekCounters = createWriteCounters();
+  const validWeekResult = await executePersistenceBoundary(validGeneration, validWeekCounters, { includeHistory: true });
+  if (validWeekResult.ok !== true || Object.values(validWeekCounters).some((count) => count !== 1)) {
+    throw new Error(`Valid week did not exercise every instrumented write boundary: ${JSON.stringify(validWeekCounters)}`);
+  }
+
+  const validMonthCounters = createWriteCounters();
+  const validMonthResult = await executePersistenceBoundary(validGeneration, validMonthCounters);
+  if (
+    validMonthResult.ok !== true ||
+    validMonthCounters.replaceShiftsBatch !== 1 ||
+    validMonthCounters.historyWrite !== 0 ||
+    validMonthCounters.publicProjectionWrite !== 1 ||
+    validMonthCounters.auditWrite !== 1
+  ) {
+    throw new Error(`Valid month did not exercise every instrumented write boundary: ${JSON.stringify(validMonthCounters)}`);
+  }
+
+  // 6b. EXACT FINAL CANDIDATE REVALIDATION ZERO-WRITE PROOF
+  // Simulate generator validating candidate A, store filtering dropping a shift resulting in invalid candidate B.
+  const partialWeekCandidate = validGeneration.shifts.slice(1);
+  const revalidatedWeekCheck = schedulerAdapterModule.revalidateScheduleCandidate({
+    candidateShifts: partialWeekCandidate,
+    employees: Array.from({ length: 6 }, (_, i) => createTestEmployee(i + 1)),
+    schedulerConfig: getDefaultCategoryConfig('gate-tenant', 'FUEL_STATION'),
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    dates: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'],
+  });
+  if (revalidatedWeekCheck.valid !== false) {
+    throw new Error('Candidate revalidation failed to reject candidate with missing coverage shift!');
+  }
+  const filteredCandidateCounters = createWriteCounters();
+  const filteredPersistenceResult = await executePersistenceBoundary(
+    { shifts: partialWeekCandidate, finalCandidate: partialWeekCandidate, validation: revalidatedWeekCheck },
+    filteredCandidateCounters,
+    { includeHistory: true },
+  );
+  if (filteredPersistenceResult.ok !== false || Object.values(filteredCandidateCounters).some((count) => count !== 0)) {
+    throw new Error(`Filtered invalid candidate crossed persistence boundary: ${JSON.stringify(filteredCandidateCounters)}`);
+  }
+
+  totalAssertions += 6;
+  console.log(`  ✓ INVALID_WEEK_REPLACE_CALLS=${invalidWeekCounters.replaceShiftsBatch}`);
+  console.log(`  ✓ INVALID_WEEK_OTHER_WRITE_CALLS=${invalidWeekCounters.historyWrite + invalidWeekCounters.publicProjectionWrite + invalidWeekCounters.auditWrite}`);
+  console.log(`  ✓ INVALID_MONTH_REPLACE_CALLS=${invalidMonthCounters.replaceShiftsBatch}`);
+  console.log(`  ✓ INVALID_MONTH_OTHER_WRITE_CALLS=${invalidMonthCounters.historyWrite + invalidMonthCounters.publicProjectionWrite + invalidMonthCounters.auditWrite}`);
+  console.log(`  ✓ VALID_WEEK_WRITE_BOUNDARY_CALLED=${validWeekCounters.replaceShiftsBatch === 1 ? 'YES' : 'NO'}`);
+  console.log(`  ✓ VALID_MONTH_WRITE_BOUNDARY_CALLED=${validMonthCounters.replaceShiftsBatch === 1 ? 'YES' : 'NO'}\n`);
 
   // -------------------------------------------------------------------------
   // SECTION 7: END-TO-END REAL TENANT CONFIG PRESERVATION
@@ -574,16 +1282,32 @@ async function runAllTests() {
   let validScheduleScenarios = 0;
   let unsatisfiableScenarios = 0;
   let invariantFailures = 0;
+  let validButUnsatisfiableConfigs = 0;
+  const variantMetrics = {
+    operatingWindowVariants: 0,
+    shiftTemplateVariants: 0,
+    coverageVariants: 0,
+    roleSkillVariants: 0,
+    sundayVariants: 0,
+    specialDayVariants: 0,
+    seasonalVariants: 0,
+  };
 
   for (let run = 1; run <= 2000; run++) {
     const empCount = prng.nextInt(1, 30);
     const employees = Array.from({ length: empCount }, (_, i) =>
       createTestEmployee(i + 1, {
-        isEnabled: prng.nextBoolean(0.92),
+        scheduleRole: prng.pick(FUZZ_ROLE_TYPES),
+        isEnabled: prng.nextBoolean(0.88),
+        fixedDayOff: prng.nextBoolean(0.65) ? prng.pick(FUZZ_WEEKDAYS) : undefined,
         canWorkSunday: prng.nextBoolean(0.85),
         canWorkMorning: prng.nextBoolean(0.9),
+        canWorkIntermediate: prng.nextBoolean(0.9),
         canWorkAfternoon: prng.nextBoolean(0.9),
-        skills: prng.nextBoolean(0.3) ? ['SPECIALIST'] : [],
+        activeFrom: prng.nextBoolean(0.12) ? prng.pick(['2026-05-01', '2026-06-03']) : undefined,
+        activeTo: prng.nextBoolean(0.12) ? prng.pick(['2026-06-04', '2026-07-01']) : undefined,
+        extraMode: prng.nextBoolean(0.15) ? prng.pick(['SUBSTITUTE_ONLY', 'ACTIVE_SEASONAL', 'DISABLED']) : undefined,
+        skills: prng.nextBoolean(0.45) ? ['SKILL_A'] : [],
       })
     );
 
@@ -603,30 +1327,37 @@ async function runAllTests() {
     }
 
     const category = prng.pick(fuzzCategories);
-    const config = getDefaultCategoryConfig(`fuzz-tenant-${run}`, category);
+    const intentRoll = prng.next();
+    const intent = intentRoll < 0.15
+      ? 'INVALID_CONFIG'
+      : intentRoll < 0.35
+        ? 'VALID_BUT_UNSATISFIABLE_CONFIG'
+        : 'VALID_CONFIG';
+    const { config, windowMode } = createVariableFuzzConfig(prng, run, category, employees, intent);
+    const configValidation = validateSchedulerConfig(config);
 
-    // Intentionally inject invalid configs for 15% of scenarios to test config validation
-    const injectInvalid = prng.nextBoolean(0.15);
-    if (injectInvalid) {
+    if (intent === 'INVALID_CONFIG') {
       invalidConfigScenarios++;
-      const mutationType = prng.pick(['BAD_DURATION', 'UNKNOWN_TEMPLATE_SLOT', 'OUT_OF_WINDOW', 'INVALID_HOURS']);
-      if (mutationType === 'BAD_DURATION' && config.shiftTemplates.length > 0) {
-        config.shiftTemplates[0].durationHours = 99.0;
-      } else if (mutationType === 'UNKNOWN_TEMPLATE_SLOT' && config.coverageRequirements.length > 0) {
-        config.coverageRequirements[0].slots.push({ shiftTemplateId: 'non-existent-template-id', minHeadcount: 1, targetHeadcount: 1 });
-      } else if (mutationType === 'OUT_OF_WINDOW' && config.operatingDays.length > 0) {
-        // Shrink operating window so 8h shifts do not fit
-        config.operatingDays[0].windows = [{ openTime: '12:00', closeTime: '13:00' }];
-      } else if (mutationType === 'INVALID_HOURS') {
-        config.complianceRules.maxDailyWorkingHours = 0;
+      if (configValidation.valid) {
+        invariantFailures++;
+        throw new Error(`[FUZZ RUN ${run}] INVALID_CONFIG mutation remained valid.`);
       }
     } else {
       validConfigScenarios++;
-      // Randomize compliance rules within valid bounds
-      config.complianceRules.maxConsecutiveWorkingDays = prng.nextInt(4, 7);
-      config.complianceRules.minRestIntervalBetweenShiftsHours = prng.pick([8, 11, 12]);
-      config.complianceRules.minDaysOffPerWeek = prng.pick([1, 2]);
+      if (!configValidation.valid) {
+        invariantFailures++;
+        throw new Error(`[FUZZ RUN ${run}] ${intent} failed schema validation: ${JSON.stringify(configValidation.errors)}`);
+      }
+      if (intent === 'VALID_BUT_UNSATISFIABLE_CONFIG') validButUnsatisfiableConfigs++;
     }
+
+    variantMetrics.operatingWindowVariants += windowMode === 'CROSS_MIDNIGHT' || config.operatingDays.some((day) => day.windows.length === 2) ? 1 : 0;
+    variantMetrics.shiftTemplateVariants += config.shiftTemplates.length > 1 || config.shiftTemplates.some((template) => template.unpaidBreakMinutes > 0) ? 1 : 0;
+    variantMetrics.coverageVariants += config.coverageRequirements.some((pattern) => pattern.slots.some((slot) => slot.maxHeadcount !== slot.targetHeadcount)) ? 1 : 0;
+    variantMetrics.roleSkillVariants += config.shiftTemplates.some((template) => template.requiredSkillsOrRoles?.length) || config.coverageRequirements.some((pattern) => pattern.slots.some((slot) => slot.requiredRole)) ? 1 : 0;
+    variantMetrics.sundayVariants += config.sundayAndHolidays.sundayMode !== 'CYCLIC_FAIR' || config.sundayAndHolidays.participatingRoleTypes.length < FUZZ_ROLE_TYPES.length ? 1 : 0;
+    variantMetrics.specialDayVariants += Object.keys(config.specialDaysByDate).length > 0 ? 1 : 0;
+    variantMetrics.seasonalVariants += employees.some((employee) => employee.activeFrom || employee.activeTo || employee.extraMode) ? 1 : 0;
 
     let result;
     try {
@@ -642,12 +1373,25 @@ async function runAllTests() {
       throw new Error(`[FUZZ RUN ${run}] Engine threw uncaught exception: ${err.message}`);
     }
 
-    if (injectInvalid) {
+    if (intent === 'INVALID_CONFIG') {
       if (result.validation.valid !== false) {
         invariantFailures++;
-        throw new Error(`[FUZZ RUN ${run}] Invalid config was accepted by generator!`);
+        throw new Error(`[FUZZ SEED 20260830 RUN ${run}] Invalid config was accepted by generator!`);
       }
       continue;
+    }
+
+    if (intent === 'VALID_BUT_UNSATISFIABLE_CONFIG') {
+      const hasHardGap = (result.unresolvedGaps || []).some(
+        (g) => !result.warnings.some((w) => w.id?.includes(g.id?.replace('gap-', '')) && w.code === 'TARGET_COVERAGE_NOT_MET')
+      );
+      const hasHardViolation = (result.validation?.violations || []).some((v) => v.severity === 'error');
+      if (result.validation.valid !== false || (!hasHardGap && !hasHardViolation)) {
+        invariantFailures++;
+        throw new Error(
+          `[FUZZ SEED 20260830 RUN ${run}] Intentionally unsatisfiable config must have validation.valid=false plus hard gap or hard violation: valid=${result.validation?.valid}, hardGap=${hasHardGap}, hardViolation=${hasHardViolation}`,
+        );
+      }
     }
 
     if (result.validation.valid) {
@@ -655,10 +1399,26 @@ async function runAllTests() {
 
       // Invariant 1: No inactive employees assigned
       const inactiveSet = new Set(employees.filter((e) => e.isEnabled === false).map((e) => e.employeeId));
+      const inputEmployeeIds = new Set(employees.map((employee) => employee.employeeId));
+      const knownTemplateIds = new Set(config.shiftTemplates.map((template) => template.id));
+      const knownDemandSlotIds = new Set(buildDemandSlots(config, '2026-06-01', '2026-06-07').map((slot) => slot.slotId));
       for (const s of result.shifts) {
+        if (!inputEmployeeIds.has(s.employeeId)) {
+          invariantFailures++;
+          throw new Error(`[FUZZ RUN ${run}] Foreign employee ${s.employeeId} assigned shift!`);
+        }
         if (inactiveSet.has(s.employeeId)) {
           invariantFailures++;
           throw new Error(`[FUZZ RUN ${run}] Inactive employee ${s.employeeId} assigned shift!`);
+        }
+        if (!knownTemplateIds.has(s.shiftTemplateId) || !knownDemandSlotIds.has(s.demandSlotId)) {
+          invariantFailures++;
+          throw new Error(`[FUZZ RUN ${run}] Generated shift lost known template/demand identity!`);
+        }
+        const employee = employees.find((candidate) => candidate.employeeId === s.employeeId);
+        if ((employee?.activeFrom && s.date < employee.activeFrom) || (employee?.activeTo && s.date > employee.activeTo)) {
+          invariantFailures++;
+          throw new Error(`[FUZZ RUN ${run}] Out-of-season employee ${s.employeeId} assigned shift!`);
         }
       }
 
@@ -720,14 +1480,38 @@ async function runAllTests() {
   }
 
   totalAssertions += 2000;
+  if (
+    validButUnsatisfiableConfigs === 0 ||
+    Object.values(variantMetrics).some((count) => count === 0)
+  ) {
+    throw new Error(
+      `Deep fuzz did not exercise every required intent/variant class: ${JSON.stringify({ validButUnsatisfiableConfigs, variantMetrics })}`,
+    );
+  }
   console.log(`  ✓ Fuzzing Metrics (Seed: ${prng.seed}):`);
   console.log(`    - Total Scenarios: 2000`);
   console.log(`    - Valid Config Scenarios: ${validConfigScenarios}`);
   console.log(`    - Invalid Injected Config Scenarios (Safely Caught): ${invalidConfigScenarios}`);
+  console.log(`    - Valid But Intentionally Unsatisfiable Configs: ${validButUnsatisfiableConfigs}`);
   console.log(`    - Valid Schedules Generated: ${validScheduleScenarios}`);
   console.log(`    - Unsatisfiable / Understaffed Gaps Caught: ${unsatisfiableScenarios}`);
+  console.log(`    - Operating Window Variants: ${variantMetrics.operatingWindowVariants}`);
+  console.log(`    - Shift Template Variants: ${variantMetrics.shiftTemplateVariants}`);
+  console.log(`    - Coverage Variants: ${variantMetrics.coverageVariants}`);
+  console.log(`    - Role / Skill Variants: ${variantMetrics.roleSkillVariants}`);
+  console.log(`    - Sunday Variants: ${variantMetrics.sundayVariants}`);
+  console.log(`    - Special Day Variants: ${variantMetrics.specialDayVariants}`);
+  console.log(`    - Seasonal Variants: ${variantMetrics.seasonalVariants}`);
   console.log(`    - Unexpected Engine Exceptions: ${unexpectedEngineExceptions}`);
-  console.log(`    - Invariant Failures: ${invariantFailures}\n`);
+  console.log(`    - Invariant Failures: ${invariantFailures}`);
+  console.log(`    - TOTAL=2000`);
+  console.log(`    - VALID_CONFIG=${validConfigScenarios}`);
+  console.log(`    - INVALID_CONFIG=${invalidConfigScenarios}`);
+  console.log(`    - INTENTIONALLY_UNSATISFIABLE=${validButUnsatisfiableConfigs}`);
+  console.log(`    - VALID_SCHEDULE=${validScheduleScenarios}`);
+  console.log(`    - UNEXPECTED_EXCEPTIONS=${unexpectedEngineExceptions}`);
+  console.log(`    - INVARIANT_FAILURES=${invariantFailures}`);
+  console.log(`    - SEED=20260830\n`);
 
   // -------------------------------------------------------------------------
   // SECTION 10: MULTI-TENANT ISOLATION MATRIX

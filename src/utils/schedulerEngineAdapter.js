@@ -1,5 +1,13 @@
-import { generateSchedule } from '../scheduler-engine/index.ts';
+import {
+  generateSchedule,
+  validateGeneratedScheduleCompliance,
+  validateSchedule,
+} from '../scheduler-engine/index.ts';
 import { SHIFT_TYPES } from './analytics.js';
+export {
+  allPersistenceResultsSucceeded,
+  persistValidatedSchedule,
+} from './validatedSchedulePersistence.js';
 
 const APP_SHIFT_TYPES = {
   MORNING: 'morning',
@@ -306,14 +314,18 @@ function toEngineEmployee(employee, scheduleRole, rules = {}) {
   };
 }
 
-function toEngineEmployees(employees = [], rules = {}) {
+export function mapAppEmployeesToSchedulerPool(employees = [], rules = {}) {
   const activeEmployees = (employees || []).filter((employee) => employee?.isActive !== false && employee?.id);
   const { roleById, valid } = resolveEngineRoleMap(activeEmployees);
-  return activeEmployees.map((employee) => {
-    const legacyRole = valid ? roleById.get(employee.id) : null;
+  return (employees || []).filter((employee) => employee?.id).map((employee) => {
+    const legacyRole = employee.isActive !== false && valid ? roleById.get(employee.id) : null;
     const scheduleRole = legacyRole || employee.scheduleRole || employee.roleType || 'AUTO';
     return toEngineEmployee(employee, scheduleRole, rules);
   });
+}
+
+function toEngineEmployees(employees = [], rules = {}) {
+  return mapAppEmployeesToSchedulerPool(employees, rules);
 }
 
 function toEngineAbsence(shift) {
@@ -377,14 +389,72 @@ function toEngineAbsences(shifts = [], dates = []) {
     .map(toEngineAbsence);
 }
 
+const APP_TO_ENGINE_SHIFT_TYPE = {
+  morning: 'MORNING',
+  intermediate: 'INTERMEDIATE',
+  evening: 'AFTERNOON',
+  afternoon: 'AFTERNOON',
+  night: 'NIGHT',
+  split: 'SPLIT',
+  custom: 'CUSTOM',
+  special: 'SPECIAL',
+};
+
+function toEngineManualOverrides(shifts = [], dates = [], engineEmployees = [], schedulerConfig) {
+  const dateSet = new Set(dates);
+  const employeeMap = new Map(engineEmployees.map((employee) => [employee.employeeId, employee]));
+  const templates = Array.isArray(schedulerConfig?.shiftTemplates) ? schedulerConfig.shiftTemplates : [];
+  const templateMap = new Map(templates.map((template) => [template.id, template]));
+
+  return (shifts || [])
+    .filter(
+      (shift) =>
+        shift?.employeeId &&
+        dateSet.has(shift.date) &&
+        shift.isManualOverride === true &&
+        (shift.type || SHIFT_TYPES.WORK) === SHIFT_TYPES.WORK,
+    )
+    .map((shift) => {
+      const explicitTemplate = shift.shiftTemplateId ? templateMap.get(shift.shiftTemplateId) : undefined;
+      const matchingTemplates = templates.filter(
+        (template) => template.startTime === shift.startTime && template.endTime === shift.endTime,
+      );
+      const template = explicitTemplate || (matchingTemplates.length === 1 ? matchingTemplates[0] : undefined);
+      const employee = employeeMap.get(shift.employeeId);
+      const normalizedShiftType =
+        template?.shiftType ||
+        APP_TO_ENGINE_SHIFT_TYPE[`${shift.shiftType || ''}`.toLowerCase()] ||
+        'CUSTOM';
+
+      return {
+        id: shift.id || `manual-${shift.employeeId}-${shift.date}-${shift.startTime}`,
+        date: shift.date,
+        employeeId: shift.employeeId,
+        employeeName: shift.employeeName || employee?.fullName || shift.employeeId,
+        scheduleRole: employee?.scheduleRole || 'AUTO',
+        shiftType: normalizedShiftType,
+        shiftTemplateId: template?.id || shift.shiftTemplateId,
+        demandSlotId: shift.demandSlotId,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        crossMidnight: Boolean(shift.crossMidnight ?? template?.crossMidnight),
+        durationHours: shift.durationHours ?? template?.durationHours,
+        source: 'MANUAL_OVERRIDE',
+      };
+    });
+}
+
 function toAppShift(shift) {
   return {
     id: shift.id,
     employeeId: shift.employeeId,
-    employeeName: shift.employeeName,
     date: shift.date,
     startTime: shift.startTime,
     endTime: shift.endTime,
+    shiftTemplateId: shift.shiftTemplateId,
+    demandSlotId: shift.demandSlotId,
+    crossMidnight: Boolean(shift.crossMidnight),
+    durationHours: shift.durationHours,
     label: APP_SHIFT_LABELS[shift.shiftType] || 'Εργασία',
     shiftType: APP_SHIFT_TYPES[shift.shiftType] || `${shift.shiftType || 'custom'}`.toLowerCase(),
     customLabel: shift.shiftType === 'SUNDAY_12H' ? 'Κυριακή' : '',
@@ -496,11 +566,17 @@ export async function generateEngineWeekSchedule({
     employees: engineEmployees,
     absences: engineAbsences,
     schedulerConfig: schedulerConfig || (rules?.schemaVersion === 2 ? rules : undefined),
+    manualOverrides: isV2
+      ? toEngineManualOverrides(allShifts, weekDays, engineEmployees, schedulerConfig || rules)
+      : [],
     rules: toEngineRules(rules),
   });
 
+  const generatedAppShifts = engineResult.shifts
+    .filter((shift) => shift.source !== 'MANUAL_OVERRIDE')
+    .map(toAppShift);
   return {
-    shifts: filterAgainstManualEntries(engineResult.shifts.map(toAppShift), allShifts),
+    shifts: isV2 ? generatedAppShifts : filterAgainstManualEntries(generatedAppShifts, allShifts),
     warnings: collectWarnings(engineResult),
     validation: engineResult.validation,
     unresolvedGaps: engineResult.unresolvedGaps,
@@ -567,11 +643,17 @@ export function generateEngineMonthSchedule({
     employees: engineEmployees,
     absences: engineAbsences,
     schedulerConfig: schedulerConfig || (rules?.schemaVersion === 2 ? rules : undefined),
+    manualOverrides: isV2
+      ? toEngineManualOverrides(existingMonthShifts, monthDays, engineEmployees, schedulerConfig || rules)
+      : [],
     rules: toEngineRules(rules),
   });
 
+  const generatedAppShifts = engineResult.shifts
+    .filter((shift) => shift.source !== 'MANUAL_OVERRIDE')
+    .map(toAppShift);
   return {
-    shifts: filterAgainstManualEntries(engineResult.shifts.map(toAppShift), existingMonthShifts),
+    shifts: isV2 ? generatedAppShifts : filterAgainstManualEntries(generatedAppShifts, existingMonthShifts),
     warnings: collectWarnings(engineResult),
     unresolvedGaps: engineResult.unresolvedGaps,
     validation: engineResult.validation,
@@ -581,5 +663,114 @@ export function generateEngineMonthSchedule({
       resolvedRoles: engineResult.debug.resolvedRoles,
       dayPlans: engineResult.debug.dayPlans,
     },
+  };
+}
+
+export function revalidateScheduleCandidate({
+  candidateShifts = [],
+  employees = [],
+  allShifts = [],
+  absences = [],
+  rules = {},
+  schedulerConfig,
+  startDate,
+  endDate,
+  dates = [],
+} = {}) {
+  const isV2 = Boolean(schedulerConfig?.schemaVersion === 2 || rules?.schemaVersion === 2);
+  const effectiveConfig = schedulerConfig || (rules?.schemaVersion === 2 ? rules : undefined);
+  const engineEmployees = toEngineEmployees(employees, rules);
+  const targetDates = Array.isArray(dates) && dates.length > 0
+    ? dates
+    : getMonthDays(Number(startDate.split('-')[0]), Number(startDate.split('-')[1]) - 1);
+  const workCandidateShifts = candidateShifts.filter(
+    (shift) => !shift.type || shift.type === 'work' || shift.type === SHIFT_TYPES.WORK,
+  );
+  const nonWorkCandidateShifts = candidateShifts.filter(
+    (shift) => shift.type && shift.type !== 'work' && shift.type !== SHIFT_TYPES.WORK,
+  );
+
+  const engineAbsences = [
+    ...toEngineAbsences(allShifts, targetDates),
+    ...toEngineStoredAbsences(absences, startDate, endDate),
+    ...nonWorkCandidateShifts.map(toEngineAbsence),
+  ];
+
+  if (isV2 && effectiveConfig) {
+    const templates = Array.isArray(effectiveConfig.shiftTemplates) ? effectiveConfig.shiftTemplates : [];
+    const templateMap = new Map(templates.map((t) => [t.id, t]));
+    const employeeMap = new Map(engineEmployees.map((e) => [e.employeeId, e]));
+
+    const engineShifts = workCandidateShifts.map((shift) => {
+      const explicitTemplate = shift.shiftTemplateId ? templateMap.get(shift.shiftTemplateId) : undefined;
+      const matchingTemplates = templates.filter(
+        (template) => template.startTime === shift.startTime && template.endTime === shift.endTime,
+      );
+      const template = explicitTemplate || (matchingTemplates.length === 1 ? matchingTemplates[0] : undefined);
+      const employee = employeeMap.get(shift.employeeId);
+      const isManual = Boolean(shift.isManualOverride || shift.source === 'MANUAL_OVERRIDE');
+      const normalizedShiftType =
+        template?.shiftType ||
+        APP_TO_ENGINE_SHIFT_TYPE[`${shift.shiftType || ''}`.toLowerCase()] ||
+        'CUSTOM';
+
+      return {
+        id: shift.id || `${isManual ? 'manual' : 'auto'}-${shift.employeeId}-${shift.date}-${shift.startTime}`,
+        date: shift.date,
+        employeeId: shift.employeeId,
+        employeeName: shift.employeeName || employee?.fullName || shift.employeeId,
+        scheduleRole: employee?.scheduleRole || 'AUTO',
+        shiftType: normalizedShiftType,
+        shiftTemplateId: template?.id || shift.shiftTemplateId,
+        demandSlotId: shift.demandSlotId,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        crossMidnight: Boolean(shift.crossMidnight ?? template?.crossMidnight),
+        durationHours: shift.durationHours ?? template?.durationHours,
+        source: isManual ? 'MANUAL_OVERRIDE' : (shift.source || 'AUTO'),
+      };
+    });
+
+    const compliance = validateGeneratedScheduleCompliance({
+      config: effectiveConfig,
+      employees: engineEmployees,
+      absences: engineAbsences,
+      shifts: engineShifts,
+      startDate,
+      endDate,
+    });
+
+    return {
+      valid: compliance.valid && !compliance.violations.some((v) => v.severity === 'error'),
+      violations: compliance.violations,
+    };
+  }
+
+  // Legacy (V1) candidate revalidation
+  const legacyCandidateShifts = workCandidateShifts.map((s) => ({
+    id: s.id,
+    date: s.date,
+    employeeId: s.employeeId,
+    employeeName: s.employeeName || s.employeeId,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    shiftType: APP_TO_ENGINE_SHIFT_TYPE[`${s.shiftType || ''}`.toLowerCase()] || s.shiftType || 'MORNING',
+    type: s.type || 'work',
+    isManualOverride: Boolean(s.isManualOverride),
+  }));
+
+  const validation = validateSchedule({
+    startDate,
+    endDate,
+    employees: engineEmployees,
+    absences: engineAbsences,
+    shifts: legacyCandidateShifts,
+    unresolvedGaps: [],
+    warnings: [],
+  });
+
+  return {
+    valid: validation.valid && !validation.violations.some((v) => v.severity === 'error'),
+    violations: validation.violations,
   };
 }

@@ -31,7 +31,7 @@ export interface GenerateScheduleV2Input {
   employees: EmployeeScheduleConfig[];
   absences?: EmployeeAbsence[];
   config?: SchedulerConfigV2;
-  rawSettings?: any;
+  rawSettings?: unknown;
   previousSundayEmployeeId?: string;
   manualOverrides?: GeneratedShift[];
 }
@@ -69,6 +69,23 @@ function stableSortEmployees(employees: EmployeeScheduleConfig[]): EmployeeSched
   );
 }
 
+export function calculateTargetDaysOffPenalty(
+  weeklyDaysWorked: number,
+  targetDaysOffPerWeek: number
+): number {
+  const normalizedWorkedDays = Number.isFinite(weeklyDaysWorked)
+    ? Math.max(0, Math.floor(weeklyDaysWorked))
+    : 0;
+  const normalizedTargetDaysOff = Number.isFinite(targetDaysOffPerWeek)
+    ? Math.min(6, Math.max(0, Math.floor(targetDaysOffPerWeek)))
+    : 0;
+  const preferredMaximumWorkingDays = 7 - normalizedTargetDaysOff;
+  const projectedWorkingDays = normalizedWorkedDays + 1;
+  return projectedWorkingDays > preferredMaximumWorkingDays
+    ? (projectedWorkingDays - preferredMaximumWorkingDays) * 250
+    : 0;
+}
+
 export function validateGeneratedScheduleCompliance(params: {
   config: SchedulerConfigV2;
   employees: EmployeeScheduleConfig[];
@@ -83,6 +100,8 @@ export function validateGeneratedScheduleCompliance(params: {
   const empMap = new Map(validEmployees.map((e) => [e.employeeId, e]));
   const tplMap = new Map((config?.shiftTemplates || []).map((t) => [t.id, t]));
   const opDayMap = new Map((config?.operatingDays || []).map((d) => [d.weekday, d]));
+  const expectedDemandSlots = buildDemandSlots(config, startDate, endDate);
+  const expectedDemandSlotIds = new Set(expectedDemandSlots.map((slot) => slot.slotId));
 
   // Chronologically sorted shifts
   const sorted = [...shifts].sort(
@@ -99,6 +118,53 @@ export function validateGeneratedScheduleCompliance(params: {
 
   for (const s of sorted) {
     const emp = empMap.get(s.employeeId);
+    const tpl = s.shiftTemplateId ? tplMap.get(s.shiftTemplateId) : undefined;
+
+    if (!tpl) {
+      violations.push({
+        id: `UNKNOWN_SHIFT_TEMPLATE-${s.id}`,
+        severity: 'error',
+        code: 'UNKNOWN_SHIFT_TEMPLATE',
+        message: `Η βάρδια ${s.id} δεν αναφέρεται σε γνωστό shiftTemplateId.`,
+        date: s.date,
+        employeeId: s.employeeId,
+      });
+    } else {
+      const derivedDuration = deriveShiftDurationHours(
+        s.startTime,
+        s.endTime,
+        Boolean(s.crossMidnight),
+        tpl.unpaidBreakMinutes,
+      );
+      const identityMismatch =
+        s.startTime !== tpl.startTime ||
+        s.endTime !== tpl.endTime ||
+        Boolean(s.crossMidnight) !== Boolean(tpl.crossMidnight) ||
+        (typeof s.durationHours === 'number' && Math.abs(s.durationHours - derivedDuration) > 0.05);
+      if (identityMismatch) {
+        violations.push({
+          id: `SHIFT_TEMPLATE_IDENTITY_MISMATCH-${s.id}`,
+          severity: 'error',
+          code: 'SHIFT_TEMPLATE_IDENTITY_MISMATCH',
+          message: `Η βάρδια ${s.id} δεν συμφωνεί με τις ώρες/διάρκεια του shift template ${tpl.id}.`,
+          date: s.date,
+          employeeId: s.employeeId,
+        });
+      }
+    }
+    if (
+      s.source !== 'MANUAL_OVERRIDE' &&
+      (!s.demandSlotId || !expectedDemandSlotIds.has(s.demandSlotId))
+    ) {
+      violations.push({
+        id: `UNKNOWN_DEMAND_SLOT-${s.id}`,
+        severity: 'error',
+        code: 'UNKNOWN_DEMAND_SLOT',
+        message: `Η αυτόματη βάρδια ${s.id} δεν αναφέρεται σε γνωστό demandSlotId.`,
+        date: s.date,
+        employeeId: s.employeeId,
+      });
+    }
 
     // Rule 1: Unknown employee existence
     if (!emp) {
@@ -118,7 +184,7 @@ export function validateGeneratedScheduleCompliance(params: {
       violations.push({
         id: `DEACTIVATED_EMPLOYEE_ASSIGNED-${s.id}`,
         severity: 'error',
-        code: 'DEACTIVATED_EMPLOYEE_ASSIGNED',
+        code: 'DEACTIVATED_EMPLOYEE_FUTURE_ASSIGNMENT',
         message: `Απενεργοποιημένος υπάλληλος ${s.employeeId} έλαβε βάρδια στις ${s.date}`,
         date: s.date,
         employeeId: s.employeeId,
@@ -203,7 +269,7 @@ export function validateGeneratedScheduleCompliance(params: {
         s.endTime,
         applicableWindows,
         undefined,
-        Boolean((s as any).crossMidnight)
+        Boolean(s.crossMidnight ?? tpl?.crossMidnight)
       );
       if (!fits) {
         violations.push({
@@ -218,7 +284,6 @@ export function validateGeneratedScheduleCompliance(params: {
     }
 
     // Rule 6: Skills check if template defines requiredSkillsOrRoles
-    const tpl = tplMap.get(s.shiftType) || [...tplMap.values()].find((t) => t.startTime === s.startTime && t.endTime === s.endTime);
     if (tpl?.requiredSkillsOrRoles && tpl.requiredSkillsOrRoles.length > 0) {
       const empSkills = new Set(Array.isArray(emp.skills) ? emp.skills : []);
       const hasAll = tpl.requiredSkillsOrRoles.every((r) => empSkills.has(r) || emp.scheduleRole === r);
@@ -246,7 +311,189 @@ export function validateGeneratedScheduleCompliance(params: {
     datesByEmp.get(s.employeeId)!.add(s.date);
   }
 
-  // Rule 7 & 8: Double Shifts & Overlapping Shifts on Same Day
+  // Rule 7: Rebuild configured demand independently from final candidate shifts.
+  type DemandRequirement = {
+    shiftTemplateId: string;
+    minHeadcount: number;
+    targetHeadcount: number;
+    maxHeadcount?: number;
+    requiredRole?: string;
+    optionalCandidateRoles?: string[];
+    participatingRoles?: string[];
+    fixedEmployeeId?: string;
+  };
+
+  const coverageMap = new Map((config.coverageRequirements || []).map((pattern) => [pattern.weekday, pattern]));
+  for (const date of eachDateInclusive(startDate, endDate)) {
+    const weekday = getWeekday(date);
+    const specialDay = config.specialDaysByDate?.[date];
+    const dateShifts = sorted.filter((shift) => shift.date === date);
+
+    if (specialDay?.isHoliday && config.sundayAndHolidays?.closedOnPublicHolidays) {
+      if (dateShifts.length > 0) {
+        violations.push({
+          id: `CLOSED_HOLIDAY_COVERAGE-${date}`,
+          severity: 'error',
+          code: 'CLOSED_HOLIDAY_SHIFT_ASSIGNED',
+          message: `Υπάρχουν βάρδιες στην κλειστή δημόσια αργία ${date}.`,
+          date,
+        });
+      }
+      continue;
+    }
+
+    const treatedAsSunday =
+      weekday === 'SUNDAY' ||
+      Boolean(specialDay?.isHoliday && config.sundayAndHolidays?.holidaysTreatedAsSundays);
+    const sundayMode = config.sundayAndHolidays?.sundayMode;
+
+    if (treatedAsSunday && sundayMode === 'CLOSED') {
+      if (dateShifts.length > 0) {
+        violations.push({
+          id: `CLOSED_SUNDAY_COVERAGE-${date}`,
+          severity: 'error',
+          code: 'CLOSED_SUNDAY_SHIFT_ASSIGNED',
+          message: `Υπάρχουν βάρδιες στις ${date}, ενώ η πολιτική Κυριακής είναι CLOSED.`,
+          date,
+        });
+      }
+      continue;
+    }
+
+    let requirements: DemandRequirement[] = [];
+    if (treatedAsSunday && sundayMode !== 'STANDARD_WEEKDAY_LIKE') {
+      requirements = [{
+        shiftTemplateId: config.sundayAndHolidays.sundayShiftTemplateId,
+        minHeadcount: 1,
+        targetHeadcount: 1,
+        maxHeadcount: 1,
+        participatingRoles: config.sundayAndHolidays.participatingRoleTypes,
+        fixedEmployeeId:
+          sundayMode === 'FIXED_ASSIGNMENT'
+            ? config.sundayAndHolidays.fixedSundayEmployeeIds?.[0]
+            : undefined,
+      }];
+    } else {
+      const coverageWeekday = treatedAsSunday ? 'SUNDAY' : weekday;
+      requirements = (coverageMap.get(coverageWeekday)?.slots || []).map((slot) => ({
+        shiftTemplateId: slot.shiftTemplateId,
+        minHeadcount: slot.minHeadcount,
+        targetHeadcount: slot.targetHeadcount,
+        maxHeadcount: slot.maxHeadcount,
+        requiredRole: slot.requiredRole,
+        optionalCandidateRoles: slot.optionalCandidateRoles,
+      }));
+      if (requirements.length === 0) {
+        const fallbackByTemplate = new Map<string, DemandRequirement>();
+        for (const slot of expectedDemandSlots.filter((candidate) => candidate.date === date)) {
+          const current = fallbackByTemplate.get(slot.template.id) || {
+            shiftTemplateId: slot.template.id,
+            minHeadcount: 0,
+            targetHeadcount: 0,
+          };
+          current.targetHeadcount += 1;
+          if (slot.isHardMinimum) current.minHeadcount += 1;
+          fallbackByTemplate.set(slot.template.id, current);
+        }
+        requirements = [...fallbackByTemplate.values()];
+      }
+    }
+
+    for (const requirement of requirements) {
+      const matchingShifts = dateShifts.filter(
+        (shift) => shift.shiftTemplateId === requirement.shiftTemplateId
+      );
+      const count = matchingShifts.length;
+
+      if (count < requirement.minHeadcount) {
+        violations.push({
+          id: `MIN_COVERAGE_NOT_MET-${date}-${requirement.shiftTemplateId}`,
+          severity: 'error',
+          code: 'MIN_COVERAGE_NOT_MET',
+          message: `Ελάχιστη κάλυψη ${requirement.minHeadcount} για ${requirement.shiftTemplateId} στις ${date}, τελικό πλήθος ${count}.`,
+          date,
+        });
+      } else if (count < requirement.targetHeadcount) {
+        violations.push({
+          id: `TARGET_COVERAGE_NOT_MET-${date}-${requirement.shiftTemplateId}`,
+          severity: 'warning',
+          code: 'TARGET_COVERAGE_NOT_MET',
+          message: `Στόχος κάλυψης ${requirement.targetHeadcount} για ${requirement.shiftTemplateId} στις ${date}, τελικό πλήθος ${count}.`,
+          date,
+        });
+      }
+
+      if (typeof requirement.maxHeadcount === 'number' && count > requirement.maxHeadcount) {
+        violations.push({
+          id: `MAX_COVERAGE_EXCEEDED-${date}-${requirement.shiftTemplateId}`,
+          severity: 'error',
+          code: 'MAX_COVERAGE_EXCEEDED',
+          message: `Μέγιστη κάλυψη ${requirement.maxHeadcount} για ${requirement.shiftTemplateId} στις ${date}, τελικό πλήθος ${count}.`,
+          date,
+        });
+      }
+
+      for (const shift of matchingShifts) {
+        const employee = empMap.get(shift.employeeId);
+        if (!employee) continue;
+
+        if (requirement.requiredRole) {
+          const allowedRoles = new Set([
+            requirement.requiredRole,
+            ...(requirement.optionalCandidateRoles || []),
+          ]);
+          if (!allowedRoles.has(employee.scheduleRole)) {
+            violations.push({
+              id: `ROLE_REQUIREMENT_UNMET-${shift.id}`,
+              severity: 'error',
+              code: 'ROLE_REQUIREMENT_UNMET',
+              message: `Ο ${shift.employeeId} δεν έχει επιτρεπόμενο scheduling role για ${requirement.shiftTemplateId} στις ${date}.`,
+              date,
+              employeeId: shift.employeeId,
+            });
+          }
+        }
+
+        if (
+          requirement.participatingRoles?.length &&
+          !requirement.participatingRoles.includes(employee.scheduleRole)
+        ) {
+          violations.push({
+            id: `SUNDAY_ROLE_EXCLUDED-${shift.id}`,
+            severity: 'error',
+            code: 'SUNDAY_ROLE_EXCLUDED',
+            message: `Ο ρόλος ${employee.scheduleRole} δεν συμμετέχει στην πολιτική Κυριακής για ${date}.`,
+            date,
+            employeeId: shift.employeeId,
+          });
+        }
+
+        if (treatedAsSunday && sundayMode === 'CYCLIC_FAIR' && employee.participatesInSundayRotation === false) {
+          violations.push({
+            id: `SUNDAY_ROTATION_OPT_OUT-${shift.id}`,
+            severity: 'error',
+            code: 'SUNDAY_ROTATION_OPT_OUT',
+            message: `Ο ${shift.employeeId} έχει εξαιρεθεί από την εναλλαγή Κυριακών για ${date}.`,
+            date,
+            employeeId: shift.employeeId,
+          });
+        }
+
+        if (requirement.fixedEmployeeId && shift.employeeId !== requirement.fixedEmployeeId) {
+          violations.push({
+            id: `FIXED_ASSIGNMENT_MISMATCH-${shift.id}`,
+            severity: 'error',
+            code: 'FIXED_ASSIGNMENT_MISMATCH',
+            message: `Η σταθερή ανάθεση στις ${date} απαιτεί τον ${requirement.fixedEmployeeId}, όχι τον ${shift.employeeId}.`,
+            date,
+            employeeId: shift.employeeId,
+          });
+        }
+      }
+    }
+  }
+
+  // Rule 8 & 9: Double Shifts & Overlapping Shifts on Same Day
   for (const [empDateKey, dayShifts] of shiftsByEmpDate.entries()) {
     if (dayShifts.length > 1) {
       const [empId, date] = empDateKey.split(':');
@@ -267,8 +514,8 @@ export function validateGeneratedScheduleCompliance(params: {
     for (const [empDateKey, dayShifts] of shiftsByEmpDate.entries()) {
       let totalDailyHours = 0;
       for (const s of dayShifts) {
-        const tpl = tplMap.get(s.shiftType) || [...tplMap.values()].find((t) => t.startTime === s.startTime && t.endTime === s.endTime);
-        const dur = tpl?.durationHours || deriveShiftDurationHours(s.startTime, s.endTime);
+        const tpl = s.shiftTemplateId ? tplMap.get(s.shiftTemplateId) : undefined;
+        const dur = s.durationHours ?? tpl?.durationHours ?? deriveShiftDurationHours(s.startTime, s.endTime, Boolean(s.crossMidnight));
         totalDailyHours += dur;
       }
       if (totalDailyHours > maxDaily) {
@@ -319,8 +566,8 @@ export function validateGeneratedScheduleCompliance(params: {
       if (maxWeeklyHours) {
         let weeklyHours = 0;
         for (const s of empShifts) {
-          const tpl = tplMap.get(s.shiftType) || [...tplMap.values()].find((t) => t.startTime === s.startTime && t.endTime === s.endTime);
-          const dur = tpl?.durationHours || deriveShiftDurationHours(s.startTime, s.endTime);
+          const tpl = s.shiftTemplateId ? tplMap.get(s.shiftTemplateId) : undefined;
+          const dur = s.durationHours ?? tpl?.durationHours ?? deriveShiftDurationHours(s.startTime, s.endTime, Boolean(s.crossMidnight));
           weeklyHours += dur;
         }
         if (weeklyHours > maxWeeklyHours) {
@@ -350,11 +597,11 @@ export function validateGeneratedScheduleCompliance(params: {
           s1.date,
           s1.startTime,
           s1.endTime,
-          Boolean((s1 as any).crossMidnight),
+          Boolean(s1.crossMidnight),
           s2.date,
           s2.startTime,
           s2.endTime,
-          Boolean((s2 as any).crossMidnight)
+          Boolean(s2.crossMidnight)
         );
         if (rest < minRest) {
           violations.push({
@@ -395,7 +642,7 @@ export function validateGeneratedScheduleCompliance(params: {
     }
   }
 
-  return { valid: violations.length === 0, violations };
+  return { valid: !violations.some((violation) => violation.severity === 'error'), violations };
 }
 
 export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateScheduleV2Result {
@@ -546,7 +793,7 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
             shiftType: slot.template.shiftType as ShiftType,
             startTime: slot.template.startTime,
             endTime: slot.template.endTime,
-            missingRole: slot.requiredRole as any,
+            missingRole: slot.requiredRole,
             reason: 'NO_EMPLOYEE',
           });
           warnings.push({
@@ -584,8 +831,12 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
             employeeName: targetEmp.fullName,
             scheduleRole: targetEmp.scheduleRole,
             shiftType: slot.template.shiftType as ShiftType,
+            shiftTemplateId: slot.template.id,
+            demandSlotId: slot.slotId,
             startTime: slot.template.startTime,
             endTime: slot.template.endTime,
+            crossMidnight: Boolean(slot.template.crossMidnight),
+            durationHours: slot.template.durationHours,
             source: 'SUNDAY_ROTATION',
           };
           shifts.push(fixedShift);
@@ -605,7 +856,7 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
             shiftType: slot.template.shiftType as ShiftType,
             startTime: slot.template.startTime,
             endTime: slot.template.endTime,
-            missingRole: slot.requiredRole as any,
+            missingRole: slot.requiredRole,
             reason: 'UNAVAILABLE',
           });
           warnings.push({
@@ -650,7 +901,7 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
           shiftType: slot.template.shiftType as ShiftType,
           startTime: slot.template.startTime,
           endTime: slot.template.endTime,
-          missingRole: slot.requiredRole as any,
+          missingRole: slot.requiredRole,
           reason: 'NO_EMPLOYEE',
         });
         warnings.push({
@@ -691,7 +942,15 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
         const streak = consecutiveDaysMap[emp.employeeId] || 0;
         cost += streak * 8;
 
-        // 5. Deterministic Tie-Breaker (FNV-1a)
+        // 5. Soft target days off. Hard coverage/role/skill/rest/hour filters
+        // have already run, so this preference can never make a required slot invalid.
+        const weeklyDaysSet = weeklyDaysMap[weekKey][emp.employeeId] || new Set<string>();
+        cost += calculateTargetDaysOffPenalty(
+          weeklyDaysSet.size,
+          config.complianceRules?.targetDaysOffPerWeek || 0
+        );
+
+        // 6. Deterministic Tie-Breaker (FNV-1a)
         const tieBreaker = stableHash(`${slot.slotId}:${emp.employeeId}`);
         cost += tieBreaker;
 
@@ -709,8 +968,12 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
         employeeName: bestCandidate.fullName,
         scheduleRole: bestCandidate.scheduleRole,
         shiftType: slot.template.shiftType as ShiftType,
+        shiftTemplateId: slot.template.id,
+        demandSlotId: slot.slotId,
         startTime: slot.template.startTime,
         endTime: slot.template.endTime,
+        crossMidnight: Boolean(slot.template.crossMidnight),
+        durationHours: slot.template.durationHours,
         source: weekday === 'SUNDAY' ? 'SUNDAY_ROTATION' : 'BASE',
       };
 
@@ -784,7 +1047,7 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
     warnings,
     unresolvedGaps: gaps,
     validation: {
-      valid: violations.length === 0,
+      valid: !violations.some((violation) => violation.severity === 'error'),
       violations,
     },
     analytics: {

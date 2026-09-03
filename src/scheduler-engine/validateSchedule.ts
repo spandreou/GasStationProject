@@ -52,7 +52,7 @@ export function validateSchedule(params: {
 
   const employeesById = new Map(params.employees.map((employee) => [employee.employeeId, employee]));
   const seenEmployeeDates = new Set<string>();
-  const sundayShifts = params.shifts.filter((shift) => shift.shiftType === 'SUNDAY_12H').sort((a, b) => a.date.localeCompare(b.date));
+  const sundayShifts = params.shifts.filter((shift) => shift.shiftType === 'SUNDAY_12H').sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   for (const shift of params.shifts) {
     const employee = employeesById.get(shift.employeeId);

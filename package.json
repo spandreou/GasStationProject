@@ -9,6 +9,7 @@
     "qa:scheduler-engine": "node scripts/stress-test-scheduler-engine.mjs",
     "qa:scheduler": "node scripts/run-validate-scheduler-rules.mjs && node scripts/test-new-employee-scheduler-regression.mjs && npm run build",
     "test:new-employee-scheduler": "node scripts/test-new-employee-scheduler-regression.mjs",
+    "test:scheduler-contract-v2": "node scripts/test-scheduler-contract-v2.mjs",
     "qa:export-security": "node scripts/validate-export-audit-security.mjs",
     "qa:public-readonly": "node scripts/validate-public-readonly.mjs",
     "qa:tenant-authorization": "node scripts/validate-tenant-authorization.mjs",
@@ -65,6 +66,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.4.21",
+    "browserslist": "^4.28.8",
     "esbuild": "^0.28.1",
     "playwright": "^1.59.1",
     "postcss": "^8.5.18",

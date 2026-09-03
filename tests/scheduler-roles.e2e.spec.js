@@ -185,6 +185,7 @@ test('employee scheduling roles are the source of truth for monthly generation',
   await page.goto(BASE_URL);
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedSchedulerStore(page);
+  await page.getByTestId('scheduler-tab-legacy_employees').click();
 
   await expect(page.getByTestId('employee-rules-drossi')).toBeVisible();
 
@@ -244,6 +245,7 @@ test('saving generator rules also persists pending employee role drafts before m
   await page.goto(BASE_URL);
   await page.waitForFunction(() => window.__gasStationSchedulerStore);
   await seedSchedulerStore(page);
+  await page.getByTestId('scheduler-tab-legacy_employees').click();
 
   await page.getByTestId('employee-role-drossi').selectOption('intermediate');
   await page.getByTestId('employee-fixed-day-drossi').selectOption('5');
@@ -283,4 +285,74 @@ test('saving generator rules also persists pending employee role drafts before m
     'intermediate',
   );
   await expect(page.locator(`${byDate('2026-06-03')} [data-employee-id="spourlis"]`)).toHaveCount(0);
+});
+
+test('OWNER Scheduler V2 configuration surfaces the complete supported contract responsively', async ({ page }, testInfo) => {
+  const runtimeErrors = [];
+  page.on('pageerror', (error) => runtimeErrors.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') runtimeErrors.push(`console: ${message.text()}`);
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE_URL);
+  await page.waitForFunction(() => window.__gasStationSchedulerStore);
+  await seedSchedulerStore(page);
+
+  await page.getByTestId('scheduler-tab-v2_operating').click();
+  const addMondayWindow = page.getByRole('button', { name: '+ Προσθήκη παραθύρου' }).first();
+  await expect(addMondayWindow).toBeVisible();
+  await expect(page.getByLabel('Δευτέρα παράθυρο 1 έναρξη')).toBeVisible();
+  await addMondayWindow.click();
+  await expect(page.getByLabel('Δευτέρα παράθυρο 2 έναρξη')).toHaveValue('09:00');
+  await page.getByLabel('Δευτέρα παράθυρο 2 περνά τα μεσάνυχτα').check();
+  await page.getByRole('button', { name: 'Αφαίρεση Δευτέρα παραθύρου 2' }).click();
+  await expect(page.getByLabel('Δευτέρα παράθυρο 2 έναρξη')).toHaveCount(0);
+
+  await page.getByTestId('scheduler-tab-v2_templates').click();
+  await page.getByRole('button', { name: '+ Προσθήκη Προτύπου' }).click();
+  await page.getByLabel('Τύπος βάρδιας').last().selectOption('NIGHT');
+  await page.getByLabel('Έναρξη βάρδιας').last().fill('22:00');
+  await page.getByLabel('Λήξη βάρδιας').last().fill('06:00');
+  await page.getByLabel('Περνά τα μεσάνυχτα').last().check();
+  await page.getByLabel('Μη αμειβόμενο διάλειμμα (λεπτά)').last().fill('30');
+  await page.getByLabel('Απαιτούμενα skills/roles (με κόμμα)').last().fill('NIGHT_CERT');
+  await expect(page.getByText(/Stable ID:/).last()).toBeVisible();
+  await expect(page.getByLabel('Διάρκεια (Ώρες)').last()).toHaveValue('7.5');
+
+  await page.getByTestId('scheduler-tab-v2_coverage').click();
+  const addCoverageSlot = page.getByRole('button', { name: '+ Προσθήκη slot' }).first();
+  await expect(addCoverageSlot).toBeVisible();
+  await addCoverageSlot.click();
+  await expect(page.getByRole('button', { name: 'Αφαίρεση slot' }).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Αφαίρεση slot' }).last().click();
+  await page.getByText('Max (HARD)').first().locator('..').getByRole('spinbutton').fill('4');
+  await expect(page.getByText('Max (HARD)').first()).toBeVisible();
+  await expect(page.getByText('Target (SOFT)').first()).toBeVisible();
+
+  await page.getByTestId('scheduler-tab-v2_compliance').click();
+  await page.getByLabel('Στόχος Ρεπό ανά Εβδομάδα (SOFT)').fill('2');
+  await expect(page.getByLabel('Στόχος Ρεπό ανά Εβδομάδα (SOFT)')).toHaveValue('2');
+  await expect(page.getByText('Στόχος Ρεπό ανά Εβδομάδα (SOFT)')).toBeVisible();
+  await expect(page.getByText('Ελάχιστα Ρεπό ανά Εβδομάδα (HARD)')).toBeVisible();
+
+  await page.getByTestId('scheduler-tab-v2_sunday').click();
+  await expect(page.getByText('Πρότυπο βάρδιας Κυριακής/Αργίας')).toBeVisible();
+  await expect(page.getByText('Συμμετέχοντες scheduling roles')).toBeVisible();
+  await expect(page.getByText('Κλειστά στις δημόσιες αργίες')).toBeVisible();
+  await page.getByLabel('Οι δημόσιες αργίες ακολουθούν την πολιτική Κυριακής').check();
+  await page.getByLabel('Κλειστά στις δημόσιες αργίες').check();
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  const unexpectedRuntimeErrors = runtimeErrors.filter(
+    (message) => !message.includes('Το Firebase δεν είναι ρυθμισμένο. Λείπουν env vars:'),
+  );
+  expect(unexpectedRuntimeErrors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('scheduler-v2-mobile.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.getByText('Συμμετέχοντες scheduling roles')).toBeVisible();
+  const desktopOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(desktopOverflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('scheduler-v2-desktop.png'), fullPage: true });
 });

@@ -371,7 +371,7 @@ export function deriveShiftDurationHours(
 }
 
 export function validateTimeWindows(
-  windows: TimeWindowConfig[],
+  windows: TimeWindow[],
   contextName: string,
   errors: string[]
 ): void {

@@ -66,6 +66,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.4.21",
+    "browserslist": "^4.28.8",
     "esbuild": "^0.28.1",
     "playwright": "^1.59.1",
     "postcss": "^8.5.18",

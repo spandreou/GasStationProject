@@ -190,12 +190,26 @@ export function mergeSchedulerConfigSpecialDays(
       : raw.operatingStartTime && raw.operatingEndTime
         ? [{ openTime: raw.operatingStartTime, closeTime: raw.operatingEndTime }]
         : undefined;
+    let validatedWindows = Array.isArray(operatingWindows) && operatingWindows.length > 0 ? operatingWindows : undefined;
+    if (validatedWindows) {
+      const winErrors: string[] = [];
+      validateTimeWindows(validatedWindows, `specialDaysByDate[${date}]`, winErrors);
+      if (winErrors.length > 0) {
+        // Discard invalid window definitions so corrupt times never propagate
+        validatedWindows = undefined;
+      }
+    }
+    const isSpecialOperatingHours =
+      typeof raw.isSpecialOperatingHours === 'boolean'
+        ? raw.isSpecialOperatingHours
+        : Boolean(validatedWindows && validatedWindows.length > 0);
+
     normalizedSpecialDays[date] = {
       date,
       isHoliday: Boolean(raw.isHoliday),
-      isSpecialOperatingHours: Boolean(raw.isSpecialOperatingHours ?? raw.isSpecialDay),
+      isSpecialOperatingHours,
       label: raw.label || (raw.isHoliday ? 'Αργία' : 'Ειδικό Ωράριο'),
-      operatingWindows,
+      operatingWindows: validatedWindows,
       customShiftTemplateIds: raw.customShiftTemplateIds,
       notes: raw.notes,
     };
@@ -356,6 +370,42 @@ export function deriveShiftDurationHours(
   return Math.round((netMinutes / 60) * 100) / 100;
 }
 
+export function validateTimeWindows(
+  windows: TimeWindowConfig[],
+  contextName: string,
+  errors: string[]
+): void {
+  for (const w of windows) {
+    if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
+      errors.push(`${contextName} window contains invalid time format: ${w.openTime}-${w.closeTime}`);
+    }
+    if (w.openTime === w.closeTime) {
+      errors.push(`${contextName} window has zero duration: ${w.openTime}-${w.closeTime}`);
+    }
+    if (w.crossMidnight && w.openTime < w.closeTime) {
+      errors.push(`${contextName} window has crossMidnight: true but openTime (${w.openTime}) is before closeTime (${w.closeTime})`);
+    }
+    if (!w.crossMidnight && w.openTime > w.closeTime) {
+      errors.push(`${contextName} window openTime (${w.openTime}) > closeTime (${w.closeTime}) without crossMidnight flag`);
+    }
+  }
+
+  if (windows.length > 1) {
+    const intervals = windows
+      .filter((w) => TIME_REGEX.test(w.openTime) && TIME_REGEX.test(w.closeTime))
+      .map((w) => shiftToTimestampInterval('2026-01-01', w.openTime, w.closeTime, Boolean(w.crossMidnight)));
+    for (let i = 0; i < intervals.length; i++) {
+      for (let j = i + 1; j < intervals.length; j++) {
+        if (intervals[i].startMs < intervals[j].endMs && intervals[j].startMs < intervals[i].endMs) {
+          errors.push(
+            `${contextName} has overlapping operating windows: ${windows[i].openTime}-${windows[i].closeTime} and ${windows[j].openTime}-${windows[j].closeTime}`
+          );
+        }
+      }
+    }
+  }
+}
+
 export function validateSchedulerConfig(config: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   if (!config || typeof config !== 'object') {
@@ -394,33 +444,7 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
         if (d.isOpen && d.windows.length === 0) {
           errors.push(`operatingDays.${d.weekday} is marked open but has no operating windows configured`);
         }
-        for (const w of d.windows) {
-          if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
-            errors.push(`operatingDays.${d.weekday} window contains invalid time format: ${w.openTime}-${w.closeTime}`);
-          }
-          if (w.openTime === w.closeTime) {
-            errors.push(`operatingDays.${d.weekday} window has zero duration: ${w.openTime}-${w.closeTime}`);
-          }
-          if (w.crossMidnight && w.openTime < w.closeTime) {
-            errors.push(`operatingDays.${d.weekday} window has crossMidnight: true but openTime (${w.openTime}) is before closeTime (${w.closeTime})`);
-          }
-          if (!w.crossMidnight && w.openTime > w.closeTime) {
-            errors.push(`operatingDays.${d.weekday} window openTime (${w.openTime}) > closeTime (${w.closeTime}) without crossMidnight flag`);
-          }
-        }
-
-        if (d.windows.length > 1) {
-          const intervals = d.windows
-            .filter((w) => TIME_REGEX.test(w.openTime) && TIME_REGEX.test(w.closeTime))
-            .map((w) => shiftToTimestampInterval('2026-01-01', w.openTime, w.closeTime, Boolean(w.crossMidnight)));
-          for (let i = 0; i < intervals.length; i++) {
-            for (let j = i + 1; j < intervals.length; j++) {
-              if (intervals[i].startMs < intervals[j].endMs && intervals[j].startMs < intervals[i].endMs) {
-                errors.push(`operatingDays.${d.weekday} has overlapping operating windows: ${d.windows[i].openTime}-${d.windows[i].closeTime} and ${d.windows[j].openTime}-${d.windows[j].closeTime}`);
-              }
-            }
-          }
-        }
+        validateTimeWindows(d.windows, `operatingDays.${d.weekday}`, errors);
       }
     }
   }
@@ -557,8 +581,11 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
     if (!Number.isFinite(r.maxConsecutiveWorkingDays) || !Number.isInteger(r.maxConsecutiveWorkingDays) || r.maxConsecutiveWorkingDays < 1 || r.maxConsecutiveWorkingDays > 14) {
       errors.push('complianceRules.maxConsecutiveWorkingDays must be between 1 and 14');
     }
-    if (!Number.isFinite(r.minRestIntervalBetweenShiftsHours) || r.minRestIntervalBetweenShiftsHours < 8 || r.minRestIntervalBetweenShiftsHours > 24) {
-      errors.push('complianceRules.minRestIntervalBetweenShiftsHours must be between 8 and 24');
+    if (!Number.isFinite(r.minRestIntervalBetweenShiftsHours) || r.minRestIntervalBetweenShiftsHours < 11 || r.minRestIntervalBetweenShiftsHours > 24) {
+      errors.push('complianceRules.minRestIntervalBetweenShiftsHours must be between 11 and 24');
+    }
+    if (r.preventClashingTurnaround === false) {
+      errors.push('complianceRules.preventClashingTurnaround cannot be disabled when minimum rest turnaround is mandatory (>= 11h)');
     }
     if (!Number.isFinite(r.maxDailyWorkingHours) || r.maxDailyWorkingHours < 1 || r.maxDailyWorkingHours > 24) {
       errors.push('complianceRules.maxDailyWorkingHours must be between 1 and 24');
@@ -583,8 +610,10 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
       }
     }
     if (mode === 'FIXED_ASSIGNMENT') {
-      if (!Array.isArray(s.fixedSundayEmployeeIds) || s.fixedSundayEmployeeIds.length === 0) {
-        errors.push('fixedSundayEmployeeIds must contain at least one employee ID when sundayMode is FIXED_ASSIGNMENT');
+      if (!Array.isArray(s.fixedSundayEmployeeIds) || s.fixedSundayEmployeeIds.length !== 1) {
+        errors.push(
+          `fixedSundayEmployeeIds must contain exactly 1 employee ID when sundayMode is FIXED_ASSIGNMENT in this release (multiple fixed workers deferred; received ${Array.isArray(s.fixedSundayEmployeeIds) ? s.fixedSundayEmployeeIds.length : 'none'})`
+        );
       }
     }
     for (const participatingRole of s.participatingRoleTypes || []) {
@@ -600,11 +629,14 @@ export function validateSchedulerConfig(config: unknown): { valid: boolean; erro
       if (!DATE_REGEX.test(dateKey)) {
         errors.push(`specialDaysByDate key "${dateKey}" is not a valid YYYY-MM-DD date`);
       }
-      if (override && Array.isArray(override.operatingWindows)) {
-        for (const w of override.operatingWindows) {
-          if (!TIME_REGEX.test(w.openTime) || !TIME_REGEX.test(w.closeTime)) {
-            errors.push(`specialDaysByDate[${dateKey}] operating window contains invalid time format: ${w.openTime}-${w.closeTime}`);
+      if (override) {
+        if (override.isSpecialOperatingHours) {
+          if (!Array.isArray(override.operatingWindows) || override.operatingWindows.length === 0) {
+            errors.push(`specialDaysByDate[${dateKey}] has isSpecialOperatingHours: true but no operatingWindows configured`);
           }
+        }
+        if (Array.isArray(override.operatingWindows)) {
+          validateTimeWindows(override.operatingWindows, `specialDaysByDate[${dateKey}]`, errors);
         }
       }
     }

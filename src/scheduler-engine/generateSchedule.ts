@@ -97,7 +97,12 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
 
     return {
       shifts: [...withSundays.shifts].sort(
-        (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.employeeId.localeCompare(b.employeeId)
+        (a, b) => {
+          if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+          if (a.startTime !== b.startTime) return a.startTime < b.startTime ? -1 : 1;
+          if (a.employeeId !== b.employeeId) return a.employeeId < b.employeeId ? -1 : 1;
+          return 0;
+        }
       ),
       warnings,
       unresolvedGaps: filled.unresolvedGaps,

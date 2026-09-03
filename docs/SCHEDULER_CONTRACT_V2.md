@@ -142,7 +142,7 @@ No fuel-station-specific topology is assumed globally.
 
 ### Contract 10: Deterministic Reproducibility
 - Given identical inputs (tenant config, employee snapshot, absences, target date range, seed), generation produces byte-for-byte identical schedules across all platforms and timezones.
-- Tie-breaking uses deterministic 32-bit hashing (FNV-1a / Mulberry32), never unseeded `Math.random()`.
+- Algorithmic candidate tie-breaking uses deterministic lexical `employeeId` code-unit comparison and 32-bit hashing (FNV-1a / Mulberry32), never locale-sensitive `localeCompare`, `Intl.Collator`, or unseeded `Math.random()`.
 - Calendar arithmetic uses pure UTC ISO dates (`YYYY-MM-DD`).
 
 ### Contract 11: Multi-Objective Fairness Heuristics
@@ -158,6 +158,7 @@ No fuel-station-specific topology is assumed globally.
 The engine never:
 - Silently drops an active employee.
 - Maps an unknown role to a silent fallback (e.g. `|| 'EXTRA_A'`).
+- Fabricates staffing demand when coverage slots are omitted or empty (empty slots represent an explicit zero-demand day).
 - Saves a partial or broken schedule to the database.
 - Renders missing assignments as statutory rest (`ΑΝ`) in PDF/Excel/Word/WhatsApp exports.
 - Ignores an unsatisfied hard constraint.
@@ -214,7 +215,7 @@ export interface SchedulerConfigV2 {
     targetDaysOffPerWeek: number;
     minDaysOffPerWeek: number;
     maxConsecutiveWorkingDays: number;
-    minRestIntervalBetweenShiftsHours: number;
+    minRestIntervalBetweenShiftsHours: number; // >= 11.0 mandatory
     maxDailyWorkingHours: number;
     maxWeeklyStandardHours: number;
     preventClashingTurnaround: boolean;

@@ -36,13 +36,27 @@ export function normalizeInput(input: GenerateScheduleInput): NormalizedSchedule
       canWorkAfternoon: employee.canWorkAfternoon !== false,
       canWorkSunday: employee.canWorkSunday !== false,
     }))
-    .sort((a, b) => (a.scheduleRole || '').localeCompare(b.scheduleRole || '') || a.employeeId.localeCompare(b.employeeId));
+    .sort((a, b) => {
+      const roleA = String(a.scheduleRole || '');
+      const roleB = String(b.scheduleRole || '');
+      if (roleA !== roleB) return roleA < roleB ? -1 : 1;
+      const idA = String(a.employeeId || '');
+      const idB = String(b.employeeId || '');
+      return idA < idB ? -1 : idA > idB ? 1 : 0;
+    });
 
   return {
     startDate: input.startDate,
     endDate: input.endDate,
     employees,
-    absences: [...(input.absences || [])].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)),
+    absences: [...(input.absences || [])].sort((a, b) => {
+      const dateA = String(a.startDate || '');
+      const dateB = String(b.startDate || '');
+      if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+      const idA = String(a.id || '');
+      const idB = String(b.id || '');
+      return idA < idB ? -1 : idA > idB ? 1 : 0;
+    }),
     previousSundayEmployeeId: input.previousSundayEmployeeId,
     schedulerConfig: input.schedulerConfig,
     manualOverrides: input.manualOverrides,

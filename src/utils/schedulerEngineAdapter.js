@@ -57,10 +57,9 @@ function mapExplicitRole(token) {
 }
 
 function stableEmployeeSort(a, b) {
-  return (
-    (a.fullName || '').localeCompare(b.fullName || '', 'el') ||
-    `${a.id || a.employeeId || ''}`.localeCompare(`${b.id || b.employeeId || ''}`)
-  );
+  const idA = String(a?.id || a?.employeeId || '');
+  const idB = String(b?.id || b?.employeeId || '');
+  return idA < idB ? -1 : idA > idB ? 1 : 0;
 }
 
 export function validateSchedulerEmployeeCapacity(employees = []) {

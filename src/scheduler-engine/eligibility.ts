@@ -200,8 +200,8 @@ export function evaluateEmployeeEligibility(params: {
   }
 
   // 15. Hard Compliance: Turnaround Rest Interval (Past & Pre-assigned Future)
-  if (complianceRules?.minRestIntervalBetweenShiftsHours && complianceRules.preventClashingTurnaround !== false) {
-    const minRequiredRest = complianceRules.minRestIntervalBetweenShiftsHours;
+  if (complianceRules?.minRestIntervalBetweenShiftsHours) {
+    const minRequiredRest = Math.max(11.0, complianceRules.minRestIntervalBetweenShiftsHours || 11.0);
 
     for (const adjacentShift of existingShifts) {
       if (adjacentShift.employeeId !== employee.employeeId) continue;

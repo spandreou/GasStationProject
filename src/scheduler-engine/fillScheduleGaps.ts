@@ -102,7 +102,16 @@ export function fillScheduleGaps(params: {
     const candidates = manualCandidate
       ? [manualCandidate]
       : [...params.employees].sort(
-          (a, b) => candidatePriority(a) - candidatePriority(b) || a.scheduleRole.localeCompare(b.scheduleRole) || a.employeeId.localeCompare(b.employeeId),
+          (a, b) => {
+            const pDiff = candidatePriority(a) - candidatePriority(b);
+            if (pDiff !== 0) return pDiff;
+            const roleA = String(a.scheduleRole || '');
+            const roleB = String(b.scheduleRole || '');
+            if (roleA !== roleB) return roleA < roleB ? -1 : 1;
+            const idA = String(a.employeeId || '');
+            const idB = String(b.employeeId || '');
+            return idA < idB ? -1 : idA > idB ? 1 : 0;
+          },
         );
     const replacement = candidates.find((candidate) => canFillGap({ candidate, gap, shifts, absences: params.absences }));
 

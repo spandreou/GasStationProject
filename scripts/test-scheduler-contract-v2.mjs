@@ -176,7 +176,7 @@ function createVariableFuzzConfig(prng, run, category, employees, intent) {
     minDaysOffPerWeek,
     targetDaysOffPerWeek: prng.nextInt(minDaysOffPerWeek, Math.min(4, minDaysOffPerWeek + 2)),
     maxConsecutiveWorkingDays: prng.nextInt(3, 7),
-    minRestIntervalBetweenShiftsHours: prng.pick([8, 10, 11, 12]),
+    minRestIntervalBetweenShiftsHours: prng.pick([11, 12, 13, 14]),
     maxDailyWorkingHours: prng.pick([8, 10, 12, 16, 24]),
     maxWeeklyStandardHours: prng.pick([32, 40, 48, 60, 84]),
   };
@@ -1569,6 +1569,264 @@ async function runAllTests() {
     console.log(`  - ${count} Employees (30 Days): Min: ${min}ms | Max: ${max}ms | Avg: ${avg}ms`);
   }
   totalAssertions += 6;
+
+  // -------------------------------------------------------------------------
+  // SECTION 12: INDEPENDENT CONTRACT FINDINGS REGRESSION SUITE
+  // -------------------------------------------------------------------------
+  console.log('[SECTION 12] Independent Contract Findings Regressions...');
+
+  // 12.1 EMPTY_COVERAGE_SEMANTICS_PASS & NO_SILENT_DEMAND_FALLBACK_PASS
+  // An open day (e.g. Tuesday) with slots: [] produces 0 demand slots and 0 shifts.
+  const emptyTuesdayConfig = getDefaultCategoryConfig('empty-cov-tenant', 'CAFE');
+  emptyTuesdayConfig.coverageRequirements = emptyTuesdayConfig.coverageRequirements.map((pattern) => ({
+    ...pattern,
+    slots: pattern.weekday === 'TUESDAY' ? [] : pattern.slots,
+  }));
+  const emptyTuesdayResult = generateScheduleV2({
+    startDate: '2026-06-02',
+    endDate: '2026-06-02',
+    employees: Array.from({ length: 4 }, (_, i) => createTestEmployee(i + 1)),
+    config: emptyTuesdayConfig,
+  });
+  if (emptyTuesdayResult.shifts.length !== 0 || emptyTuesdayResult.validation.valid !== true) {
+    throw new Error(`[NO_SILENT_DEMAND_FALLBACK] Open day with empty coverage slots generated shifts or failed validation: ${JSON.stringify(emptyTuesdayResult)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.2 MISSING_COVERAGE_PATTERN
+  const missingPatternConfig = getDefaultCategoryConfig('missing-cov-tenant', 'CAFE');
+  missingPatternConfig.coverageRequirements = missingPatternConfig.coverageRequirements.filter((p) => p.weekday !== 'WEDNESDAY');
+  const missingPatternResult = generateScheduleV2({
+    startDate: '2026-06-03',
+    endDate: '2026-06-03',
+    employees: Array.from({ length: 4 }, (_, i) => createTestEmployee(i + 1)),
+    config: missingPatternConfig,
+  });
+  if (missingPatternResult.shifts.length !== 0 || missingPatternResult.validation.valid !== true) {
+    throw new Error(`[MISSING_COVERAGE_PATTERN] Omitted coverage pattern day generated shifts or failed validation: ${JSON.stringify(missingPatternResult)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.3 CLOSED_DAY_EMPTY_COVERAGE
+  const closedDayConfig = getDefaultCategoryConfig('closed-cov-tenant', 'CAFE');
+  closedDayConfig.operatingDays = closedDayConfig.operatingDays.map((d) =>
+    d.weekday === 'THURSDAY' ? { ...d, isOpen: false, windows: [] } : d
+  );
+  closedDayConfig.coverageRequirements = closedDayConfig.coverageRequirements.map((p) =>
+    p.weekday === 'THURSDAY' ? { ...p, slots: [] } : p
+  );
+  const closedDayResult = generateScheduleV2({
+    startDate: '2026-06-04',
+    endDate: '2026-06-04',
+    employees: Array.from({ length: 4 }, (_, i) => createTestEmployee(i + 1)),
+    config: closedDayConfig,
+  });
+  if (closedDayResult.shifts.length !== 0 || closedDayResult.validation.valid !== true) {
+    throw new Error(`[CLOSED_DAY_EMPTY_COVERAGE] Closed day with empty coverage generated shifts: ${JSON.stringify(closedDayResult)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.4 SPECIAL_DAY_ZERO_DURATION_REJECTED
+  const zeroDurationConfig = getDefaultCategoryConfig('zero-dur-tenant', 'CAFE');
+  zeroDurationConfig.specialDaysByDate = {
+    '2026-06-05': {
+      date: '2026-06-05',
+      isHoliday: false,
+      isSpecialOperatingHours: true,
+      label: 'Zero Duration Day',
+      operatingWindows: [{ openTime: '08:00', closeTime: '08:00' }],
+    },
+  };
+  const zeroDurVal = validateSchedulerConfig(zeroDurationConfig);
+  if (zeroDurVal.valid || !zeroDurVal.errors.some((e) => e.includes('zero duration'))) {
+    throw new Error(`[SPECIAL_DAY_ZERO_DURATION] Special day with zero duration window was not rejected! ${JSON.stringify(zeroDurVal)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.5 SPECIAL_DAY_WRONG_CROSS_MIDNIGHT_REJECTED
+  const wrongCrossConfig = getDefaultCategoryConfig('wrong-cross-tenant', 'CAFE');
+  wrongCrossConfig.specialDaysByDate = {
+    '2026-06-05': {
+      date: '2026-06-05',
+      isHoliday: false,
+      isSpecialOperatingHours: true,
+      label: 'Contradictory Cross Midnight',
+      operatingWindows: [{ openTime: '09:00', closeTime: '17:00', crossMidnight: true }],
+    },
+  };
+  const wrongCrossVal = validateSchedulerConfig(wrongCrossConfig);
+  if (wrongCrossVal.valid || !wrongCrossVal.errors.some((e) => e.includes('crossMidnight: true but openTime'))) {
+    throw new Error(`[SPECIAL_DAY_WRONG_CROSS_MIDNIGHT] Contradictory crossMidnight window was not rejected! ${JSON.stringify(wrongCrossVal)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.6 SPECIAL_DAY_OVERLAP_REJECTED
+  const overlapConfig = getDefaultCategoryConfig('overlap-tenant', 'CAFE');
+  overlapConfig.specialDaysByDate = {
+    '2026-06-05': {
+      date: '2026-06-05',
+      isHoliday: false,
+      isSpecialOperatingHours: true,
+      label: 'Overlapping Special Windows',
+      operatingWindows: [
+        { openTime: '08:00', closeTime: '14:00' },
+        { openTime: '12:00', closeTime: '18:00' },
+      ],
+    },
+  };
+  const overlapVal = validateSchedulerConfig(overlapConfig);
+  if (overlapVal.valid || !overlapVal.errors.some((e) => e.includes('overlapping operating windows'))) {
+    throw new Error(`[SPECIAL_DAY_OVERLAP_REJECTED] Overlapping special day windows were not rejected! ${JSON.stringify(overlapVal)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.7 REST_10_5_REJECTED and REST_11_ACCEPTED
+  const rest105Config = getDefaultCategoryConfig('rest-tenant', 'CAFE');
+  rest105Config.complianceRules.minRestIntervalBetweenShiftsHours = 10.5;
+  const rest105Val = validateSchedulerConfig(rest105Config);
+  if (rest105Val.valid || !rest105Val.errors.some((e) => e.includes('minRestIntervalBetweenShiftsHours must be between 11 and 24'))) {
+    throw new Error(`[REST_10_5_REJECTED] Config with 10.5h rest was not rejected! ${JSON.stringify(rest105Val)}`);
+  }
+  rest105Config.complianceRules.minRestIntervalBetweenShiftsHours = 11.0;
+  const rest11Val = validateSchedulerConfig(rest105Config);
+  if (!rest11Val.valid) {
+    throw new Error(`[REST_11_ACCEPTED] Config with 11.0h rest was rejected: ${JSON.stringify(rest11Val)}`);
+  }
+  totalAssertions += 2;
+
+  // 12.8 REST_FINAL_CANDIDATE_GATE_PASS
+  const restConfig = getDefaultCategoryConfig('rest-gate-tenant', 'FUEL_STATION');
+  const restTurnaroundCandidate = [
+    {
+      id: 'shift-d1',
+      date: '2026-06-01',
+      employeeId: 'emp-1',
+      startTime: '14:00',
+      endTime: '22:00',
+      shiftTemplateId: 'afternoon',
+    },
+    {
+      id: 'shift-d2',
+      date: '2026-06-02',
+      employeeId: 'emp-1',
+      startTime: '08:30', // 10.5h rest from 22:00
+      endTime: '16:30',
+      shiftTemplateId: 'morning',
+    },
+  ];
+  const restDirectValidation = validateGeneratedScheduleCompliance({
+    config: restConfig,
+    employees: [createTestEmployee(1)],
+    shifts: restTurnaroundCandidate,
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+  });
+  if (restDirectValidation.valid || !restDirectValidation.violations.some((v) => v.id.startsWith('REST_INTERVAL_VIOLATED'))) {
+    throw new Error(`[REST_FINAL_CANDIDATE_GATE_PASS] Direct compliance validation failed to reject 10.5h turnaround: ${JSON.stringify(restDirectValidation)}`);
+  }
+  const restGateCounters = createWriteCounters();
+  const restPersistRes = await executePersistenceBoundary(
+    { shifts: restTurnaroundCandidate, validation: restDirectValidation },
+    restGateCounters,
+  );
+  if (restPersistRes.ok !== false || Object.values(restGateCounters).some((c) => c !== 0)) {
+    throw new Error(`[REST_FINAL_CANDIDATE_GATE_PASS] Turnaround violation crossed persistence boundary: ${JSON.stringify(restGateCounters)}`);
+  }
+  totalAssertions += 2;
+
+  // 12.9 DETERMINISTIC_EMPLOYEE_ORDER_PASS
+  const detEmps1 = [
+    createTestEmployee(1, { employeeId: 'emp-alpha', fullName: 'Νίκος Παπαδόπουλος' }),
+    createTestEmployee(2, { employeeId: 'emp-beta', fullName: 'Alex Smith' }),
+    createTestEmployee(3, { employeeId: 'emp-gamma', fullName: 'Γιώργος Γεωργίου' }),
+    createTestEmployee(4, { employeeId: 'emp-delta', fullName: 'Chloe Brown' }),
+  ];
+  const detEmps2 = [detEmps1[2], detEmps1[0], detEmps1[3], detEmps1[1]];
+  const detConf = getDefaultCategoryConfig('det-tenant', 'CAFE');
+  const detRes1 = generateScheduleV2({
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    employees: detEmps1,
+    config: detConf,
+  });
+  const detRes2 = generateScheduleV2({
+    startDate: '2026-06-01',
+    endDate: '2026-06-07',
+    employees: detEmps2,
+    config: detConf,
+  });
+  const serialized1 = JSON.stringify(detRes1.shifts.map((s) => ({ date: s.date, slot: s.shiftTemplateId, emp: s.employeeId })));
+  const serialized2 = JSON.stringify(detRes2.shifts.map((s) => ({ date: s.date, slot: s.shiftTemplateId, emp: s.employeeId })));
+  if (serialized1 !== serialized2) {
+    throw new Error(`[DETERMINISTIC_EMPLOYEE_ORDER_PASS] Reordered input employees generated non-identical schedules!`);
+  }
+  totalAssertions += 1;
+
+  // 12.10 FIXED_SUNDAY_MULTI_ID_CONTRACT_PASS
+  const fixedSunConf = getDefaultCategoryConfig('sun-fixed-tenant', 'FUEL_STATION');
+  fixedSunConf.sundayAndHolidays.sundayMode = 'FIXED_ASSIGNMENT';
+  fixedSunConf.sundayAndHolidays.fixedSundayEmployeeIds = ['emp-1'];
+  const fixedValid1 = validateSchedulerConfig(fixedSunConf);
+  if (!fixedValid1.valid) {
+    throw new Error(`[FIXED_SUNDAY_MULTI_ID_CONTRACT] Exactly 1 employee ID was rejected: ${JSON.stringify(fixedValid1)}`);
+  }
+  fixedSunConf.sundayAndHolidays.fixedSundayEmployeeIds = ['emp-1', 'emp-2'];
+  const fixedInvalidMultiple = validateSchedulerConfig(fixedSunConf);
+  if (fixedInvalidMultiple.valid || !fixedInvalidMultiple.errors.some((e) => e.includes('fixedSundayEmployeeIds must contain exactly 1 employee ID'))) {
+    throw new Error(`[FIXED_SUNDAY_MULTI_ID_CONTRACT] Multiple fixed Sunday IDs were not rejected! ${JSON.stringify(fixedInvalidMultiple)}`);
+  }
+  fixedSunConf.sundayAndHolidays.fixedSundayEmployeeIds = [];
+  const fixedInvalidEmpty = validateSchedulerConfig(fixedSunConf);
+  if (fixedInvalidEmpty.valid || !fixedInvalidEmpty.errors.some((e) => e.includes('fixedSundayEmployeeIds must contain exactly 1 employee ID'))) {
+    throw new Error(`[FIXED_SUNDAY_MULTI_ID_CONTRACT] Empty fixed Sunday IDs was not rejected! ${JSON.stringify(fixedInvalidEmpty)}`);
+  }
+  totalAssertions += 3;
+
+  // 12.11 SUNDAY_STANDARD_WEEKDAY_LIKE_EMPTY_COVERAGE_PASS
+  // Open Sunday under STANDARD_WEEKDAY_LIKE with slots: [] must produce 0 demand slots and 0 shifts
+  const sunStdEmptyConfig = getDefaultCategoryConfig('sun-std-empty-tenant', 'CAFE');
+  sunStdEmptyConfig.sundayAndHolidays.sundayMode = 'STANDARD_WEEKDAY_LIKE';
+  sunStdEmptyConfig.coverageRequirements = sunStdEmptyConfig.coverageRequirements.map((pattern) => ({
+    ...pattern,
+    slots: pattern.weekday === 'SUNDAY' ? [] : pattern.slots,
+  }));
+  const sunStdEmptyRes = generateScheduleV2({
+    startDate: '2026-06-07', // Sunday
+    endDate: '2026-06-07',
+    employees: Array.from({ length: 4 }, (_, i) => createTestEmployee(i + 1)),
+    config: sunStdEmptyConfig,
+  });
+  if (sunStdEmptyRes.shifts.length !== 0 || sunStdEmptyRes.validation.valid !== true) {
+    throw new Error(`[SUNDAY_STANDARD_WEEKDAY_LIKE_EMPTY_COVERAGE_PASS] Sunday under STANDARD_WEEKDAY_LIKE with empty slots generated shifts: ${JSON.stringify(sunStdEmptyRes)}`);
+  }
+  totalAssertions += 1;
+
+  // 12.12 MERGE_SPECIAL_DAYS_SANITIZES_INVALID_WINDOWS_PASS
+  // mergeSchedulerConfigSpecialDays must discard invalid windows (zero duration, contradictory crossMidnight)
+  const corruptMerged = schedulerEngineModule.mergeSchedulerConfigSpecialDays(
+    getDefaultCategoryConfig('corrupt-merge-tenant', 'CAFE'),
+    {
+      '2026-05-01': {
+        operatingStartTime: '10:00',
+        operatingEndTime: '10:00', // zero duration
+      },
+    }
+  );
+  if (corruptMerged.specialDaysByDate['2026-05-01'].operatingWindows !== undefined) {
+    throw new Error('[MERGE_SPECIAL_DAYS_SANITIZES_INVALID_WINDOWS_PASS] Zero-duration window was not discarded!');
+  }
+  totalAssertions += 1;
+
+  // 12.13 PREVENT_CLASHING_TURNAROUND_DISABLED_REJECTED
+  const disabledTurnaroundConfig = getDefaultCategoryConfig('no-turnaround-tenant', 'CAFE');
+  disabledTurnaroundConfig.complianceRules.preventClashingTurnaround = false;
+  const disabledTurnaroundVal = validateSchedulerConfig(disabledTurnaroundConfig);
+  if (disabledTurnaroundVal.valid || !disabledTurnaroundVal.errors.some((e) => e.includes('preventClashingTurnaround cannot be disabled'))) {
+    throw new Error(`[PREVENT_CLASHING_TURNAROUND_DISABLED_REJECTED] Config with preventClashingTurnaround: false was not rejected! ${JSON.stringify(disabledTurnaroundVal)}`);
+  }
+  totalAssertions += 1;
+
+  console.log('  ✓ All 13 independent contract findings and adversarial regressions verified successfully.\n');
 
   console.log('\n============================================================');
   console.log(` ALL ${totalAssertions} SCHEDULER CONTRACT V2 TESTS PASSED (100%) `);

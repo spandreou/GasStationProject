@@ -82,7 +82,7 @@ export function buildDemandSlots(
 
       if (sundayMode === 'STANDARD_WEEKDAY_LIKE') {
         const sundayCoverage = coverageMap.get('SUNDAY');
-        if (sundayCoverage && Array.isArray(sundayCoverage.slots) && sundayCoverage.slots.length > 0) {
+        if (sundayCoverage && Array.isArray(sundayCoverage.slots)) {
           for (const slotReq of sundayCoverage.slots) {
             const tpl = templateMap.get(slotReq.shiftTemplateId);
             const minCount = Math.max(0, slotReq.minHeadcount ?? 1);
@@ -133,8 +133,10 @@ export function buildDemandSlots(
               });
             }
           }
-          continue;
         }
+        // Under STANDARD_WEEKDAY_LIKE, Sunday is governed strictly by configured coverage slots.
+        // If slots are empty or omitted, zero shifts are demanded. Never fall through to 12h Sunday template.
+        continue;
       }
 
       // Default / CYCLIC_FAIR / FIXED_ASSIGNMENT Sunday handling
@@ -145,7 +147,7 @@ export function buildDemandSlots(
         config.shiftTemplates?.[0];
 
       const fixedEmpId =
-        sundayMode === 'FIXED_ASSIGNMENT' && Array.isArray(config.sundayAndHolidays?.fixedSundayEmployeeIds) && config.sundayAndHolidays.fixedSundayEmployeeIds.length > 0
+        sundayMode === 'FIXED_ASSIGNMENT' && Array.isArray(config.sundayAndHolidays?.fixedSundayEmployeeIds) && config.sundayAndHolidays.fixedSundayEmployeeIds.length === 1
           ? config.sundayAndHolidays.fixedSundayEmployeeIds[0]
           : undefined;
 
@@ -245,22 +247,9 @@ export function buildDemandSlots(
           });
         }
       }
-    } else {
-      // Fallback: 1 of each active shift template that fits open windows
-      for (const tpl of (config.shiftTemplates || []).filter((t) => t.isActive !== false && t.shiftType !== 'SPECIAL')) {
-        if (!fitsAnyWindow(tpl)) continue;
-        slotCounter++;
-        slots.push({
-          slotId: `slot-${date}-${tpl.id}-${slotCounter}`,
-          date,
-          weekday,
-          template: tpl,
-          priority: 2,
-          isHardMinimum: true,
-          requiredSkillsOrRoles: tpl.requiredSkillsOrRoles,
-        });
-      }
     }
+    // Explicit canonical contract: if coverage pattern is omitted or has zero slots,
+    // this day represents an explicit zero-demand day (zero automatic shifts).
   }
 
   // Bind Manual Overrides to matching slots

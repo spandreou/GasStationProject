@@ -895,7 +895,7 @@ export default function SchedulingRulesPanel({
               <input
                 type="number"
                 aria-label="Ελάχιστη Ανάπαυση μεταξύ Βαρδιών (Ώρες)"
-                min="8"
+                min="11"
                 max="24"
                 step="0.5"
                 value={v2Draft.complianceRules?.minRestIntervalBetweenShiftsHours || 11.0}

@@ -62,11 +62,11 @@ function stableHash(str: string): number {
 }
 
 function stableSortEmployees(employees: EmployeeScheduleConfig[]): EmployeeScheduleConfig[] {
-  return [...employees].sort(
-    (a, b) =>
-      (a?.fullName || '').localeCompare(b?.fullName || '', 'el') ||
-      (a?.employeeId || '').localeCompare(b?.employeeId || '')
-  );
+  return [...employees].sort((a, b) => {
+    const idA = String(a?.employeeId || '');
+    const idB = String(b?.employeeId || '');
+    return idA < idB ? -1 : idA > idB ? 1 : 0;
+  });
 }
 
 export function calculateTargetDaysOffPenalty(
@@ -104,12 +104,12 @@ export function validateGeneratedScheduleCompliance(params: {
   const expectedDemandSlotIds = new Set(expectedDemandSlots.map((slot) => slot.slotId));
 
   // Chronologically sorted shifts
-  const sorted = [...shifts].sort(
-    (a, b) =>
-      a.date.localeCompare(b.date) ||
-      a.startTime.localeCompare(b.startTime) ||
-      a.employeeId.localeCompare(b.employeeId)
-  );
+  const sorted = [...shifts].sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    if (a.startTime !== b.startTime) return a.startTime < b.startTime ? -1 : 1;
+    if (a.employeeId !== b.employeeId) return a.employeeId < b.employeeId ? -1 : 1;
+    return 0;
+  });
 
   // Trackers
   const shiftsByEmpDate = new Map<string, GeneratedShift[]>();
@@ -369,8 +369,8 @@ export function validateGeneratedScheduleCompliance(params: {
         maxHeadcount: 1,
         participatingRoles: config.sundayAndHolidays.participatingRoleTypes,
         fixedEmployeeId:
-          sundayMode === 'FIXED_ASSIGNMENT'
-            ? config.sundayAndHolidays.fixedSundayEmployeeIds?.[0]
+          sundayMode === 'FIXED_ASSIGNMENT' && Array.isArray(config.sundayAndHolidays?.fixedSundayEmployeeIds) && config.sundayAndHolidays.fixedSundayEmployeeIds.length === 1
+            ? config.sundayAndHolidays.fixedSundayEmployeeIds[0]
             : undefined,
       }];
     } else {
@@ -383,20 +383,7 @@ export function validateGeneratedScheduleCompliance(params: {
         requiredRole: slot.requiredRole,
         optionalCandidateRoles: slot.optionalCandidateRoles,
       }));
-      if (requirements.length === 0) {
-        const fallbackByTemplate = new Map<string, DemandRequirement>();
-        for (const slot of expectedDemandSlots.filter((candidate) => candidate.date === date)) {
-          const current = fallbackByTemplate.get(slot.template.id) || {
-            shiftTemplateId: slot.template.id,
-            minHeadcount: 0,
-            targetHeadcount: 0,
-          };
-          current.targetHeadcount += 1;
-          if (slot.isHardMinimum) current.minHeadcount += 1;
-          fallbackByTemplate.set(slot.template.id, current);
-        }
-        requirements = [...fallbackByTemplate.values()];
-      }
+      // If no coverage slots were configured for this day, requirements remains empty.
     }
 
     for (const requirement of requirements) {
@@ -584,11 +571,15 @@ export function validateGeneratedScheduleCompliance(params: {
   }
 
   // Rule 11: Rest Turnaround Intervals
-  if (config.complianceRules?.minRestIntervalBetweenShiftsHours && config.complianceRules.preventClashingTurnaround !== false) {
-    const minRest = config.complianceRules.minRestIntervalBetweenShiftsHours;
+  if (config.complianceRules?.minRestIntervalBetweenShiftsHours) {
+    const minRest = Math.max(11.0, config.complianceRules.minRestIntervalBetweenShiftsHours || 11.0);
     for (const [empId, empShifts] of shiftsByEmp.entries()) {
       const empSorted = [...empShifts].sort(
-        (a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
+        (a, b) => {
+          if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+          if (a.startTime !== b.startTime) return a.startTime < b.startTime ? -1 : 1;
+          return 0;
+        }
       );
       for (let i = 0; i < empSorted.length - 1; i++) {
         const s1 = empSorted[i];
@@ -766,7 +757,7 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
     if (!weeklyDaysMap[weekKey]) weeklyDaysMap[weekKey] = {};
 
     // Sort slots by priority (MRV heuristic: hard roles/skills first)
-    daySlots.sort((a, b) => a.priority - b.priority || a.slotId.localeCompare(b.slotId));
+    daySlots.sort((a, b) => a.priority - b.priority || (a.slotId < b.slotId ? -1 : a.slotId > b.slotId ? 1 : 0));
 
     const workedToday = new Set<string>();
     for (const s of shifts.filter((s) => s.date === date)) {
@@ -1037,9 +1028,9 @@ export function generateScheduleV2(input: GenerateScheduleV2Input): GenerateSche
 
   const sortedShifts = [...shifts].sort(
     (a, b) =>
-      a.date.localeCompare(b.date) ||
-      a.startTime.localeCompare(b.startTime) ||
-      a.employeeId.localeCompare(b.employeeId)
+      (a.date !== b.date ? (a.date < b.date ? -1 : 1) :
+       a.startTime !== b.startTime ? (a.startTime < b.startTime ? -1 : 1) :
+       a.employeeId < b.employeeId ? -1 : a.employeeId > b.employeeId ? 1 : 0)
   );
 
   return {

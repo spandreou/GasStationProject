@@ -1,12 +1,12 @@
 # ShiftOryx Current State
 
-Status date: 29 August 2026
+Status date: 04 September 2026
 
-Evidence baseline: `c2ad046f3966e6ac81b623e679545afaa6dcdd6d`
+Evidence baseline: `8ee1985d2cec350b1cafa980e99f1dc46b32577a`
 
 Audit branch: `antigravity/phase6-domain-cutover-preflight`
 
-Phase verdict: `PHASE_5_CLOSED_VERIFIED_PHASE_6_PREFLIGHT_ACTIVE`
+Phase verdict: `PHASE_5_AND_SCHEDULER_V2_CLOSED_VERIFIED_PHASE_6_PREFLIGHT_ACTIVE`
 
 This file is the concise implementation snapshot of the active repository state. Documentation claims about live systems are strictly backed by verifiable code and configuration evidence.
 
@@ -21,6 +21,7 @@ This file is the concise implementation snapshot of the active repository state.
 | **Phase 3** | Registration Token Backend | `CLOSED_VERIFIED` |
 | **Phase 4** | Automated Tenant Provisioning | `CLOSED_VERIFIED` |
 | **Phase 5** | Root Portal & Store Selector | `CLOSED_VERIFIED` |
+| **Scheduler V2** | Tenant-Configurable Scheduler Contract V2 (PR #44) | `CLOSED_VERIFIED` |
 | **Phase 6** | Wildcard ShiftOryx Domains & Cutover | `CURRENT_PREFLIGHT_ACTIVE` |
 | **Phase 14** | HomeOps Read-Only Integration | `CANCELLED` |
 
@@ -42,6 +43,7 @@ This file is the concise implementation snapshot of the active repository state.
 - Sanitized public schedules, months, employees and announcements exist as dedicated anonymously readable collections.
 - `employee_absences_private` is permanently fail-closed (`allow read, write: if false;`).
 - A deterministic TypeScript scheduler engine implements rotations, fixed days off, absences/replacements, Sunday coverage, warnings, validation, 4 mandatory base slots (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`), max 6 active autoscheduler employees, PDF completeness failsafes, and manual-override preservation.
+- Tenant-configurable Scheduler Contract V2 (PR #44, approved head `c1844ca66bbcf5261e2433481facf036e7aeccdf`, squash merge commit `8ee1985d2cec350b1cafa980e99f1dc46b32577a`) is fully implemented, tested across 2,118 test assertions, merged to `main`, and deployed/verified on Vercel Production: tenant-configurable shift templates and operating windows, min/max headcount constraints, target headcount soft objective, min/target days off, explicit `shiftTemplateId`/`demandSlotId` traceability, manual-override preservation, unified zero-write validation-persistence gate (`validateAndPersistScheduleCandidate`), and strict backwards compatibility with legacy fixed 4-slot scheduling.
 - Owner-only PDF/Excel/Word/WhatsApp exports and a feature-flagged private monthly PDF archive exist.
 - A short-lived Firebase auth-ticket broker foundation exists on Node.js 22 (Gen 2) with hashed tickets, exact-origin checks, transactional one-time consumption and custom-token exchange for `OWNER` only.
 - `platformAdmins/{uid}` is strictly decoupled from tenant ownership: active platform admins have 0 tenant memberships and cannot access tenant private data.
@@ -73,6 +75,7 @@ This file is the concise implementation snapshot of the active repository state.
 
 ## Next Approved Scope
 
-Phase 5 is complete, merged, and verified on Vercel Production.
-Phase 6 (Production Domain Cutover) is the active phase in **Preflight / Readiness Mode**.
+Phase 5 and Scheduler Contract V2 (PR #44) are complete, merged, and verified on Vercel Production.
+Phase 6 (Production Domain Cutover) is the active phase in **Preflight / Readiness Mode** (PR #42).
+Phase 6A dual-domain compatibility implementation exists in PR #43 (Draft, unmerged, not production baseline).
 No production DNS, Vercel domain, Firebase Authorized Domains, or Firestore mutations are authorized until explicit human approval.

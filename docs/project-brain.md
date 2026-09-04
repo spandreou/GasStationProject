@@ -106,7 +106,7 @@ References:
 
 Μία phase κάθε φορά. Πριν από αλλαγές: branch/status, current-state inspection και backup. Καμία production αλλαγή χωρίς explicit approval. Κάθε phase κλείνει με tests, security/dependency review, risks και rollback, και σταματά πριν την επόμενη phase.
 
-Phase 0, 1, 2A, 2B, 3, 4, και 5 είναι πλήρως ολοκληρωμένες και verified. Η Phase 6 είναι η τρέχουσα ενεργή φάση σε επίπεδο Preflight / Readiness Design. Καμία αλλαγή production (DNS, Vercel domains, Firebase Authorized Domains, Cloud Functions deploy) δεν εκτελείται χωρίς ρητή έγκριση.
+Phase 0, 1, 2A, 2B, 3, 4, 5 και το cross-cutting Scheduler Contract V2 (PR #44) είναι πλήρως ολοκληρωμένες, merged στο main και verified στο Vercel Production. Η Phase 6 είναι η τρέχουσα ενεργή φάση σε επίπεδο Preflight / Readiness Design (PR #42) και dual-domain compatibility implementation (PR #43, Draft). Καμία αλλαγή production (DNS, Vercel domains, Firebase Authorized Domains, Cloud Functions deploy) δεν εκτελείται χωρίς ρητή έγκριση.
 
 ## Product Proposals, Not Current Enforcement
 

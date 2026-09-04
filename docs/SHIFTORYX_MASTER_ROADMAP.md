@@ -690,20 +690,32 @@ Production Closure Summary:
 - Open redirect prevention via `resolveAuthorizedReturnTo` tenant membership verification.
 - Functions discovery guard verified at 658ms (< 3000ms threshold).
 
+### Scheduler Contract V2 (PR #44 — CLOSED)
+
+Status: **CLOSED & PRODUCTION VERIFIED**
+
+Production Closure Summary:
+- Approved PR #44 head: `c1844ca66bbcf5261e2433481facf036e7aeccdf`.
+- Squash merged to `main`: `8ee1985d2cec350b1cafa980e99f1dc46b32577a` (authoritative baseline).
+- Vercel Production state: `READY` (success), verified via HTTP smoke and client-route rendering.
+- Tenant-configurable shift templates, operating windows, headcount constraints (`minHeadcount`, `maxHeadcount`, `targetHeadcount`), days off constraints (`minDaysOffPerWeek`, `targetDaysOffPerWeek`), explicit slot identity (`shiftTemplateId`, `demandSlotId`), manual work override preservation during auto-generation, and unified validation-persistence gate (`validateAndPersistScheduleCandidate`).
+- 2,118 automated test assertions passing; zero backward compatibility regression for legacy fixed 4-slot scheduling.
+- Specification document: `docs/SCHEDULER_CONTRACT_V2.md`.
+
 ### Phase 6 — Wildcard ShiftOryx Domains
 
 Status: **CURRENT ACTIVE PHASE (PREFLIGHT / READINESS MODE)**
 
 Domain ownership is confirmed (`shiftoryx.gr` is `PURCHASED`).
-Phase 6 Preflight audit complete: DNS, Vercel wildcard domain, Firebase Authorized Domains, Auth Broker, frontend configuration, and rollback safety designed.
+Phase 6 Preflight specification (PR #42) aligns DNS, Vercel wildcard domain, Firebase Authorized Domains, Auth Broker, frontend configuration, and rollback safety.
+Phase 6A dual-domain compatibility implementation exists in PR #43 (Draft, unmerged, not production baseline).
 Live production cutover requires explicit human approval.
 
 Tasks:
 
-- Cloudflare / Vercel DNS zone configuration (A record `76.76.21.21`, CNAME `www` and `*` to `cname.vercel-dns.com`),
-- root/www records,
-- wildcard record (`*.shiftoryx.gr`),
-- Firebase Authorized Domains (`shiftoryx.gr`),
+- Vercel nameserver delegation (`ns1.vercel-dns.com`, `ns2.vercel-dns.com`),
+- root/www records and wildcard record (`*.shiftoryx.gr`) on Vercel,
+- Firebase Authorized Domains (`shiftoryx.gr`, `www.shiftoryx.gr`),
 - CSP/connect-src/frame rules,
 - tenant resolver,
 - unknown/suspended/expired states,

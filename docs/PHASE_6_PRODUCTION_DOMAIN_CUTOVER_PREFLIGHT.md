@@ -2,7 +2,7 @@
 
 **Status:** `PREFLIGHT_CORRECTED_DUAL_DOMAIN_COMPATIBILITY_REQUIRED`  
 **Target Milestone:** Phase 6 — Wildcard ShiftOryx Domains & Pilot Cutover  
-**Baseline Git Commit:** `c2ad046f3966e6ac81b623e679545afaa6dcdd6d`  
+**Baseline Git Commit:** `8ee1985d2cec350b1cafa980e99f1dc46b32577a` (post-PR44 Scheduler Contract V2)  
 **Production Firebase Project:** `gasstationproject-9dd89`  
 **Production Vercel Project:** `gas-station-project` (`prj_P2YThL4OQctOIUkyX9h7OagA4B4t`)  
 **Domain Ownership:** `shiftoryx.gr` (Purchased / Registered)  

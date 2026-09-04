@@ -50,18 +50,27 @@ This is approved roadmap direction, not current runtime behavior.
 - **ADMIN/MANAGER**: legacy runtime compatibility μόνο. Δεν δημιουργούνται σε νέο provisioning. Read-only inventory/design ανήκει στη Phase 2A και οποιαδήποτε controlled production migration στη separately approved Phase 2B.
 - **Employee/public viewer**: δεν έχει account, password, Firebase UID ή membership στο MVP. Διαβάζει μόνο sanitized public data.
 
-Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι business classifications. Δεν είναι auth roles και δεν δίνουν δικαιώματα.
+Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι legacy business classifications και όχι auth roles. Στο τρέχον Scheduler Contract V2 (PR #44), το scheduling είναι tenant-configurable χωρίς universal όριο 4–6 εργαζομένων ή υποχρεωτικά fixed SaaS roles.
 
 ## Scheduler Guarantees
 
-- Fixed day off και absence/unavailability είναι constraints.
-- Core rotation, Sunday fairness και coverage rules παραμένουν deterministic.
-- Manual overrides προστατεύονται και ο OWNER μπορεί πάντα να διορθώσει πρόγραμμα.
-- Παραβίαση κανόνα εμφανίζεται ως warning. Δεν δημιουργείται ψεύτικα σωστό πρόγραμμα.
-- Διατηρούνται weekly/monthly generation, manual edit, drag and drop, templates, history, persistence και exports.
+- **Scheduler Contract V2 (Authoritative, PR #44 / `8ee1985d2cec350b1cafa980e99f1dc46b32577a`)**:
+  - Generalized, tenant-configurable constraint and assignment engine (οποιοδήποτε πλήθος εργαζομένων που ικανοποιεί μαθηματικά το πρόγραμμα).
+  - Hard constraints: `minHeadcount`, `maxHeadcount`, `minDaysOffPerWeek`, ελάχιστη 11ωρη ανάπαυση (turnaround), fixed days off, absences/unavailability.
+  - Soft objectives: `targetHeadcount`, `targetDaysOffPerWeek`.
+  - Zero-write validation-persistence gate: κανένα μη επικυρωμένο πρόγραμμα δεν αποθηκεύεται στη βάση (`validateAndPersistScheduleCandidate`).
+  - Πλήρης διατήρηση manual work overrides κατά το auto-generation.
+- **Legacy Compatibility Path**:
+  - Διατηρείται για backwards compatibility με υφιστάμενα καταστήματα (BP Kallis) και legacy fixed 4-slot topologies.
+- Και στα δύο paths:
+  - Deterministic generation μέσω seeded PRNG.
+  - Manual overrides προστατεύονται και ο OWNER μπορεί πάντα να διορθώσει πρόγραμμα.
+  - Παραβίαση κανόνα εμφανίζεται ως warning. Δεν δημιουργείται ψεύτικα σωστό πρόγραμμα.
+  - Διατηρούνται weekly/monthly generation, manual edit, drag and drop, templates, history, persistence και exports.
 
 References:
 
+- `docs/SCHEDULER_CONTRACT_V2.md`
 - `docs/scheduler-rules.md`
 - `docs/scheduler-ui-export-rules.md`
 - `docs/scheduler-qa-checklist.md`

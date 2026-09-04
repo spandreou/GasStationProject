@@ -30,14 +30,15 @@ Initial preflight assumed configuration-only cutover without code modifications.
 ### 2.1 Public DNS & Authoritative Vercel Nameservers
 - **Current State:** `shiftoryx.gr` is registered in the `.gr` registry (EETT / FORTH-ICS) and sits on registrar default parking nameservers. Zero DNS records are configured.
 - **Authoritative DNS Model for Wildcards:**
-  - Official Vercel documentation dictates that apex wildcard routing (`*.shiftoryx.gr`) with automated Let's Encrypt / Google Trust Services SSL certificate lifecycle is best supported when the domain's **Authoritative Nameservers are delegated directly to Vercel**:
+  - Official Vercel documentation indicates that apex wildcard routing (`*.shiftoryx.gr`) with automated TLS certificate management is best supported when the domain's **Authoritative Nameservers are delegated directly to Vercel**:
     - `ns1.vercel-dns.com`
     - `ns2.vercel-dns.com`
-  - This eliminates third-party DNS proxy complexities and ensures automated DNS-01 ACME challenge validation for wildcards.
+  - This eliminates third-party DNS proxy complexities and enables automated DNS-01 ACME challenge validation for wildcards.
+  - Wildcard TLS certificate issuance and renewal are managed by Vercel after required DNS ownership validation. Specific certificate authority / issuer (e.g. Let's Encrypt, Google Trust Services, or other provider) is **not guaranteed** as a fixed invariant and is marked: `REQUIRES_EXECUTION_TIME_VALIDATION`.
   - Cloudflare is **not required** for the ShiftOryx Vercel production frontend.
 - **No Hardcoded DNS Values:**
-  - Generic IP addresses (e.g. `76.76.21.21`) or CNAMEs are vendor examples only (`EXAMPLE_ONLY`).
-  - During live cutover execution, exact DNS records must be obtained directly from active Vercel domain inspection.
+  - Generic IP addresses (e.g. `76.76.21.21`) or CNAMEs (`cname.vercel-dns.com`) are vendor examples only (`EXAMPLE_ONLY`).
+  - During live cutover execution, exact DNS records must be obtained directly from active Vercel domain inspection: `REQUIRES_EXECUTION_TIME_VALIDATION`.
 - **CAA Directives:**
   - The domain `shiftoryx.gr` currently has 0 CAA records. Absence of CAA permits standard issuance. `CAA_CHANGE_REQUIRED=NO`.
 
@@ -47,11 +48,13 @@ Initial preflight assumed configuration-only cutover without code modifications.
   - `signInWithEmailAndPassword`: Direct REST call to Identity Toolkit. Does **not** enforce Authorized Domains.
   - `createUserWithEmailAndPassword`: Direct REST call to Identity Toolkit. Does **not** enforce Authorized Domains.
   - `signInWithCustomToken`: Direct REST call to Identity Toolkit. Does **not** enforce Authorized Domains.
-  - `OAuth Popups / Redirects` & `Email Action Links` (Password Reset / Verification continueUrls): **Strictly enforce Authorized Domains**.
+  - `OAuth Popups / Redirects` & `Email Action Links` (Password Reset / Verification `continueUrl` / ActionCodeSettings): **Strictly enforce Authorized Domains**.
+- **Scope Clarification & Email Domain Distinction:**
+  - Adding `shiftoryx.gr` and `www.shiftoryx.gr` to Firebase Authorized Domains authorizes redirect/continue URLs in browser flows.
+  - **Crucial Boundary**: Authorized Domains does **not** automatically configure custom sender email domains or branded action handler URLs. Custom authentication email sender domains (`noreply@shiftoryx.gr`) and custom email action link domains require separate Firebase project email template configuration, DNS SPF/DKIM verification, and/or Firebase Hosting custom-domain action handler routing: `REQUIRES_EXECUTION_TIME_VALIDATION`.
 - **Tenant Subdomain Authorization:**
   - In ShiftOryx, tenant logins use Auth Broker custom tokens (`signInWithCustomToken`). Tenant subdomains do not require manual per-tenant Firebase Authorized Domains entries.
-  - Adding apex `shiftoryx.gr` and `www.shiftoryx.gr` to Firebase Authorized Domains covers central password reset and action link flows.
-  - Wildcard domain inheritance is marked: `REQUIRES_CONTROLLED_PRODUCTION_VALIDATION`.
+  - Wildcard domain inheritance in Firebase Authorized Domains is marked: `REQUIRES_CONTROLLED_PRODUCTION_VALIDATION`.
 
 ### 2.3 Auth Broker Dual-Run Limitation (Code Evidence)
 - `functions/src/authBrokerCore.js` uses a singular `baseDomain` parameter (default: `'homelabshare.gr'`).

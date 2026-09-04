@@ -100,17 +100,19 @@ substitutes for tenant membership and never grants tenant authorization.
 
 ## 3. Scheduler Business Model
 
-Οι υπάρχοντες scheduler roles παραμένουν, όπως `CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A` και `EXTRA_B` ή τα legacy aliases τους. Είναι business classifications και όχι auth roles.
+Στο τρέχον σύστημα λειτουργούν δύο επίπεδα:
+- **Scheduler Contract V2 (Authoritative Product Contract, PR #44)**: Το μοντέλο scheduling είναι tenant-configurable και δεν βασίζεται σε universal όριο 4–6 εργαζομένων ούτε σε υποχρεωτικά SaaS roles τύπου `CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`. Κάθε tenant ορίζει τα δικά του operating windows, shift templates και demand slots. Το μέγεθος της ομάδας είναι ελεύθερο υπό την προϋπόθεση ότι ικανοποιούνται μαθηματικά οι απαιτήσεις κάλυψης και οι αυστηροί περιορισμοί (όπως το ελάχιστο 11ωρο ανάπαυσης, οι μέρες ανάπαυσης ανά εβδομάδα, τα fixed days off και οι απουσίες).
+- **Legacy Compatibility Path**: Οι ιστορικοί scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B`) και η σταθερή 4-slot τοπολογία παραμένουν πλήρως λειτουργικά για backwards compatibility με υφιστάμενα καταστήματα όπως το BP Kallis. Είναι αποκλειστικά business/scheduling classifications και όχι auth roles.
 
-Το auto-generation πρέπει να διατηρεί:
-
+Το auto-generation (τόσο στο V2 όσο και στο legacy path) διατηρεί απαρέγκλιτα:
 - fixed days off,
 - absences και unavailability,
-- weekly core rotation,
-- Sunday rules,
+- minimum rest protection (11 hours minimum turnaround),
+- Sunday coverage rules και διαφάνεια,
 - coverage constraints,
-- deterministic output,
+- deterministic output μέσω seeded PRNG,
 - manual overrides,
+- zero-write validation-persistence gate (καμία αποθήκευση άκυρου προγράμματος),
 - warnings όταν δεν είναι δυνατή πλήρης κάλυψη.
 
 Ο owner μπορεί πάντα να κάνει manual αλλαγές. Οι παραβιάσεις κανόνων εμφανίζονται ως warnings και δεν κρύβονται.

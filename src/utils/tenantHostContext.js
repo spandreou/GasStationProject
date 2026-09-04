@@ -19,7 +19,37 @@ export const RESERVED_SUBDOMAINS = new Set([
   'dashboard',
   'shiftoryx',
   'gas',
+  'tenant',
+  'root',
+  'system',
+  'null',
+  'undefined',
 ]);
+
+export const SLUG_MIN_LENGTH = 3;
+export const SLUG_MAX_LENGTH = 40;
+export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+
+export function isAllowedTenantSlug(slug) {
+  if (typeof slug !== 'string') return false;
+  const normalized = slug.trim().toLowerCase();
+  if (normalized.length < SLUG_MIN_LENGTH || normalized.length > SLUG_MAX_LENGTH) {
+    return false;
+  }
+  if (!SLUG_REGEX.test(normalized)) {
+    return false;
+  }
+  if (RESERVED_SUBDOMAINS.has(normalized)) {
+    return false;
+  }
+  if (normalized.startsWith('gas-') || normalized.endsWith('-gas')) {
+    return false;
+  }
+  if (normalized.startsWith('shiftoryx-') || normalized.endsWith('-shiftoryx')) {
+    return false;
+  }
+  return true;
+}
 
 export const DEFAULT_HOST_FAMILIES = [
   {
@@ -100,19 +130,23 @@ export function resolveTenantHostContext(hostnameValue = '') {
 
     if (hostname.endsWith(`.${family.baseDomain}`)) {
       const candidate = hostname.slice(0, -(family.baseDomain.length + 1));
-      if (candidate && !RESERVED_SUBDOMAINS.has(candidate)) {
-        return {
-          mode: 'tenant',
-          hostname,
-          tenantSlug: candidate,
-          family: family.id,
-        };
+      // Subdomain must be strictly single-label. Deep nested subdomains (e.g. foo.bar.shiftoryx.gr) fail closed.
+      if (!candidate || candidate.includes('.')) {
+        continue;
       }
       if (RESERVED_SUBDOMAINS.has(candidate)) {
         return {
           mode: 'reserved',
           hostname,
           reservedSlug: candidate,
+          family: family.id,
+        };
+      }
+      if (isAllowedTenantSlug(candidate)) {
+        return {
+          mode: 'tenant',
+          hostname,
+          tenantSlug: candidate,
           family: family.id,
         };
       }

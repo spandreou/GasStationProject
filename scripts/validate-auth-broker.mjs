@@ -5,6 +5,11 @@ import {
   buildTenantTicketRedirectUrl,
   hashAuthTicket,
   isAllowedBrokerOrigin,
+  isAllowedTenantOrigin,
+  isAllowedTenantSlug,
+  SLUG_MIN_LENGTH,
+  SLUG_MAX_LENGTH,
+  SLUG_REGEX,
   validateBrokerReturnTo,
   validateTicketFormat,
 } from '../functions/src/authBrokerCore.js';
@@ -140,6 +145,21 @@ assert(!crossFamily2.valid && crossFamily2.reason === 'cross-family-redirect-not
   'https://api.shiftoryx.gr/app',
   'https://unknown.homelabshare.gr/app',
   'https://bp-kallis.homelabshare.gr/../../admin',
+  // Adversarial multi-tenant cases: deep nested subdomains must fail closed
+  'https://foo.bar.shiftoryx.gr/app',
+  'https://www.foo.shiftoryx.gr/app',
+  'https://bp-kallis.extra.shiftoryx.gr/app',
+  'https://nested.tenant.homelabshare.gr/app',
+  // Domain lookalikes & suffix injection
+  'https://evilshiftoryx.gr/app',
+  'https://shiftoryx.gr.evil.com/app',
+  'https://homelabshare.gr.evil.com/app',
+  // Invalid slug length / format
+  'https://ab.shiftoryx.gr/app',
+  `https://${'a'.repeat(41)}.shiftoryx.gr/app`,
+  'https://bp_kallis.shiftoryx.gr/app',
+  'https://-leading-dash.shiftoryx.gr/app',
+  'https://trailing-dash-.shiftoryx.gr/app',
 ].forEach((returnTo) => {
   assert(
     !validateBrokerReturnTo({
@@ -151,6 +171,50 @@ assert(!crossFamily2.valid && crossFamily2.reason === 'cross-family-redirect-not
     `Unsafe returnTo must be rejected: ${returnTo}`,
   );
 });
+
+// Authoritative provisioning slug contract verification
+assertEqual(SLUG_MIN_LENGTH, 3, 'SLUG_MIN_LENGTH must be 3.');
+assertEqual(SLUG_MAX_LENGTH, 40, 'SLUG_MAX_LENGTH must be 40.');
+assert(SLUG_REGEX.test('bp-kallis'), 'Valid slug regex check.');
+assert(!SLUG_REGEX.test('ab'), 'Slug regex must reject length 2.');
+assert(!SLUG_REGEX.test('a'.repeat(41)), 'Slug regex must reject length 41.');
+assert(!SLUG_REGEX.test('has_underscore'), 'Slug regex must reject underscores.');
+assert(!SLUG_REGEX.test('-leading'), 'Slug regex must reject leading hyphen.');
+assert(!SLUG_REGEX.test('trailing-'), 'Slug regex must reject trailing hyphen.');
+assert(isAllowedTenantSlug('bp-kallis'), 'isAllowedTenantSlug must accept bp-kallis.');
+assert(isAllowedTenantSlug('brand-new-store-123'), 'isAllowedTenantSlug must accept valid slug.');
+assert(!isAllowedTenantSlug('admin'), 'isAllowedTenantSlug must reject admin.');
+assert(!isAllowedTenantSlug('www'), 'isAllowedTenantSlug must reject www.');
+assert(!isAllowedTenantSlug('gas'), 'isAllowedTenantSlug must reject gas.');
+assert(!isAllowedTenantSlug('shiftoryx'), 'isAllowedTenantSlug must reject shiftoryx.');
+assert(!isAllowedTenantSlug('gas-store'), 'isAllowedTenantSlug must reject gas- prefix.');
+assert(!isAllowedTenantSlug('store-gas'), 'isAllowedTenantSlug must reject -gas suffix.');
+assert(!isAllowedTenantSlug('shiftoryx-store'), 'isAllowedTenantSlug must reject shiftoryx- prefix.');
+assert(!isAllowedTenantSlug('store-shiftoryx'), 'isAllowedTenantSlug must reject -shiftoryx suffix.');
+assert(!isAllowedTenantSlug('foo.bar'), 'isAllowedTenantSlug must reject slugs with dots.');
+
+// Scalable dynamic origin verification for newly provisioned tenants
+assert(isAllowedTenantOrigin('https://bp-kallis.shiftoryx.gr'), 'bp-kallis on primary domain must be allowed.');
+assert(isAllowedTenantOrigin('https://bp-kallis.homelabshare.gr'), 'bp-kallis on legacy domain must be allowed.');
+assert(isAllowedTenantOrigin('https://brand-new-tenant-999.shiftoryx.gr'), 'Newly provisioned tenant on primary domain must be allowed without manual reconfiguration.');
+assert(isAllowedTenantOrigin('https://brand-new-tenant-999.homelabshare.gr'), 'Newly provisioned tenant on legacy domain must be allowed without manual reconfiguration.');
+assert(!isAllowedTenantOrigin('https://foo.bar.shiftoryx.gr'), 'Deep nested origin must be rejected.');
+assert(!isAllowedTenantOrigin('https://www.shiftoryx.gr'), 'Central / reserved origin must be rejected as tenant origin.');
+assert(!isAllowedTenantOrigin('https://admin.shiftoryx.gr'), 'Reserved subdomain origin must be rejected.');
+assert(!isAllowedTenantOrigin('https://evilshiftoryx.gr'), 'Domain lookalike origin must be rejected.');
+assert(!isAllowedTenantOrigin('http://bp-kallis.shiftoryx.gr'), 'Non-https origin must be rejected.');
+assert(!isAllowedTenantOrigin('https://bp-kallis.shiftoryx.gr:8080'), 'Non-standard port must be rejected in production.');
+
+// Verify newly provisioned tenant returnTo validation without function reconfiguration
+const newTenantReturnTo = validateBrokerReturnTo({
+  returnTo: 'https://brand-new-tenant-999.shiftoryx.gr/app',
+  expectedTenantId: 'brand-new-tenant-999',
+  callerOrigin: 'https://shiftoryx.gr',
+  production: true,
+});
+assert(newTenantReturnTo.valid, 'Newly provisioned tenant returnTo must pass without manual reconfiguration.');
+assertEqual(newTenantReturnTo.tenantId, 'brand-new-tenant-999', 'Resolved tenant ID must match new tenant slug.');
+assertEqual(newTenantReturnTo.allowedTenantOrigin, 'https://brand-new-tenant-999.shiftoryx.gr', 'Resolved tenant origin must match.');
 
 assert(isAllowedBrokerOrigin('https://gas.homelabshare.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Legacy central origin must be allowlisted.');
 assert(isAllowedBrokerOrigin('https://shiftoryx.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Primary central origin must be allowlisted.');

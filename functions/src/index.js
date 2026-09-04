@@ -18,6 +18,7 @@ import {
   hashAuthTicket,
   isActiveBrokerMembership,
   isAllowedBrokerOrigin,
+  isAllowedTenantOrigin,
   resolveTenantIdFromHostname,
   validateBrokerReturnTo,
   validateTicketFormat,
@@ -62,6 +63,10 @@ function splitList(value, fallback = []) {
   return rows.length ? rows : fallback;
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getBrokerConfig() {
   const baseDomain = process.env.AUTH_BROKER_BASE_DOMAIN || DEFAULT_BASE_DOMAIN;
   const centralDomain = process.env.AUTH_BROKER_CENTRAL_DOMAIN || DEFAULT_CENTRAL_DOMAIN;
@@ -100,6 +105,10 @@ function getBrokerConfig() {
   ]);
   const production = process.env.AUTH_BROKER_ALLOW_LOCAL_DEV !== 'true';
 
+  const tenantFamilyCorsRegexes = domainFamilies.map(
+    (f) => new RegExp(`^https://[a-z0-9][a-z0-9-]{1,38}[a-z0-9]\\.${escapeRegex(f.baseDomain)}$`),
+  );
+
   return {
     baseDomain,
     centralDomain,
@@ -109,7 +118,10 @@ function getBrokerConfig() {
     centralOrigins,
     tenantOrigins,
     production,
-    callableCorsOrigins: [...new Set([...centralOrigins, ...tenantOrigins])],
+    callableCorsOrigins: [
+      ...new Set([...centralOrigins, ...tenantOrigins]),
+      ...tenantFamilyCorsRegexes,
+    ],
   };
 }
 
@@ -238,7 +250,9 @@ export const exchangeAuthTicket = onCall(
   async (request) => {
     const config = getBrokerConfig();
     const origin = getRequestOrigin(request);
-    if (!isAllowedBrokerOrigin(origin, config.tenantOrigins)) {
+    const isDynamicTenantOrigin = isAllowedTenantOrigin(origin, config.domainFamilies);
+    const isStaticTenantOrigin = isAllowedBrokerOrigin(origin, config.tenantOrigins);
+    if (!isDynamicTenantOrigin && !isStaticTenantOrigin) {
       deny('invalid-tenant-origin');
     }
 
@@ -250,6 +264,7 @@ export const exchangeAuthTicket = onCall(
       hostname: originUrl.hostname,
       baseDomain: config.baseDomain,
       centralDomain: config.centralDomain,
+      domainFamilies: config.domainFamilies,
     });
     if (!originTenantId) deny('invalid-tenant-host');
 

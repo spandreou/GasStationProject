@@ -6,6 +6,7 @@ import {
 import {
   resolveTenantHostContext,
   getResolvedDomainFamilies,
+  isAllowedTenantSlug,
 } from '../utils/tenantHostContext';
 
 export const TENANT_ACCESS_MESSAGES = {
@@ -112,12 +113,18 @@ export function buildTenantUrl(tenant, familyId = 'primary') {
   if (typeof tenant.domain === 'string' && tenant.domain.trim()) {
     const domain = tenant.domain.trim().toLowerCase();
     if (domain.endsWith(`.${targetFamily.baseDomain}`)) {
-      return `https://${domain}`;
+      const candidate = domain.slice(0, -(targetFamily.baseDomain.length + 1));
+      if (candidate && !candidate.includes('.') && isAllowedTenantSlug(candidate)) {
+        return `https://${domain}`;
+      }
     }
   }
 
   if (typeof tenant.slug === 'string' && tenant.slug.trim()) {
-    return `https://${tenant.slug.trim().toLowerCase()}.${targetFamily.baseDomain}`;
+    const slug = tenant.slug.trim().toLowerCase();
+    if (isAllowedTenantSlug(slug)) {
+      return `https://${slug}.${targetFamily.baseDomain}`;
+    }
   }
 
   return '';

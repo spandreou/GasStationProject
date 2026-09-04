@@ -30,7 +30,37 @@ export const RESERVED_SUBDOMAINS = new Set([
   'dashboard',
   'shiftoryx',
   'gas',
+  'tenant',
+  'root',
+  'system',
+  'null',
+  'undefined',
 ]);
+
+export const SLUG_MIN_LENGTH = 3;
+export const SLUG_MAX_LENGTH = 40;
+export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+
+export function isAllowedTenantSlug(slug) {
+  if (typeof slug !== 'string') return false;
+  const normalized = slug.trim().toLowerCase();
+  if (normalized.length < SLUG_MIN_LENGTH || normalized.length > SLUG_MAX_LENGTH) {
+    return false;
+  }
+  if (!SLUG_REGEX.test(normalized)) {
+    return false;
+  }
+  if (RESERVED_SUBDOMAINS.has(normalized)) {
+    return false;
+  }
+  if (normalized.startsWith('gas-') || normalized.endsWith('-gas')) {
+    return false;
+  }
+  if (normalized.startsWith('shiftoryx-') || normalized.endsWith('-shiftoryx')) {
+    return false;
+  }
+  return true;
+}
 
 export const DEFAULT_DOMAIN_FAMILIES = [
   {
@@ -163,13 +193,37 @@ export function resolveDomainFamilyForHostname({
     }
     if (cleanHostname.endsWith(`.${family.baseDomain}`)) {
       const candidate = cleanHostname.slice(0, -(family.baseDomain.length + 1));
-      if (candidate && !RESERVED_SUBDOMAINS.has(candidate)) {
+      // Subdomain must be strictly single-label. Deep nested subdomains (e.g. foo.bar.shiftoryx.gr) fail closed.
+      if (!candidate || candidate.includes('.')) {
+        return null;
+      }
+      if (RESERVED_SUBDOMAINS.has(candidate)) {
+        return { family, role: 'reserved', reservedSlug: candidate };
+      }
+      if (isAllowedTenantSlug(candidate)) {
         return { family, role: 'tenant', tenantSlug: candidate };
       }
+      return null;
     }
   }
 
   return null;
+}
+
+export function isAllowedTenantOrigin(origin, domainFamilies = []) {
+  try {
+    const url = new URL(toCleanString(origin));
+    if (url.protocol !== 'https:') return false;
+    if (url.username || url.password || url.port) return false;
+    const hostname = normalizeHostname(url.hostname);
+    const targetInfo = resolveDomainFamilyForHostname({
+      hostname,
+      domainFamilies,
+    });
+    return Boolean(targetInfo && targetInfo.role === 'tenant' && targetInfo.tenantSlug);
+  } catch {
+    return false;
+  }
 }
 
 export function resolveTenantIdFromHostname({

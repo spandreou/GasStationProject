@@ -1,4 +1,4 @@
-export default function AuthPageShell({ title, subtitle, children, footer = 'Powered by HomelabShare' }) {
+export default function AuthPageShell({ title, subtitle, children, footer = 'Powered by ShiftOryx' }) {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#edf6ff_48%,#f8fafc_100%)] px-4 py-8 text-slate-950">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.045)_1px,transparent_1px)] bg-[size:44px_44px]" />

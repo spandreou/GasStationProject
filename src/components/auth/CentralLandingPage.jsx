@@ -59,10 +59,10 @@ export default function CentralLandingPage() {
               SaaS operations portal
             </div>
             <h1 className="mt-6 max-w-4xl text-4xl font-black leading-[1.02] tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
-              Manage all your fuel stations from one platform.
+              Plan shifts, manage teams and operate every workplace from one platform.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg">
-              Central login, tenant selection and secure station dashboards for schedule generation,
+              Central login, tenant selection and secure workspace dashboards for schedule generation,
               employee visibility and programme exports.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row flex-wrap">
@@ -125,7 +125,7 @@ export default function CentralLandingPage() {
         </div>
 
         <footer className="border-t border-slate-200 py-5 text-sm text-slate-500">
-          Powered by HomelabShare
+          Powered by ShiftOryx
         </footer>
       </section>
     </main>

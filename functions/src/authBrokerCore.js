@@ -11,6 +11,70 @@ export const AUTH_BROKER_ROLES = ['OWNER'];
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
+export const RESERVED_SUBDOMAINS = new Set([
+  'www',
+  'admin',
+  'api',
+  'auth',
+  'login',
+  'register',
+  'stores',
+  'portal',
+  'app',
+  'support',
+  'status',
+  'mail',
+  'firebase',
+  'billing',
+  'ops',
+  'dashboard',
+  'shiftoryx',
+  'gas',
+  'tenant',
+  'root',
+  'system',
+  'null',
+  'undefined',
+]);
+
+export const SLUG_MIN_LENGTH = 3;
+export const SLUG_MAX_LENGTH = 40;
+export const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+
+export function isAllowedTenantSlug(slug) {
+  if (typeof slug !== 'string') return false;
+  const normalized = slug.trim().toLowerCase();
+  if (normalized.length < SLUG_MIN_LENGTH || normalized.length > SLUG_MAX_LENGTH) {
+    return false;
+  }
+  if (!SLUG_REGEX.test(normalized)) {
+    return false;
+  }
+  if (RESERVED_SUBDOMAINS.has(normalized)) {
+    return false;
+  }
+  if (normalized.startsWith('gas-') || normalized.endsWith('-gas')) {
+    return false;
+  }
+  if (normalized.startsWith('shiftoryx-') || normalized.endsWith('-shiftoryx')) {
+    return false;
+  }
+  return true;
+}
+
+export const DEFAULT_DOMAIN_FAMILIES = [
+  {
+    id: 'primary',
+    baseDomain: 'shiftoryx.gr',
+    centralDomain: 'shiftoryx.gr',
+  },
+  {
+    id: 'legacy',
+    baseDomain: 'homelabshare.gr',
+    centralDomain: 'gas.homelabshare.gr',
+  },
+];
+
 function toCleanString(value) {
   return String(value || '').trim();
 }
@@ -30,6 +94,59 @@ function normalizeOrigin(value) {
 
 function isLocalHostname(hostname) {
   return LOCAL_HOSTS.has(normalizeHostname(hostname));
+}
+
+export function normalizeDomainFamily(family) {
+  if (!family || typeof family !== 'object') return null;
+  const id = String(family.id || '').trim().toLowerCase();
+  const baseDomain = normalizeHostname(family.baseDomain);
+  const centralDomain = normalizeHostname(
+    family.centralDomain || (id === 'primary' ? baseDomain : `gas.${baseDomain}`),
+  );
+  if (!id || !baseDomain || !centralDomain) return null;
+  return { id, baseDomain, centralDomain };
+}
+
+export function resolveDomainFamilies(config = {}) {
+  if (Array.isArray(config.domainFamilies) && config.domainFamilies.length > 0) {
+    const parsed = config.domainFamilies.map(normalizeDomainFamily).filter(Boolean);
+    if (parsed.length > 0) return parsed;
+  }
+
+  if (config.baseDomain || config.centralDomain) {
+    const primaryBase = normalizeHostname(config.baseDomain || 'shiftoryx.gr');
+    const primaryCentral = normalizeHostname(
+      config.centralDomain ||
+        (primaryBase === 'homelabshare.gr' ? 'gas.homelabshare.gr' : primaryBase),
+    );
+
+    const legacyBase = normalizeHostname(
+      config.legacyBaseDomain || (primaryBase !== 'homelabshare.gr' ? 'homelabshare.gr' : ''),
+    );
+    const legacyCentral = normalizeHostname(
+      config.legacyCentralDomain || (legacyBase ? 'gas.homelabshare.gr' : ''),
+    );
+
+    const families = [
+      {
+        id: 'primary',
+        baseDomain: primaryBase,
+        centralDomain: primaryCentral,
+      },
+    ];
+
+    if (legacyBase && legacyCentral && legacyBase !== primaryBase) {
+      families.push({
+        id: 'legacy',
+        baseDomain: legacyBase,
+        centralDomain: legacyCentral,
+      });
+    }
+
+    return families;
+  }
+
+  return DEFAULT_DOMAIN_FAMILIES.map(normalizeDomainFamily).filter(Boolean);
 }
 
 export function generateAuthTicket() {
@@ -59,22 +176,117 @@ export function isAllowedBrokerOrigin(origin, allowedOrigins = []) {
   return allowedOrigins.map(normalizeOrigin).includes(normalizedOrigin);
 }
 
-export function resolveTenantIdFromHostname({
+export function resolveDomainFamilyForHostname({
   hostname,
-  baseDomain = 'homelabshare.gr',
-  centralDomain = 'gas.homelabshare.gr',
+  baseDomain,
+  centralDomain,
+  domainFamilies,
 }) {
   const cleanHostname = normalizeHostname(hostname);
-  const cleanBaseDomain = normalizeHostname(baseDomain);
-  const cleanCentralDomain = normalizeHostname(centralDomain);
+  if (!cleanHostname) return null;
 
-  if (!cleanHostname || cleanHostname === cleanCentralDomain) return '';
-  if (isLocalHostname(cleanHostname)) return '';
-  if (!cleanHostname.endsWith(`.${cleanBaseDomain}`)) return '';
+  const families = resolveDomainFamilies({ baseDomain, centralDomain, domainFamilies });
 
-  const tenantId = cleanHostname.slice(0, -(cleanBaseDomain.length + 1));
-  if (!tenantId || tenantId === 'gas') return '';
-  return tenantId;
+  for (const family of families) {
+    if (cleanHostname === family.centralDomain) {
+      return { family, role: 'central' };
+    }
+    if (cleanHostname.endsWith(`.${family.baseDomain}`)) {
+      const candidate = cleanHostname.slice(0, -(family.baseDomain.length + 1));
+      // Subdomain must be strictly single-label. Deep nested subdomains (e.g. foo.bar.shiftoryx.gr) fail closed.
+      if (!candidate || candidate.includes('.')) {
+        return null;
+      }
+      if (RESERVED_SUBDOMAINS.has(candidate)) {
+        return { family, role: 'reserved', reservedSlug: candidate };
+      }
+      if (isAllowedTenantSlug(candidate)) {
+        return { family, role: 'tenant', tenantSlug: candidate };
+      }
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export function isAllowedTenantOrigin(origin, domainFamilies = []) {
+  try {
+    const url = new URL(toCleanString(origin));
+    if (url.protocol !== 'https:') return false;
+    if (url.username || url.password || url.port) return false;
+    const hostname = normalizeHostname(url.hostname);
+    const targetInfo = resolveDomainFamilyForHostname({
+      hostname,
+      domainFamilies,
+    });
+    return Boolean(targetInfo && targetInfo.role === 'tenant' && targetInfo.tenantSlug);
+  } catch {
+    return false;
+  }
+}
+
+export function resolveTenantIdFromHostname({
+  hostname,
+  baseDomain,
+  centralDomain,
+  domainFamilies,
+}) {
+  const cleanHostname = normalizeHostname(hostname);
+  if (!cleanHostname || isLocalHostname(cleanHostname)) return '';
+
+  const targetInfo = resolveDomainFamilyForHostname({
+    hostname: cleanHostname,
+    baseDomain,
+    centralDomain,
+    domainFamilies,
+  });
+
+  if (targetInfo && targetInfo.role === 'tenant' && targetInfo.tenantSlug) {
+    return targetInfo.tenantSlug;
+  }
+
+  return '';
+}
+
+export function resolveValidatedTenantOrigin({
+  tenant,
+  expectedTenantId,
+  targetFamily,
+}) {
+  if (!tenant || typeof tenant !== 'object') return null;
+  if (!targetFamily || !targetFamily.baseDomain || !targetFamily.id) return null;
+
+  const expectedId = toCleanString(expectedTenantId).toLowerCase();
+  const rawTenantId = toCleanString(tenant.id).toLowerCase();
+  const rawTenantSlug = toCleanString(tenant.slug).toLowerCase();
+
+  const effectiveSlug = rawTenantSlug || rawTenantId || expectedId;
+  if (!isAllowedTenantSlug(effectiveSlug)) return null;
+
+  if (expectedId && effectiveSlug !== expectedId) return null;
+  if (rawTenantId && rawTenantId !== effectiveSlug) return null;
+
+  const rawDomain = toCleanString(tenant.domain).toLowerCase();
+  if (rawDomain) {
+    const domainInfo = resolveDomainFamilyForHostname({
+      hostname: rawDomain,
+      domainFamilies: [targetFamily],
+    });
+
+    if (
+      !domainInfo ||
+      domainInfo.role !== 'tenant' ||
+      domainInfo.family.id !== targetFamily.id ||
+      domainInfo.tenantSlug !== effectiveSlug
+    ) {
+      return null; // Fail closed on corrupt/mismatched/deep nested tenant.domain
+    }
+
+    return `https://${rawDomain}`;
+  }
+
+  return `https://${effectiveSlug}.${targetFamily.baseDomain}`;
 }
 
 function isAllowedTenantPath(pathname) {
@@ -84,8 +296,10 @@ function isAllowedTenantPath(pathname) {
 export function validateBrokerReturnTo({
   returnTo,
   expectedTenantId = '',
-  baseDomain = 'homelabshare.gr',
-  centralDomain = 'gas.homelabshare.gr',
+  baseDomain,
+  centralDomain,
+  domainFamilies,
+  callerOrigin = '',
   allowedTenantIds = [],
   production = true,
 }) {
@@ -106,13 +320,36 @@ export function validateBrokerReturnTo({
       return { valid: false, reason: 'url-credentials-not-allowed' };
     }
 
-    if (hostname === normalizeHostname(centralDomain)) {
-      return { valid: false, reason: 'central-return-not-allowed' };
+    const families = resolveDomainFamilies({ baseDomain, centralDomain, domainFamilies });
+
+    for (const family of families) {
+      if (hostname === family.centralDomain) {
+        return { valid: false, reason: 'central-return-not-allowed' };
+      }
     }
 
-    const tenantId = resolveTenantIdFromHostname({ hostname, baseDomain, centralDomain });
-    if (!tenantId) {
+    const targetInfo = resolveDomainFamilyForHostname({
+      hostname,
+      domainFamilies: families,
+    });
+
+    if (!targetInfo || targetInfo.role !== 'tenant' || !targetInfo.tenantSlug) {
       return { valid: false, reason: 'unknown-tenant-host' };
+    }
+
+    const tenantId = targetInfo.tenantSlug;
+
+    if (callerOrigin) {
+      const callerUrl = new URL(toCleanString(callerOrigin));
+      const callerHost = normalizeHostname(callerUrl.hostname);
+      const callerInfo = resolveDomainFamilyForHostname({
+        hostname: callerHost,
+        domainFamilies: families,
+      });
+
+      if (callerInfo && callerInfo.family.id !== targetInfo.family.id) {
+        return { valid: false, reason: 'cross-family-redirect-not-allowed' };
+      }
     }
 
     if (expectedTenantId && tenantId !== expectedTenantId) {
@@ -131,6 +368,8 @@ export function validateBrokerReturnTo({
       valid: true,
       reason: 'valid',
       tenantId,
+      familyId: targetInfo.family.id,
+      family: targetInfo.family,
       url: url.toString(),
       returnToHost: hostname,
       allowedTenantOrigin: `${url.protocol}//${hostname}${url.port ? `:${url.port}` : ''}`,

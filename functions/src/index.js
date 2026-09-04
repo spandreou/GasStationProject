@@ -18,7 +18,9 @@ import {
   hashAuthTicket,
   isActiveBrokerMembership,
   isAllowedBrokerOrigin,
+  isAllowedTenantOrigin,
   resolveTenantIdFromHostname,
+  resolveValidatedTenantOrigin,
   validateBrokerReturnTo,
   validateTicketFormat,
 } from './authBrokerCore.js';
@@ -50,6 +52,7 @@ onInit(() => {
 const DEFAULT_BASE_DOMAIN = 'homelabshare.gr';
 const DEFAULT_CENTRAL_DOMAIN = 'gas.homelabshare.gr';
 const DEFAULT_CENTRAL_ORIGIN = `https://${DEFAULT_CENTRAL_DOMAIN}`;
+const DEFAULT_TENANT_SLUG = 'bp-kallis';
 const DEFAULT_TENANT_ORIGIN = 'https://bp-kallis.homelabshare.gr';
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -61,22 +64,64 @@ function splitList(value, fallback = []) {
   return rows.length ? rows : fallback;
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getBrokerConfig() {
   const baseDomain = process.env.AUTH_BROKER_BASE_DOMAIN || DEFAULT_BASE_DOMAIN;
   const centralDomain = process.env.AUTH_BROKER_CENTRAL_DOMAIN || DEFAULT_CENTRAL_DOMAIN;
-  const centralOrigins = splitList(process.env.AUTH_BROKER_CENTRAL_ORIGINS, [
-    `https://${centralDomain}`,
+  const legacyBaseDomain =
+    process.env.AUTH_BROKER_LEGACY_BASE_DOMAIN ||
+    (baseDomain !== 'homelabshare.gr' ? 'homelabshare.gr' : '');
+  const legacyCentralDomain =
+    process.env.AUTH_BROKER_LEGACY_CENTRAL_DOMAIN ||
+    (legacyBaseDomain ? 'gas.homelabshare.gr' : '');
+
+  const domainFamilies = [
+    {
+      id: 'primary',
+      baseDomain,
+      centralDomain,
+    },
+  ];
+
+  if (legacyBaseDomain && legacyCentralDomain && legacyBaseDomain !== baseDomain) {
+    domainFamilies.push({
+      id: 'legacy',
+      baseDomain: legacyBaseDomain,
+      centralDomain: legacyCentralDomain,
+    });
+  }
+
+  const defaultCentralOrigins = domainFamilies.flatMap((f) => [
+    `https://${f.centralDomain}`,
+    ...(f.id === 'primary' ? [`https://www.${f.centralDomain}`] : []),
   ]);
-  const tenantOrigins = splitList(process.env.AUTH_BROKER_TENANT_ORIGINS, [DEFAULT_TENANT_ORIGIN]);
+
+  const centralOrigins = splitList(process.env.AUTH_BROKER_CENTRAL_ORIGINS, defaultCentralOrigins);
+  const tenantOrigins = splitList(process.env.AUTH_BROKER_TENANT_ORIGINS, [
+    `https://${DEFAULT_TENANT_SLUG}.${baseDomain}`,
+    ...(legacyBaseDomain ? [`https://${DEFAULT_TENANT_SLUG}.${legacyBaseDomain}`] : []),
+  ]);
   const production = process.env.AUTH_BROKER_ALLOW_LOCAL_DEV !== 'true';
 
   return {
     baseDomain,
     centralDomain,
+    legacyBaseDomain,
+    legacyCentralDomain,
+    domainFamilies,
     centralOrigins,
     tenantOrigins,
     production,
-    callableCorsOrigins: [...new Set([...centralOrigins, ...tenantOrigins])],
+    centralCorsOrigins: [...new Set(centralOrigins)],
+    exchangeCorsOrigins: (origin, callback) => {
+      const allowed =
+        isAllowedTenantOrigin(origin, domainFamilies) ||
+        isAllowedBrokerOrigin(origin, tenantOrigins);
+      callback(null, allowed);
+    },
   };
 }
 
@@ -105,11 +150,16 @@ async function getTenantOrDeny(tenantId) {
   return tenant;
 }
 
-function getTenantOriginFromTenant(tenant, fallbackTenantId, baseDomain) {
-  const domain = String(tenant.domain || '').trim().toLowerCase();
-  if (domain) return `https://${domain}`;
-  const slug = String(tenant.slug || fallbackTenantId).trim().toLowerCase();
-  return `https://${slug}.${baseDomain}`;
+function getTenantOriginFromTenant(tenant, fallbackTenantId, targetFamily) {
+  const origin = resolveValidatedTenantOrigin({
+    tenant,
+    expectedTenantId: fallbackTenantId,
+    targetFamily,
+  });
+  if (!origin) {
+    deny('invalid-tenant-origin-configuration');
+  }
+  return origin;
 }
 
 async function getActiveMembershipOrDeny(uid, tenantId) {
@@ -129,7 +179,7 @@ async function getActiveMembershipOrDeny(uid, tenantId) {
 
 export const createAuthTicket = onCall(
   {
-    cors: getBrokerConfig().callableCorsOrigins,
+    cors: getBrokerConfig().centralCorsOrigins,
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {
@@ -150,15 +200,15 @@ export const createAuthTicket = onCall(
     const validation = validateBrokerReturnTo({
       returnTo,
       expectedTenantId: requestedTenantId,
-      baseDomain: config.baseDomain,
-      centralDomain: config.centralDomain,
+      domainFamilies: config.domainFamilies,
+      callerOrigin: origin,
       allowedTenantIds: requestedTenantId ? [requestedTenantId] : [],
       production: config.production,
     });
     if (!validation.valid) invalid(validation.reason);
 
     const tenant = await getTenantOrDeny(validation.tenantId);
-    const expectedOrigin = getTenantOriginFromTenant(tenant, validation.tenantId, config.baseDomain);
+    const expectedOrigin = getTenantOriginFromTenant(tenant, validation.tenantId, validation.family);
     if (expectedOrigin !== validation.allowedTenantOrigin) {
       deny('tenant-origin-mismatch');
     }
@@ -196,13 +246,15 @@ export const createAuthTicket = onCall(
 
 export const exchangeAuthTicket = onCall(
   {
-    cors: getBrokerConfig().callableCorsOrigins,
+    cors: getBrokerConfig().exchangeCorsOrigins,
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {
     const config = getBrokerConfig();
     const origin = getRequestOrigin(request);
-    if (!isAllowedBrokerOrigin(origin, config.tenantOrigins)) {
+    const isDynamicTenantOrigin = isAllowedTenantOrigin(origin, config.domainFamilies);
+    const isStaticTenantOrigin = isAllowedBrokerOrigin(origin, config.tenantOrigins);
+    if (!isDynamicTenantOrigin && !isStaticTenantOrigin) {
       deny('invalid-tenant-origin');
     }
 
@@ -214,6 +266,7 @@ export const exchangeAuthTicket = onCall(
       hostname: originUrl.hostname,
       baseDomain: config.baseDomain,
       centralDomain: config.centralDomain,
+      domainFamilies: config.domainFamilies,
     });
     if (!originTenantId) deny('invalid-tenant-host');
 

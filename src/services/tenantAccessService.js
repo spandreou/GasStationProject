@@ -3,7 +3,11 @@ import {
   resolveTenantAdminAuthorization,
   TENANT_ACCESS_DENIED_MESSAGE,
 } from './tenantAuthorization';
-import { resolveTenantHostContext } from '../utils/tenantHostContext';
+import {
+  resolveTenantHostContext,
+  getResolvedDomainFamilies,
+  isAllowedTenantSlug,
+} from '../utils/tenantHostContext';
 
 export const TENANT_ACCESS_MESSAGES = {
   noAccess: 'Δεν υπάρχει ενεργό πρατήριο συνδεδεμένο με αυτόν τον λογαριασμό.',
@@ -15,9 +19,10 @@ function getEnvValue(name, fallback = '') {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-function getCentralPortalDomain() {
-  const baseDomain = getEnvValue('VITE_PUBLIC_APP_BASE_DOMAIN', 'homelabshare.gr').toLowerCase();
-  return getEnvValue('VITE_CENTRAL_PORTAL_DOMAIN', `gas.${baseDomain}`).toLowerCase();
+function getCentralPortalDomain(familyId = 'primary') {
+  const families = getResolvedDomainFamilies();
+  const family = families.find((f) => f.id === familyId) || families[0];
+  return family.centralDomain;
 }
 
 function isLocalHost(hostname) {
@@ -30,11 +35,14 @@ export function getCentralPortalOrigin() {
   }
 
   const currentHostname = window.location.hostname;
-  if (isLocalHost(currentHostname) || currentHostname.toLowerCase() === getCentralPortalDomain()) {
+  const hostContext = resolveTenantHostContext(currentHostname);
+
+  if (isLocalHost(currentHostname) || hostContext.mode === 'central') {
     return window.location.origin;
   }
 
-  return `https://${getCentralPortalDomain()}`;
+  const targetFamilyId = hostContext.family || 'primary';
+  return `https://${getCentralPortalDomain(targetFamilyId)}`;
 }
 
 export function buildCentralLoginUrl(returnTo = '') {
@@ -96,23 +104,39 @@ export async function resolveAuthorizedReturnTo({ uid, returnTo }) {
   };
 }
 
-export function buildTenantUrl(tenant) {
+export function buildTenantUrl(tenant, familyId = 'primary') {
   if (!tenant) return '';
 
+  const families = getResolvedDomainFamilies();
+  const targetFamily = families.find((f) => f.id === familyId) || families[0];
+
   if (typeof tenant.domain === 'string' && tenant.domain.trim()) {
-    return `https://${tenant.domain.trim().toLowerCase()}`;
+    const domain = tenant.domain.trim().toLowerCase();
+    if (domain.endsWith(`.${targetFamily.baseDomain}`)) {
+      const candidate = domain.slice(0, -(targetFamily.baseDomain.length + 1));
+      if (candidate && !candidate.includes('.') && isAllowedTenantSlug(candidate)) {
+        return `https://${domain}`;
+      }
+    }
   }
 
   if (typeof tenant.slug === 'string' && tenant.slug.trim()) {
-    const baseDomain = getEnvValue('VITE_PUBLIC_APP_BASE_DOMAIN', 'homelabshare.gr').toLowerCase();
-    return `https://${tenant.slug.trim().toLowerCase()}.${baseDomain}`;
+    const slug = tenant.slug.trim().toLowerCase();
+    if (isAllowedTenantSlug(slug)) {
+      return `https://${slug}.${targetFamily.baseDomain}`;
+    }
   }
 
   return '';
 }
 
-export async function listActiveTenantAccessForUser(uid) {
+export async function listActiveTenantAccessForUser(uid, contextHostname = '') {
   if (!uid) return [];
+
+  const hostContext = resolveTenantHostContext(
+    contextHostname || (typeof window !== 'undefined' ? window.location.hostname : ''),
+  );
+  const familyId = hostContext.family || 'primary';
 
   const memberships = await tenantMembershipsRepository.listActiveMembershipsForUser(uid);
   const rows = await Promise.all(
@@ -122,7 +146,7 @@ export async function listActiveTenantAccessForUser(uid) {
         ? {
             membership,
             tenant,
-            url: buildTenantUrl(tenant),
+            url: buildTenantUrl(tenant, familyId),
           }
         : null;
     }),

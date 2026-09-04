@@ -162,7 +162,8 @@ service cloud.firestore {
       return [
         'employeeId', 'date', 'startTime', 'endTime', 'type', 'label', 'shiftType',
         'customLabel', 'notes', 'duration', 'isManualOverride', 'isHoliday',
-        'isSpecialDay', 'specialDayLabel', 'generationRunId', 'createdAt', 'updatedAt'
+        'isSpecialDay', 'specialDayLabel', 'generationRunId', 'shiftTemplateId',
+        'demandSlotId', 'crossMidnight', 'durationHours', 'createdAt', 'updatedAt'
       ];
     }
 
@@ -179,6 +180,10 @@ service cloud.firestore {
         isOptionalString('customLabel') &&
         isOptionalString('notes') &&
         isOptionalString('generationRunId') &&
+        isOptionalString('shiftTemplateId') &&
+        isOptionalString('demandSlotId') &&
+        isOptionalBool('crossMidnight') &&
+        (!('durationHours' in request.resource.data) || request.resource.data.durationHours is number) &&
         isOptionalBool('isManualOverride') &&
         isOptionalBool('isHoliday') &&
         isOptionalBool('isSpecialDay') &&
@@ -256,12 +261,13 @@ service cloud.firestore {
     }
 
     function settingsFields() {
-      return ['generatorRules', 'specialDaysByDate', 'createdAt', 'updatedAt'];
+      return ['generatorRules', 'schedulerConfigV2', 'specialDaysByDate', 'createdAt', 'updatedAt'];
     }
 
     function validSchedulerSettings() {
       return request.resource.data.keys().hasOnly(settingsFields()) &&
         (!( 'generatorRules' in request.resource.data) || request.resource.data.generatorRules is map) &&
+        (!( 'schedulerConfigV2' in request.resource.data) || request.resource.data.schedulerConfigV2 is map) &&
         (!( 'specialDaysByDate' in request.resource.data) || request.resource.data.specialDaysByDate is map);
     }
 

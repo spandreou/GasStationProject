@@ -50,18 +50,27 @@ This is approved roadmap direction, not current runtime behavior.
 - **ADMIN/MANAGER**: legacy runtime compatibility μόνο. Δεν δημιουργούνται σε νέο provisioning. Read-only inventory/design ανήκει στη Phase 2A και οποιαδήποτε controlled production migration στη separately approved Phase 2B.
 - **Employee/public viewer**: δεν έχει account, password, Firebase UID ή membership στο MVP. Διαβάζει μόνο sanitized public data.
 
-Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι business classifications. Δεν είναι auth roles και δεν δίνουν δικαιώματα.
+Οι scheduler roles (`CORE_A`, `CORE_B`, `FLEX_A`, `FLEX_B`, `INTERMEDIATE`, `CUSTOM`, `EXTRA_A`, `EXTRA_B` και aliases) είναι legacy business classifications και όχι auth roles. Στο τρέχον Scheduler Contract V2 (PR #44), το scheduling είναι tenant-configurable χωρίς universal όριο 4–6 εργαζομένων ή υποχρεωτικά fixed SaaS roles.
 
 ## Scheduler Guarantees
 
-- Fixed day off και absence/unavailability είναι constraints.
-- Core rotation, Sunday fairness και coverage rules παραμένουν deterministic.
-- Manual overrides προστατεύονται και ο OWNER μπορεί πάντα να διορθώσει πρόγραμμα.
-- Παραβίαση κανόνα εμφανίζεται ως warning. Δεν δημιουργείται ψεύτικα σωστό πρόγραμμα.
-- Διατηρούνται weekly/monthly generation, manual edit, drag and drop, templates, history, persistence και exports.
+- **Scheduler Contract V2 (Authoritative, PR #44 / `8ee1985d2cec350b1cafa980e99f1dc46b32577a`)**:
+  - Generalized, tenant-configurable constraint and assignment engine (οποιοδήποτε πλήθος εργαζομένων που ικανοποιεί μαθηματικά το πρόγραμμα).
+  - Hard constraints: `minHeadcount`, `maxHeadcount`, `minDaysOffPerWeek`, ελάχιστη 11ωρη ανάπαυση (turnaround), fixed days off, absences/unavailability.
+  - Soft objectives: `targetHeadcount`, `targetDaysOffPerWeek`.
+  - Zero-write validation-persistence gate: κανένα μη επικυρωμένο πρόγραμμα δεν αποθηκεύεται στη βάση (`validateAndPersistScheduleCandidate`).
+  - Πλήρης διατήρηση manual work overrides κατά το auto-generation.
+- **Legacy Compatibility Path**:
+  - Διατηρείται για backwards compatibility με υφιστάμενα καταστήματα (BP Kallis) και legacy fixed 4-slot topologies.
+- Και στα δύο paths:
+  - Deterministic generation μέσω seeded PRNG.
+  - Manual overrides προστατεύονται και ο OWNER μπορεί πάντα να διορθώσει πρόγραμμα.
+  - Παραβίαση κανόνα εμφανίζεται ως warning. Δεν δημιουργείται ψεύτικα σωστό πρόγραμμα.
+  - Διατηρούνται weekly/monthly generation, manual edit, drag and drop, templates, history, persistence και exports.
 
 References:
 
+- `docs/SCHEDULER_CONTRACT_V2.md`
 - `docs/scheduler-rules.md`
 - `docs/scheduler-ui-export-rules.md`
 - `docs/scheduler-qa-checklist.md`
@@ -86,14 +95,14 @@ References:
 
 ## Approved Phase Order
 
-0. Documentation alignment.
-1. Current-state audit.
-2A. Read-only role inventory, migration design and emulator rehearsal.
-2B. Separately approved controlled OWNER migration.
-3. Registration token backend.
-4. Automated tenant provisioning.
-5. Root portal και store selector.
-6. Wildcard ShiftOryx domains.
+0. Documentation alignment. (CLOSED)
+1. Current-state audit. (CLOSED)
+2A. Read-only role inventory, migration design and emulator rehearsal. (CLOSED)
+2B. Separately approved controlled OWNER migration. (CLOSED)
+3. Registration token backend. (CLOSED)
+4. Automated tenant provisioning. (CLOSED)
+5. Root portal και store selector. (CLOSED)
+6. Wildcard ShiftOryx domains. (CURRENT ACTIVE - PREFLIGHT)
 7. Trial/subscription entitlements.
 8. Multi-store lifecycle.
 9. ShiftOryx admin panel.
@@ -101,12 +110,12 @@ References:
 11. Subdomain aliases.
 12. Customization requests.
 13. Production EU VPS.
-14. HomeOps read-only integration.
+14. HomeOps read-only integration. (CANCELLED)
 15. Billing provider.
 
 Μία phase κάθε φορά. Πριν από αλλαγές: branch/status, current-state inspection και backup. Καμία production αλλαγή χωρίς explicit approval. Κάθε phase κλείνει με tests, security/dependency review, risks και rollback, και σταματά πριν την επόμενη phase.
 
-Phase 0 and Phase 1 are complete. After the 22 July 2026 documentation synchronization is reviewed and merged, the next engineering task is a separately scoped dependency-remediation and security-gate task. Phase 2A requires separate human approval and remains read-only; Phase 2B requires another explicit approval.
+Phase 0, 1, 2A, 2B, 3, 4, 5 και το cross-cutting Scheduler Contract V2 (PR #44) είναι πλήρως ολοκληρωμένες, merged στο main και verified στο Vercel Production. Η Phase 6 είναι η τρέχουσα ενεργή φάση σε επίπεδο Preflight / Readiness Design (PR #42) και dual-domain compatibility implementation (PR #43, Draft). Καμία αλλαγή production (DNS, Vercel domains, Firebase Authorized Domains, Cloud Functions deploy) δεν εκτελείται χωρίς ρητή έγκριση.
 
 ## Product Proposals, Not Current Enforcement
 

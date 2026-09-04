@@ -143,7 +143,7 @@ server.listen(5199, "127.0.0.1", async () => {
     await centralContext.close();
 
     // -------------------------------------------------------------
-    // Test 2: Host = bp-kallis.shiftoryx.gr (Tenant App)
+    // Test 2: Host = bp-kallis.shiftoryx.gr (Primary Tenant)
     // -------------------------------------------------------------
     console.log("\n--- Testing Host: bp-kallis.shiftoryx.gr (Primary Tenant) ---");
     const tenantContext = await browser.newContext({
@@ -183,7 +183,47 @@ server.listen(5199, "127.0.0.1", async () => {
     await tenantContext.close();
 
     // -------------------------------------------------------------
-    // Test 3: Host = admin.shiftoryx.gr (Reserved / Fail Closed)
+    // Test 3: Host = bp-kallis.homelabshare.gr (Legacy Tenant Rendered)
+    // -------------------------------------------------------------
+    console.log("\n--- Testing Host: bp-kallis.homelabshare.gr (Legacy Tenant Rendered) ---");
+    const legacyTenantContext = await browser.newContext({
+      viewport: { width: 1280, height: 800 }
+    });
+    const legacyTenantPage = await legacyTenantContext.newPage();
+
+    await legacyTenantPage.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname === "bp-kallis.homelabshare.gr") {
+        url.hostname = "127.0.0.1";
+        url.port = "5199";
+        url.protocol = "http:";
+        const response = await fetch(url.toString(), {
+          headers: route.request().headers(),
+          method: route.request().method()
+        });
+        const body = await response.arrayBuffer();
+        await route.fulfill({
+          status: response.status,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: Buffer.from(body)
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await legacyTenantPage.goto("http://bp-kallis.homelabshare.gr/");
+    await legacyTenantPage.waitForLoadState("domcontentloaded");
+
+    const legacyTenantModeAttr = await legacyTenantPage.locator("[data-tenant-mode]").first().getAttribute("data-tenant-mode");
+    console.log(`data-tenant-mode on bp-kallis.homelabshare.gr: "${legacyTenantModeAttr}"`);
+    if (legacyTenantModeAttr !== "tenant") throw new Error(`Expected data-tenant-mode=tenant, got ${legacyTenantModeAttr}`);
+
+    console.log("✓ bp-kallis.homelabshare.gr: Legacy tenant app rendered with data-tenant-mode=tenant.");
+    await legacyTenantContext.close();
+
+    // -------------------------------------------------------------
+    // Test 4: Host = admin.shiftoryx.gr (Reserved / Fail Closed)
     // -------------------------------------------------------------
     console.log("\n--- Testing Host: admin.shiftoryx.gr (Reserved Host Fail-Closed) ---");
     const reservedContext = await browser.newContext();
@@ -225,7 +265,53 @@ server.listen(5199, "127.0.0.1", async () => {
     await reservedContext.close();
 
     // -------------------------------------------------------------
-    // Test 4: Live Production HTTPS Health Probes
+    // Test 5: Invalid / Attack Hosts (evilshiftoryx.gr, foo.bar.shiftoryx.gr)
+    // -------------------------------------------------------------
+    console.log("\n--- Testing Invalid/Attack Hosts Fail-Closed ---");
+    for (const invalidHost of ["evilshiftoryx.gr", "foo.bar.shiftoryx.gr"]) {
+      const badContext = await browser.newContext();
+      const badPage = await badContext.newPage();
+
+      await badPage.route("**/*", async (route) => {
+        const url = new URL(route.request().url());
+        if (url.hostname === invalidHost) {
+          url.hostname = "127.0.0.1";
+          url.port = "5199";
+          url.protocol = "http:";
+          const response = await fetch(url.toString(), {
+            headers: route.request().headers(),
+            method: route.request().method()
+          });
+          const body = await response.arrayBuffer();
+          await route.fulfill({
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: Buffer.from(body)
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await badPage.goto(`http://${invalidHost}/`);
+      await badPage.waitForLoadState("domcontentloaded");
+
+      const modeAttr = await badPage.locator("[data-tenant-mode]").first().getAttribute("data-tenant-mode");
+      if (modeAttr !== "unknown") throw new Error(`Expected data-tenant-mode=unknown for ${invalidHost}, got ${modeAttr}`);
+
+      const badContent = await badPage.content();
+      if (!badContent.includes("Μη υποστηριζόμενη διεύθυνση")) {
+        throw new Error(`Expected fail-closed error notice for ${invalidHost}!`);
+      }
+      if (badContent.includes("BP Κάλλης") || badContent.includes("BP Kallis")) {
+        throw new Error(`Tenant leak detected on invalid host ${invalidHost}!`);
+      }
+      console.log(`✓ ${invalidHost}: Correctly failed closed with safe error UI (mode=unknown).`);
+      await badContext.close();
+    }
+
+    // -------------------------------------------------------------
+    // Test 6: Live Production HTTPS Health Probes (via loopback/DNS proxy)
     // -------------------------------------------------------------
     console.log("\n--- Probing Live Production HTTPS Endpoints ---");
     for (const host of [

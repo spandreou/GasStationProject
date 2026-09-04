@@ -249,6 +249,46 @@ export function resolveTenantIdFromHostname({
   return '';
 }
 
+export function resolveValidatedTenantOrigin({
+  tenant,
+  expectedTenantId,
+  targetFamily,
+}) {
+  if (!tenant || typeof tenant !== 'object') return null;
+  if (!targetFamily || !targetFamily.baseDomain || !targetFamily.id) return null;
+
+  const expectedId = toCleanString(expectedTenantId).toLowerCase();
+  const rawTenantId = toCleanString(tenant.id).toLowerCase();
+  const rawTenantSlug = toCleanString(tenant.slug).toLowerCase();
+
+  const effectiveSlug = rawTenantSlug || rawTenantId || expectedId;
+  if (!isAllowedTenantSlug(effectiveSlug)) return null;
+
+  if (expectedId && effectiveSlug !== expectedId) return null;
+  if (rawTenantId && rawTenantId !== effectiveSlug) return null;
+
+  const rawDomain = toCleanString(tenant.domain).toLowerCase();
+  if (rawDomain) {
+    const domainInfo = resolveDomainFamilyForHostname({
+      hostname: rawDomain,
+      domainFamilies: [targetFamily],
+    });
+
+    if (
+      !domainInfo ||
+      domainInfo.role !== 'tenant' ||
+      domainInfo.family.id !== targetFamily.id ||
+      domainInfo.tenantSlug !== effectiveSlug
+    ) {
+      return null; // Fail closed on corrupt/mismatched/deep nested tenant.domain
+    }
+
+    return `https://${rawDomain}`;
+  }
+
+  return `https://${effectiveSlug}.${targetFamily.baseDomain}`;
+}
+
 function isAllowedTenantPath(pathname) {
   return pathname === '/' || pathname === '/app' || pathname.startsWith('/app/');
 }

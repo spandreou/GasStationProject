@@ -20,6 +20,7 @@ import {
   isAllowedBrokerOrigin,
   isAllowedTenantOrigin,
   resolveTenantIdFromHostname,
+  resolveValidatedTenantOrigin,
   validateBrokerReturnTo,
   validateTicketFormat,
 } from './authBrokerCore.js';
@@ -151,13 +152,15 @@ async function getTenantOrDeny(tenantId) {
 }
 
 function getTenantOriginFromTenant(tenant, fallbackTenantId, targetFamily) {
-  const activeBaseDomain = targetFamily?.baseDomain || DEFAULT_BASE_DOMAIN;
-  const domain = String(tenant?.domain || '').trim().toLowerCase();
-  if (domain && domain.endsWith(`.${activeBaseDomain}`)) {
-    return `https://${domain}`;
+  const origin = resolveValidatedTenantOrigin({
+    tenant,
+    expectedTenantId: fallbackTenantId,
+    targetFamily,
+  });
+  if (!origin) {
+    deny('invalid-tenant-origin-configuration');
   }
-  const slug = String(tenant?.slug || fallbackTenantId || '').trim().toLowerCase();
-  return `https://${slug}.${activeBaseDomain}`;
+  return origin;
 }
 
 async function getActiveMembershipOrDeny(uid, tenantId) {

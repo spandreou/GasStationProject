@@ -7,6 +7,7 @@ import {
   isAllowedBrokerOrigin,
   isAllowedTenantOrigin,
   isAllowedTenantSlug,
+  resolveValidatedTenantOrigin,
   SLUG_MIN_LENGTH,
   SLUG_MAX_LENGTH,
   SLUG_REGEX,
@@ -215,6 +216,144 @@ const newTenantReturnTo = validateBrokerReturnTo({
 assert(newTenantReturnTo.valid, 'Newly provisioned tenant returnTo must pass without manual reconfiguration.');
 assertEqual(newTenantReturnTo.tenantId, 'brand-new-tenant-999', 'Resolved tenant ID must match new tenant slug.');
 assertEqual(newTenantReturnTo.allowedTenantOrigin, 'https://brand-new-tenant-999.shiftoryx.gr', 'Resolved tenant origin must match.');
+
+// ============================================================================
+// Targeted tests for backend tenant.domain resolution (resolveValidatedTenantOrigin)
+// ============================================================================
+const primaryFam = { id: 'primary', baseDomain: 'shiftoryx.gr', centralDomain: 'shiftoryx.gr' };
+const legacyFam = { id: 'legacy', baseDomain: 'homelabshare.gr', centralDomain: 'gas.homelabshare.gr' };
+
+// 1. tenant.domain = null + valid slug + primary family -> PASS
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: null },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  'https://bp-kallis.shiftoryx.gr',
+  'tenant.domain = null + valid slug + primary family must resolve expected origin.',
+);
+
+// 2. tenant.domain = null + valid slug + legacy family -> PASS
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: null },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: legacyFam,
+  }),
+  'https://bp-kallis.homelabshare.gr',
+  'tenant.domain = null + valid slug + legacy family must resolve expected origin.',
+);
+
+// 3. valid explicit primary domain -> PASS
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'bp-kallis.shiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  'https://bp-kallis.shiftoryx.gr',
+  'valid explicit primary domain must resolve expected origin.',
+);
+
+// 4. valid explicit legacy domain -> PASS
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'bp-kallis.homelabshare.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: legacyFam,
+  }),
+  'https://bp-kallis.homelabshare.gr',
+  'valid explicit legacy domain must resolve expected origin.',
+);
+
+// 5. deep nested explicit primary domain -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'foo.bp-kallis.shiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'deep nested explicit primary domain must fail closed.',
+);
+
+// 6. deep nested explicit legacy domain -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'foo.bp-kallis.homelabshare.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: legacyFam,
+  }),
+  null,
+  'deep nested explicit legacy domain must fail closed.',
+);
+
+// 7. reserved explicit domain -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'admin.shiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'reserved explicit domain must fail closed.',
+);
+
+// 8. lookalike domain -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'evilshiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'lookalike domain must fail closed.',
+);
+
+// 9. wrong-family explicit domain -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'bp-kallis.homelabshare.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'wrong-family explicit domain must fail closed.',
+);
+
+// 10. domain slug != expected tenant slug -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'bp-kallis', domain: 'other-tenant.shiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'domain slug != expected tenant slug must fail closed.',
+);
+
+// 11. tenant.slug != expected tenant ID -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'bp-kallis', slug: 'other-slug', domain: 'other-slug.shiftoryx.gr' },
+    expectedTenantId: 'bp-kallis',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'tenant.slug != expected tenant ID must fail closed.',
+);
+
+// 12. invalid tenant slug -> FAIL
+assertEqual(
+  resolveValidatedTenantOrigin({
+    tenant: { id: 'ab', slug: 'ab', domain: null },
+    expectedTenantId: 'ab',
+    targetFamily: primaryFam,
+  }),
+  null,
+  'invalid tenant slug (< 3 chars) must fail closed.',
+);
 
 assert(isAllowedBrokerOrigin('https://gas.homelabshare.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Legacy central origin must be allowlisted.');
 assert(isAllowedBrokerOrigin('https://shiftoryx.gr', ['https://gas.homelabshare.gr', 'https://shiftoryx.gr']), 'Primary central origin must be allowlisted.');

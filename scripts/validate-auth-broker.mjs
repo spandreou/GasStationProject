@@ -408,4 +408,63 @@ assert(!redirectUrl.includes('?authTicket='), 'Ticket must not be sent in query 
   'VITE_ENABLE_AUTH_BROKER=false',
 ].forEach((phrase) => assert(runbook.includes(phrase), `Auth broker runbook must document: ${phrase}`));
 
+// ---------------------------------------------------------------------------
+// CORS Matcher & Least-Privilege Policy Verification
+// ---------------------------------------------------------------------------
+assert(functionsIndex.includes('cors: getBrokerConfig().centralCorsOrigins'), 'createAuthTicket must bind exact central CORS origins only.');
+assert(functionsIndex.includes('cors: getBrokerConfig().exchangeCorsOrigins'), 'exchangeAuthTicket must bind dynamic tenant CORS origins callback.');
+
+const mockFamilies = [
+  { id: 'primary', baseDomain: 'shiftoryx.gr', centralDomain: 'shiftoryx.gr' },
+  { id: 'legacy', baseDomain: 'homelabshare.gr', centralDomain: 'gas.homelabshare.gr' },
+];
+const mockTenantOrigins = ['https://bp-kallis.shiftoryx.gr', 'https://bp-kallis.homelabshare.gr'];
+const mockExchangeCors = (origin, cb) => {
+  const allowed = isAllowedTenantOrigin(origin, mockFamilies) || isAllowedBrokerOrigin(origin, mockTenantOrigins);
+  cb(null, allowed);
+};
+
+function testCorsOrigin(origin) {
+  let result = null;
+  mockExchangeCors(origin, (err, allowed) => {
+    if (err) throw err;
+    result = Boolean(allowed);
+  });
+  return result;
+}
+
+// VALID TENANT CORS
+assert(testCorsOrigin('https://bp-kallis.shiftoryx.gr'), 'https://bp-kallis.shiftoryx.gr must be accepted by tenant CORS');
+assert(testCorsOrigin('https://new-tenant-123.shiftoryx.gr'), 'https://new-tenant-123.shiftoryx.gr must be accepted by tenant CORS');
+assert(testCorsOrigin('https://bp-kallis.homelabshare.gr'), 'https://bp-kallis.homelabshare.gr must be accepted by tenant CORS');
+assert(testCorsOrigin('https://new-tenant-123.homelabshare.gr'), 'https://new-tenant-123.homelabshare.gr must be accepted by tenant CORS');
+
+// DENIED TENANT CORS
+const deniedOrigins = [
+  'https://admin.shiftoryx.gr',
+  'https://www.shiftoryx.gr',
+  'https://api.shiftoryx.gr',
+  'https://gas.shiftoryx.gr',
+  'https://gas-store.shiftoryx.gr',
+  'https://store-gas.shiftoryx.gr',
+  'https://shiftoryx-store.shiftoryx.gr',
+  'https://store-shiftoryx.shiftoryx.gr',
+  'https://foo.bar.shiftoryx.gr',
+  'https://evilshiftoryx.gr',
+  'https://shiftoryx.gr.evil.example',
+  'http://bp-kallis.shiftoryx.gr',
+  'https://bp-kallis.shiftoryx.gr:8080',
+];
+for (const denied of deniedOrigins) {
+  assert(!testCorsOrigin(denied), `Origin ${denied} must be denied by tenant CORS`);
+}
+
+// Exact central origins check
+const mockCentralOrigins = ['https://shiftoryx.gr', 'https://www.shiftoryx.gr', 'https://gas.homelabshare.gr'];
+assert(isAllowedBrokerOrigin('https://shiftoryx.gr', mockCentralOrigins), 'Primary central must be allowed in central CORS');
+assert(isAllowedBrokerOrigin('https://www.shiftoryx.gr', mockCentralOrigins), 'Primary central www must be allowed in central CORS');
+assert(isAllowedBrokerOrigin('https://gas.homelabshare.gr', mockCentralOrigins), 'Legacy central must be allowed in central CORS');
+assert(!isAllowedBrokerOrigin('https://bp-kallis.shiftoryx.gr', mockCentralOrigins), 'Tenant must NOT be allowed in central CORS');
+assert(!isAllowedBrokerOrigin('https://admin.shiftoryx.gr', mockCentralOrigins), 'Admin must NOT be allowed in central CORS');
+
 console.log('Auth broker checks passed');

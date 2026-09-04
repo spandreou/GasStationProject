@@ -106,10 +106,6 @@ function getBrokerConfig() {
   ]);
   const production = process.env.AUTH_BROKER_ALLOW_LOCAL_DEV !== 'true';
 
-  const tenantFamilyCorsRegexes = domainFamilies.map(
-    (f) => new RegExp(`^https://[a-z0-9][a-z0-9-]{1,38}[a-z0-9]\\.${escapeRegex(f.baseDomain)}$`),
-  );
-
   return {
     baseDomain,
     centralDomain,
@@ -119,10 +115,13 @@ function getBrokerConfig() {
     centralOrigins,
     tenantOrigins,
     production,
-    callableCorsOrigins: [
-      ...new Set([...centralOrigins, ...tenantOrigins]),
-      ...tenantFamilyCorsRegexes,
-    ],
+    centralCorsOrigins: [...new Set(centralOrigins)],
+    exchangeCorsOrigins: (origin, callback) => {
+      const allowed =
+        isAllowedTenantOrigin(origin, domainFamilies) ||
+        isAllowedBrokerOrigin(origin, tenantOrigins);
+      callback(null, allowed);
+    },
   };
 }
 
@@ -180,7 +179,7 @@ async function getActiveMembershipOrDeny(uid, tenantId) {
 
 export const createAuthTicket = onCall(
   {
-    cors: getBrokerConfig().callableCorsOrigins,
+    cors: getBrokerConfig().centralCorsOrigins,
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {
@@ -247,7 +246,7 @@ export const createAuthTicket = onCall(
 
 export const exchangeAuthTicket = onCall(
   {
-    cors: getBrokerConfig().callableCorsOrigins,
+    cors: getBrokerConfig().exchangeCorsOrigins,
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {

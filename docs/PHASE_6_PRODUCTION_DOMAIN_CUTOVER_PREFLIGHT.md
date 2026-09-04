@@ -77,7 +77,8 @@ Initial preflight assumed configuration-only cutover without code modifications.
 ## 3. Minimal Deployment Blast Radius
 
 When Phase 6 is authorized for execution:
-- **Cloud Functions Deploy Target:** ONLY the 2 Auth Broker functions (`createAuthTicket`, `exchangeAuthTicket`) and scheduled `cleanupAuthTickets` require redeployment with domain-family environment variables.
+- **Domain-Family Behavior Deploy Targets:** ONLY the 2 Auth Broker functions (`createAuthTicket`, `exchangeAuthTicket`) require redeployment with domain-family environment variables.
+- **Scheduled Retention Cleanup:** `cleanupAuthTickets` is a scheduled retention cleanup function. It does not perform hostname or domain-family resolution; it is preserved unchanged unless overall Functions deployment mechanics explicitly require deploying all functions in the codebase.
 - **Unrelated Functions:** `generateRegistrationToken`, `listRegistrationTokens`, `revokeRegistrationToken`, `validateRegistrationToken`, and `provisionTenantFromRegistrationToken` do not use broker domain config and should **not** be redeployed.
 - **Minimal Deploy Set:** `createAuthTicket, exchangeAuthTicket`.
 

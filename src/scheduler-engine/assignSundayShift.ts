@@ -34,11 +34,11 @@ function isSundayRotationMember(employee: EmployeeScheduleConfig, date: string):
 }
 
 function sortSundayRotation(a: EmployeeScheduleConfig, b: EmployeeScheduleConfig): number {
-  return (
-    sundayRotationRank(a) - sundayRotationRank(b) ||
-    a.fullName.localeCompare(b.fullName, 'el') ||
-    a.employeeId.localeCompare(b.employeeId)
-  );
+  const rankDiff = sundayRotationRank(a) - sundayRotationRank(b);
+  if (rankDiff !== 0) return rankDiff;
+  const idA = String(a.employeeId || '');
+  const idB = String(b.employeeId || '');
+  return idA < idB ? -1 : idA > idB ? 1 : 0;
 }
 
 function rotateFrom<T>(items: T[], startIndex: number): T[] {

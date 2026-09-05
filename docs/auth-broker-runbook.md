@@ -143,27 +143,31 @@ https://bp-kallis.homelabshare.gr/#authTicket=<ticket>
 
 The tenant callback removes the fragment immediately with `history.replaceState`.
 
-## CORS And Origins
+## Dual-Domain Architecture & CORS
 
-Do not use wildcard CORS.
+Do not use wildcard CORS. The Auth Broker supports two domain families:
 
-Central origin:
+1. **Primary Family:**
+   - Central: `https://shiftoryx.gr`, `https://www.shiftoryx.gr`
+   - Tenant workspaces: `https://{tenantSlug}.shiftoryx.gr` (e.g. `https://bp-kallis.shiftoryx.gr`)
 
-```text
-https://gas.homelabshare.gr
-```
+2. **Legacy Rollback Family:**
+   - Central: `https://gas.homelabshare.gr`
+   - Tenant workspaces: `https://{tenantSlug}.homelabshare.gr` (e.g. `https://bp-kallis.homelabshare.gr`)
 
-Initial tenant origin:
+CORS origins are dynamically and securely validated:
+- `createAuthTicket`: restricted to allowlisted central origins (`https://shiftoryx.gr`, `https://www.shiftoryx.gr`, `https://gas.homelabshare.gr`).
+- `exchangeAuthTicket`: dynamically verified against known domain families and active tenant slug rules.
 
-```text
-https://bp-kallis.homelabshare.gr
-```
+Cross-family redirection is strictly rejected (e.g., central `shiftoryx.gr` cannot broker a session directly to legacy `bp-kallis.homelabshare.gr`, and vice-versa).
 
-Future tenant origins should be added through controlled function configuration
-or trusted tenant config. CORS is not the security boundary; functions still
-validate ticket, tenant, membership, and origin.
+## Gate G Discovery and Remediation Invariant
 
-Do not add wildcard CORS for `*.shiftoryx.gr`. Phase 6 must implement exact trusted-origin derivation/validation from an active tenant and its canonical domain.
+During Phase 6 cutover preflight, a critical data invariant was discovered:
+- **Defect:** `tenants/bp-kallis` previously contained `domain = "bp-kallis.homelabshare.gr"`.
+- **Impact:** `resolveValidatedTenantOrigin` gave precedence to explicit `tenant.domain`. Because the pinned domain belonged to the legacy family (`homelabshare.gr`), any login originating from `https://shiftoryx.gr` was rejected with `tenant-origin-mismatch` / `null`.
+- **Approved State:** For the dual-domain burn-in period, `tenants/bp-kallis.domain` MUST be set to Firestore `null` (or omitted).
+- **Behavior with domain = null:** Both primary (`bp-kallis.shiftoryx.gr`) and legacy (`bp-kallis.homelabshare.gr`) origins resolve dynamically according to the caller's active domain family.
 
 ## Never Log Or Store
 
@@ -179,29 +183,53 @@ Never log or store in Firestore/audit logs:
 - service account keys
 - `.env` values
 
-## Safe Rollout
+## Production Activation & Human OWNER Runbook
 
-1. Keep `VITE_ENABLE_AUTH_BROKER=false`.
-2. Keep `VITE_ENABLE_TENANT_GATE=false`.
-3. Deploy Firestore rules with `authTickets` denied to clients.
-4. Deploy Cloud Functions.
-5. Verify `createAuthTicket` rejects anonymous callers.
-6. Verify `exchangeAuthTicket` rejects missing, malformed, expired, used, and
-   wrong-origin tickets.
-7. Enable `VITE_ENABLE_AUTH_BROKER=true` in a controlled environment.
-8. Login from `gas.homelabshare.gr`.
-9. Verify redirect to `bp-kallis.homelabshare.gr/#authTicket=...`.
-10. Verify the tenant removes the fragment and signs in with custom token.
-11. Verify dashboard loads and membership checks still pass.
-12. Only after broker success, evaluate `VITE_ENABLE_TENANT_GATE=true`.
+The staged production activation sequence:
+
+### Step 1: Pre-Activation Health Check
+1. Confirm `tenants/bp-kallis.domain == null`.
+2. Confirm live HTTPS endpoints respond HTTP 200:
+   - `https://shiftoryx.gr`
+   - `https://bp-kallis.shiftoryx.gr`
+   - `https://bp-kallis.homelabshare.gr`
+3. Confirm Cloud Functions (`createAuthTicket`, `exchangeAuthTicket`) CORS passes.
+
+### Step 2: Auth Broker Flag Activation (State 1)
+1. In Vercel Project Environment Variables, set:
+   ```text
+   VITE_ENABLE_AUTH_BROKER=true
+   VITE_ENABLE_TENANT_GATE=false
+   ```
+2. Redeploy frontend on Vercel Production.
+3. Verify live endpoints load without redirect loops.
+
+### Step 3: Human OWNER E2E Flow
+1. Open browser to `https://shiftoryx.gr/login`.
+2. Sign in with the OWNER credentials.
+3. Central portal authenticates and presents store selector or direct redirection.
+4. Select `BP Κάλλης` (`bp-kallis`).
+5. Observe redirection:
+   `https://shiftoryx.gr` -> `createAuthTicket` -> `https://bp-kallis.shiftoryx.gr/#authTicket=...`
+6. Observe callback execution:
+   `exchangeAuthTicket` -> `signInWithCustomToken` -> URL fragment removed cleanly.
+7. Verify OWNER access to tenant dashboard and schedule management.
+8. Verify legacy path `https://bp-kallis.homelabshare.gr` remains healthy and accessible.
+
+### Step 4: Tenant Gate Activation (State 2)
+Only AFTER the human OWNER E2E passes:
+1. In Vercel Project Environment Variables, set:
+   ```text
+   VITE_ENABLE_AUTH_BROKER=true
+   VITE_ENABLE_TENANT_GATE=true
+   ```
+2. Redeploy frontend on Vercel Production.
+3. Confirm unauthenticated direct requests to `https://bp-kallis.shiftoryx.gr` redirect to central authentication rather than exposing tenant schedules.
 
 ## Rollback
 
 1. Set `VITE_ENABLE_AUTH_BROKER=false`.
 2. Set `VITE_ENABLE_TENANT_GATE=false`.
-3. Rebuild/redeploy the frontend if a flag was changed.
-4. Existing tenant login behavior continues.
-5. Leave `authTickets` rules denied.
-6. Functions can remain deployed but unused.
-
-No tenant data migration is required.
+3. Rebuild/redeploy the frontend.
+4. Existing direct tenant login behavior continues.
+5. Functions remain deployed but unused. No tenant data migration is required.

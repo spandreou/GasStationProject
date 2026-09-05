@@ -136,7 +136,7 @@ function getCurrentYearMonth() {
 function getPublicTenantId() {
   const tenantSlug = getCurrentTenantHostContext()?.tenantSlug;
   if (!tenantSlug) {
-    throw new Error('Δεν βρέθηκε tenant context για το πρατήριο.');
+    throw new Error('Δεν βρέθηκε tenant context για το κατάστημα.');
   }
   return tenantSlug;
 }

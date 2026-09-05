@@ -35,7 +35,7 @@ export const VALID_BUSINESS_CATEGORIES = Object.freeze([
 
 export const BUSINESS_CATEGORY_OPTIONS = Object.freeze([
   { id: 'OTHER', label: 'Άλλη Επιχείρηση' },
-  { id: 'FUEL_STATION', label: 'Πρατήριο Καυσίμων' },
+  { id: 'FUEL_STATION', label: 'Κατάστημα' },
   { id: 'CAFE', label: 'Καφέ / Bistro' },
   { id: 'RESTAURANT', label: 'Εστιατόριο / Εστίαση' },
   { id: 'HAIR_SALON', label: 'Κομμωτήριο / Barber' },

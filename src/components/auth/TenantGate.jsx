@@ -127,7 +127,7 @@ export default function TenantGate({ children, hostContext: providedHostContext,
   }, [hostContext.hostname, hostContext.mode, routePath, shouldBypassGate]);
 
   if (state.status === 'checking') {
-    return <TenantGateMessage title="Έλεγχος πρόσβασης" message="Ελέγχουμε την πρόσβαση στο συγκεκριμένο πρατήριο." />;
+    return <TenantGateMessage title="Έλεγχος πρόσβασης" message="Ελέγχουμε την πρόσβαση στο συγκεκριμένο κατάστημα." />;
   }
 
   if (state.status === 'denied') {

@@ -10,7 +10,7 @@ import {
 } from '../utils/tenantHostContext';
 
 export const TENANT_ACCESS_MESSAGES = {
-  noAccess: 'Δεν υπάρχει ενεργό πρατήριο συνδεδεμένο με αυτόν τον λογαριασμό.',
+  noAccess: 'Δεν υπάρχει ενεργό κατάστημα συνδεδεμένο με αυτόν τον λογαριασμό.',
   denied: TENANT_ACCESS_DENIED_MESSAGE,
 };
 

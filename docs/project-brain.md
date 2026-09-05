@@ -14,7 +14,7 @@
 
 ## Product Direction
 
-Το ShiftOryx είναι multi-tenant SaaS για προγράμματα βαρδιών. Ξεκινά από πρατήρια καυσίμων αλλά ο domain model πρέπει να παραμένει επεκτάσιμος.
+Το ShiftOryx είναι multi-tenant SaaS για προγράμματα βαρδιών καταστημάτων και επιχειρήσεων, με επεκτάσιμο domain model.
 
 Current pilot:
 

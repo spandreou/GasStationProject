@@ -46,7 +46,7 @@ export function generateSchedule(input: GenerateScheduleInput): GenerateSchedule
     };
   }
 
-  // 2. Check if input matches legacy 4-6 Fuel Station topology
+  // 2. Check if input matches legacy 4-6 Store topology
   const hasBaseRoles =
     enabledEmployees.length >= 4 &&
     enabledEmployees.length <= 6 &&

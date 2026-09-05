@@ -134,9 +134,10 @@ export default function LoginPage() {
 
     try {
       await routeAfterLogin(user);
-    } catch {
+    } catch (err) {
       setStatus('error');
-      setMessage('Η σύνδεση ολοκληρώθηκε, αλλά δεν ήταν δυνατή η ολοκλήρωση της μεταφοράς. Παρακαλώ μεταβείτε στα καταστήματα ή δοκιμάστε ξανά.');
+      const cat = err?.category ? ` [${err.category}]` : '';
+      setMessage(`Η σύνδεση ολοκληρώθηκε, αλλά δεν ήταν δυνατή η ολοκλήρωση της μεταφοράς. Παρακαλώ μεταβείτε στα καταστήματα ή δοκιμάστε ξανά.${cat}`);
     }
   }
 

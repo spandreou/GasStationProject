@@ -1,4 +1,4 @@
-import { KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, LockKeyhole, Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -15,6 +15,7 @@ export default function AdminLoginModal({
     email: defaultEmail,
     password: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -139,7 +140,7 @@ export default function AdminLoginModal({
             <div className="input-glass mt-1 flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 dark:border-cyan-300/45">
               <KeyRound size={14} className="text-slate-600 dark:text-slate-300" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={credentials.password}
                 onChange={(event) => setCredentials((prev) => ({ ...prev, password: event.target.value }))}
                 placeholder="Κωδικός"
@@ -147,6 +148,15 @@ export default function AdminLoginModal({
                 required
                 disabled={!isFirebaseConfigured}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="rounded text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
+                aria-label={showPassword ? 'Απόκρυψη κωδικού' : 'Εμφάνιση κωδικού'}
+                title={showPassword ? 'Απόκρυψη κωδικού' : 'Εμφάνιση κωδικού'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
           </label>
 

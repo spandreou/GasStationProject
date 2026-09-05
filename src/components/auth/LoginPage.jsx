@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { authRepository } from '../../repositories';
 import { createTenantAuthTicketRedirect } from '../../firebase/authBrokerService';
 import {
@@ -23,6 +24,7 @@ export default function LoginPage() {
   const returnTo = useMemo(getReturnToParam, []);
   const [email, setEmail] = useState(authRepository.getConfiguredAdminEmail?.() || '');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberDevice, setRememberDevice] = useState(true);
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
@@ -174,15 +176,26 @@ export default function LoginPage() {
 
           <label className="block text-sm font-black text-slate-700">
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="mt-1.5 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
-              required
-              maxLength={MAX_PASSWORD_LENGTH}
-              autoComplete="current-password"
-            />
+            <div className="relative mt-1.5">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-3 pr-11 text-slate-950 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                required
+                maxLength={MAX_PASSWORD_LENGTH}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-700 transition"
+                aria-label={showPassword ? 'Απόκρυψη κωδικού' : 'Εμφάνιση κωδικού'}
+                title={showPassword ? 'Απόκρυψη κωδικού' : 'Εμφάνιση κωδικού'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </label>
 
           <div className="flex items-center justify-between gap-3 text-sm">

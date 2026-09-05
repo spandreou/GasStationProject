@@ -276,80 +276,103 @@ export const exchangeAuthTicket = onCall(
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {
-    const config = getBrokerConfig();
-    const origin = getRequestOrigin(request);
-    const isDynamicTenantOrigin = isAllowedTenantOrigin(origin, config.domainFamilies);
-    const isStaticTenantOrigin = isAllowedBrokerOrigin(origin, config.tenantOrigins);
-    if (!isDynamicTenantOrigin && !isStaticTenantOrigin) {
-      deny('invalid-tenant-origin');
-    }
-
-    const ticketValidation = validateTicketFormat(request.data?.ticket);
-    if (!ticketValidation.valid) invalid('invalid-ticket');
-
-    const originUrl = new URL(origin);
-    const originTenantId = resolveTenantIdFromHostname({
-      hostname: originUrl.hostname,
-      baseDomain: config.baseDomain,
-      centralDomain: config.centralDomain,
-      domainFamilies: config.domainFamilies,
-    });
-    if (!originTenantId) deny('invalid-tenant-host');
-
-    const ticketHash = hashAuthTicket(ticketValidation.ticket);
-    const db = getDb();
-    const ticketRef = db.doc(`authTickets/${ticketHash}`);
-    let consumedTicket = null;
-
-    await db.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(ticketRef);
-      if (!snapshot.exists) deny('ticket-not-found');
-
-      const ticket = snapshot.data();
-      if (ticket.status !== AUTH_TICKET_STATUS.pending || ticket.usedAt) deny('ticket-used');
-      if (ticket.expiresAt?.toMillis?.() <= Date.now()) deny('ticket-expired');
-      if (ticket.allowedTenantOrigin !== origin) deny('ticket-origin-mismatch');
-      if (ticket.tenantId !== originTenantId) deny('ticket-tenant-mismatch');
-
-      const platformAdminRef = db.doc(`platformAdmins/${ticket.uid}`);
-      const platformAdminSnapshot = await transaction.get(platformAdminRef);
-      if (platformAdminSnapshot.exists && platformAdminSnapshot.data()?.status === 'ACTIVE') {
-        deny('platform-admin-tenant-access-forbidden');
+    let currentStage = 'init';
+    const correlationId = randomUUID();
+    try {
+      currentStage = 'origin_validation';
+      const config = getBrokerConfig();
+      const origin = getRequestOrigin(request);
+      const isDynamicTenantOrigin = isAllowedTenantOrigin(origin, config.domainFamilies);
+      const isStaticTenantOrigin = isAllowedBrokerOrigin(origin, config.tenantOrigins);
+      if (!isDynamicTenantOrigin && !isStaticTenantOrigin) {
+        deny('invalid-tenant-origin');
       }
 
-      const membershipRef = db.doc(`tenantMemberships/${ticket.uid}_${ticket.tenantId}`);
-      const membershipSnapshot = await transaction.get(membershipRef);
-      if (!membershipSnapshot.exists) deny('missing-membership');
-      const membership = membershipSnapshot.data();
-      if (membership.uid !== ticket.uid || membership.tenantId !== ticket.tenantId) {
-        deny('membership-mismatch');
-      }
-      if (!isActiveBrokerMembership(membership)) {
-        deny('inactive-or-invalid-membership');
-      }
-      if (membership.role !== ticket.role) deny('membership-role-changed');
+      currentStage = 'ticket_validation';
+      const ticketValidation = validateTicketFormat(request.data?.ticket);
+      if (!ticketValidation.valid) invalid('invalid-ticket');
 
-      transaction.update(ticketRef, {
-        status: AUTH_TICKET_STATUS.used,
-        usedAt: FieldValue.serverTimestamp(),
-        usedByOrigin: origin,
+      currentStage = 'tenant_resolution';
+      const originUrl = new URL(origin);
+      const originTenantId = resolveTenantIdFromHostname({
+        hostname: originUrl.hostname,
+        baseDomain: config.baseDomain,
+        centralDomain: config.centralDomain,
+        domainFamilies: config.domainFamilies,
+      });
+      if (!originTenantId) deny('invalid-tenant-host');
+
+      currentStage = 'ticket_lookup_and_consume';
+      const ticketHash = hashAuthTicket(ticketValidation.ticket);
+      const db = getDb();
+      const ticketRef = db.doc(`authTickets/${ticketHash}`);
+      let consumedTicket = null;
+
+      await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ticketRef);
+        if (!snapshot.exists) deny('ticket-not-found');
+
+        const ticket = snapshot.data();
+        if (ticket.status !== AUTH_TICKET_STATUS.pending || ticket.usedAt) deny('ticket-used');
+        if (ticket.expiresAt?.toMillis?.() <= Date.now()) deny('ticket-expired');
+        if (ticket.allowedTenantOrigin !== origin) deny('ticket-origin-mismatch');
+        if (ticket.tenantId !== originTenantId) deny('ticket-tenant-mismatch');
+
+        const platformAdminRef = db.doc(`platformAdmins/${ticket.uid}`);
+        const platformAdminSnapshot = await transaction.get(platformAdminRef);
+        if (platformAdminSnapshot.exists && platformAdminSnapshot.data()?.status === 'ACTIVE') {
+          deny('platform-admin-tenant-access-forbidden');
+        }
+
+        const membershipRef = db.doc(`tenantMemberships/${ticket.uid}_${ticket.tenantId}`);
+        const membershipSnapshot = await transaction.get(membershipRef);
+        if (!membershipSnapshot.exists) deny('missing-membership');
+        const membership = membershipSnapshot.data();
+        if (membership.uid !== ticket.uid || membership.tenantId !== ticket.tenantId) {
+          deny('membership-mismatch');
+        }
+        if (!isActiveBrokerMembership(membership)) {
+          deny('inactive-or-invalid-membership');
+        }
+        if (membership.role !== ticket.role) deny('membership-role-changed');
+
+        transaction.update(ticketRef, {
+          status: AUTH_TICKET_STATUS.used,
+          usedAt: FieldValue.serverTimestamp(),
+          usedByOrigin: origin,
+        });
+
+        consumedTicket = ticket;
       });
 
-      consumedTicket = ticket;
-    });
+      if (!consumedTicket) unavailable('ticket-consume-failed');
 
-    if (!consumedTicket) unavailable('ticket-consume-failed');
+      currentStage = 'custom_token_creation';
+      const customToken = await getAuth().createCustomToken(consumedTicket.uid, {
+        tenantId: consumedTicket.tenantId,
+        role: consumedTicket.role,
+      });
 
-    const customToken = await getAuth().createCustomToken(consumedTicket.uid, {
-      tenantId: consumedTicket.tenantId,
-      role: consumedTicket.role,
-    });
-
-    return {
-      customToken,
-      tenantId: consumedTicket.tenantId,
-      role: consumedTicket.role,
-    };
+      currentStage = 'response_build';
+      return {
+        customToken,
+        tenantId: consumedTicket.tenantId,
+        role: consumedTicket.role,
+      };
+    } catch (err) {
+      if (err instanceof HttpsError) {
+        throw err;
+      }
+      logger.error({
+        event: 'auth_broker_exchange_failed',
+        stage: currentStage,
+        reason: err?.message || 'unknown',
+        correlationId,
+      });
+      throw new HttpsError('internal', 'Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης.', {
+        reason: 'internal-exchange-failure',
+      });
+    }
   },
 );
 

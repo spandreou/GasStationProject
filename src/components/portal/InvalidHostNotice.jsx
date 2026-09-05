@@ -19,8 +19,8 @@ export default function InvalidHostNotice({ hostContext }) {
     >
       <RouteNoticePage
         title="Μη υποστηριζόμενη διεύθυνση"
-        subtitle="Το σύστημα δεν μπόρεσε να ταυτοποιήσει το πρατήριο ή την υπηρεσία."
-        message="Η διεύθυνση που ζητήσατε δεν αντιστοιχεί σε έγκυρο πρατήριο ή ενεργή υπηρεσία του ShiftOryx."
+        subtitle="Το σύστημα δεν μπόρεσε να ταυτοποιήσει το κατάστημα ή την υπηρεσία."
+        message="Η διεύθυνση που ζητήσατε δεν αντιστοιχεί σε έγκυρο κατάστημα ή ενεργή υπηρεσία του ShiftOryx."
         actionHref={centralUrl}
         actionLabel="Μετάβαση στο κεντρικό portal"
       />

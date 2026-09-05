@@ -47,7 +47,7 @@ Use this checklist before enabling tenant-gated access or deploying SaaS foundat
 - `0` memberships shows:
 
 ```text
-Δεν υπάρχει ενεργό πρατήριο συνδεδεμένο με αυτόν τον λογαριασμό.
+Δεν υπάρχει ενεργό κατάστημα συνδεδεμένο με αυτόν τον λογαριασμό.
 ```
 
 - `1` membership redirects to the tenant domain.
@@ -55,7 +55,7 @@ Use this checklist before enabling tenant-gated access or deploying SaaS foundat
 - Tenant denial shows:
 
 ```text
-Δεν έχετε πρόσβαση σε αυτό το πρατήριο.
+Δεν έχετε πρόσβαση σε αυτό το κατάστημα.
 ```
 
 ## Tenant Gate

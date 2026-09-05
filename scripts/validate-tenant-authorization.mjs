@@ -12,7 +12,7 @@ function assert(condition, message) {
 function assertDenied(result, reason, message) {
   assert(result.allowed === false, `${message}: expected denied.`);
   assert(result.reason === reason, `${message}: expected reason ${reason}, got ${result.reason}.`);
-  assert(result.message === 'Δεν έχετε πρόσβαση σε αυτό το πρατήριο.', `${message}: expected safe Greek denial.`);
+  assert(result.message === 'Δεν έχετε πρόσβαση σε αυτό το κατάστημα.', `${message}: expected safe Greek denial.`);
 }
 
 function assertAllowed(result, message) {

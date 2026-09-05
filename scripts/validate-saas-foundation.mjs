@@ -86,8 +86,8 @@ assert(dockerfile.includes('nginx'), 'Dockerfile must serve the production build
 assert(compose.includes('gasstation-frontend'), 'docker-compose must define the frontend service.');
 assert(nginx.includes('try_files $uri $uri/ /index.html'), 'Nginx must provide SPA fallback.');
 assert(saasSecurityChecklist.includes('Αν υπάρχει λογαριασμός με αυτό το email'), 'SaaS security QA must cover generic forgot-password messaging.');
-assert(saasSecurityChecklist.includes('Δεν υπάρχει ενεργό πρατήριο'), 'SaaS security QA must cover no-access messaging.');
-assert(saasSecurityChecklist.includes('Δεν έχετε πρόσβαση σε αυτό το πρατήριο'), 'SaaS security QA must cover tenant denied messaging.');
+assert(saasSecurityChecklist.includes('Δεν υπάρχει ενεργό κατάστημα'), 'SaaS security QA must cover no-access messaging.');
+assert(saasSecurityChecklist.includes('Δεν έχετε πρόσβαση σε αυτό το κατάστημα'), 'SaaS security QA must cover tenant denied messaging.');
 assert(saasSecurityChecklist.includes('tenantMemberships/{uid}_{tenantId}'), 'SaaS security QA must cover uid-based memberships.');
 assert(saasSecurityChecklist.includes('VITE_ENABLE_TENANT_GATE=false'), 'SaaS security QA must document the pilot-safe tenant gate flag.');
 assert(saasSecurityChecklist.includes('No service account JSON'), 'SaaS security QA must cover secret commit prevention.');
@@ -138,10 +138,10 @@ assert(repositories.includes('tenantTokenRequestsRepository'), 'Repository expor
 assert(tenantAccessService.includes('listActiveTenantAccessForUser'), 'Tenant access service must load active memberships by uid.');
 assert(tenantAccessService.includes('verifyTenantAccessForHost'), 'Tenant access service must prepare tenant host membership checks.');
 assert(tenantAccessService.includes('getTenantById(hostContext.tenantSlug)'), 'Tenant host access must read tenants/{tenantSlug} directly to satisfy membership-based Firestore rules.');
-assert(tenantAccessService.includes('Δεν υπάρχει ενεργό πρατήριο'), 'Tenant access service must include safe no-access message.');
+assert(tenantAccessService.includes('Δεν υπάρχει ενεργό κατάστημα'), 'Tenant access service must include safe no-access message.');
 assert(
   tenantAccessService.includes('TENANT_ACCESS_DENIED_MESSAGE') &&
-    tenantAuthorization.includes('Δεν έχετε πρόσβαση σε αυτό το πρατήριο'),
+    tenantAuthorization.includes('Δεν έχετε πρόσβαση σε αυτό το κατάστημα'),
   'Tenant access service must use the shared safe denied message.',
 );
 assert(!tenantAccessService.includes('@'), 'Tenant access service must not hardcode email access rules.');

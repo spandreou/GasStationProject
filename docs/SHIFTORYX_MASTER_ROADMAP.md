@@ -40,7 +40,7 @@ Current domain status: `PURCHASED_NOT_CONFIGURED`. Ownership is confirmed, but D
 
 Όνομα: ShiftOryx.
 
-Το ShiftOryx είναι multi-tenant SaaS για δημιουργία, διαχείριση και δημοσίευση προγραμμάτων βαρδιών. Αρχικός κλάδος είναι τα πρατήρια καυσίμων, με δυνατότητα επέκτασης σε άλλες επιχειρήσεις με βάρδιες.
+Το ShiftOryx είναι multi-tenant SaaS για δημιουργία, διαχείριση και δημοσίευση προγραμμάτων βαρδιών για καταστήματα και επιχειρήσεις με βάρδιες.
 
 Κύρια URLs:
 

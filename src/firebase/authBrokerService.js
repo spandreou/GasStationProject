@@ -9,24 +9,91 @@ const SAFE_BROKER_ERROR = 'Δεν ήταν δυνατή η ασφαλής μετ
 const TICKET_PATTERN = /^[a-f0-9]{64}$/i;
 
 export function classifyBrokerError(err, prefix = 'BROKER_CREATE') {
+  if (err?.category && typeof err.category === 'string') {
+    return err.category;
+  }
+
   const code = String(err?.code || '').toLowerCase();
   const message = String(err?.message || '').toLowerCase();
+  const reason = String(err?.details?.reason || err?.reason || '').toLowerCase();
 
-  if (code.includes('unauthenticated') || message.includes('missing-auth') || message.includes('unauthenticated')) {
+  // Authentication errors
+  if (
+    code.includes('unauthenticated') ||
+    reason.includes('missing-auth') ||
+    message.includes('missing-auth') ||
+    message.includes('unauthenticated')
+  ) {
     return `${prefix}_UNAUTHENTICATED`;
   }
-  if (code.includes('permission-denied') || message.includes('permission-denied') || message.includes('forbidden')) {
+
+  // Permission / Authorization errors
+  if (
+    code.includes('permission-denied') ||
+    reason.includes('invalid-central-origin') ||
+    reason.includes('tenant-origin-mismatch') ||
+    reason.includes('missing-membership') ||
+    reason.includes('membership-mismatch') ||
+    reason.includes('inactive-or-invalid-membership') ||
+    reason.includes('platform-admin-tenant-access-forbidden') ||
+    reason.includes('cross-family-redirect-not-allowed') ||
+    message.includes('permission-denied') ||
+    message.includes('forbidden')
+  ) {
     return `${prefix}_PERMISSION_DENIED`;
   }
-  if (code.includes('invalid-argument') || message.includes('invalid-argument') || message.includes('missing-return-to')) {
+
+  // Invalid argument / Format errors
+  if (
+    code.includes('invalid-argument') ||
+    reason.includes('missing-return-to') ||
+    reason.includes('invalid-protocol') ||
+    reason.includes('central-return-not-allowed') ||
+    reason.includes('unknown-tenant-host') ||
+    reason.includes('tenant-mismatch') ||
+    reason.includes('tenant-not-allowed') ||
+    reason.includes('path-not-allowed') ||
+    reason.includes('invalid-url') ||
+    message.includes('invalid-argument') ||
+    message.includes('missing-return-to')
+  ) {
     return `${prefix}_INVALID_ARGUMENT`;
   }
-  if (code.includes('unavailable') || code.includes('network') || message.includes('network') || message.includes('offline') || message.includes('failed to fetch')) {
+
+  // Specific custom errors
+  if (message.includes('invalid-redirect-url') || reason.includes('invalid-redirect-url')) {
+    return `${prefix}_INVALID_REDIRECT`;
+  }
+  if (message.includes('invalid-ticket-format') || message.includes('invalid-ticket')) {
+    return `${prefix}_INVALID_TICKET`;
+  }
+  if (message.includes('missing-custom-token')) {
+    return `${prefix}_MISSING_CUSTOM_TOKEN`;
+  }
+
+  // Network / Connection / Availability / CSP / fetch failures
+  if (
+    code.includes('unavailable') ||
+    code.includes('network') ||
+    code.includes('timeout') ||
+    message.includes('network') ||
+    message.includes('offline') ||
+    message.includes('failed to fetch') ||
+    message.includes('load failed') ||
+    (code === 'functions/internal' && message === 'internal' && !err?.details)
+  ) {
     return `${prefix}_NETWORK`;
   }
-  if (code.includes('not-found') || message.includes('tenant-not-found')) {
+
+  // Not found
+  if (
+    code.includes('not-found') ||
+    reason.includes('tenant-not-found') ||
+    message.includes('tenant-not-found')
+  ) {
     return `${prefix}_NOT_FOUND`;
   }
+
   return `${prefix}_INTERNAL`;
 }
 

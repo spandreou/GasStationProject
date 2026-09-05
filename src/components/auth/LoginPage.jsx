@@ -229,9 +229,19 @@ export default function LoginPage() {
           </a>
 
           {message ? (
-            <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-950">
-              {message}
-            </p>
+            <div className="space-y-2">
+              <p className="rounded-2xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-950">
+                {message}
+              </p>
+              {message.includes('καταστήματα') ? (
+                <a
+                  href="/stores"
+                  className="block rounded-2xl bg-cyan-700 px-3 py-2.5 text-center text-xs font-black text-white hover:bg-cyan-800 transition"
+                >
+                  Μετάβαση στα Καταστήματα →
+                </a>
+              ) : null}
+            </div>
           ) : null}
         </form>
       )}

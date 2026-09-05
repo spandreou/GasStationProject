@@ -193,6 +193,7 @@ const cspHeader = allHeaders.find((header) => header.key === 'Content-Security-P
   'https://*.firebaseio.com',
   'https://*.firebaseapp.com',
   'https://*.appspot.com',
+  'https://*.cloudfunctions.net',
   'https://www.googletagmanager.com',
   "object-src 'none'",
   "base-uri 'self'",

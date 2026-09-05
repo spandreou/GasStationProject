@@ -9,6 +9,7 @@ import {
 import { onInit } from 'firebase-functions/v2/core';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import * as logger from 'firebase-functions/logger';
 import {
   AUTH_TICKET_STATUS,
   AUTH_TICKET_TTL_MS,
@@ -183,64 +184,89 @@ export const createAuthTicket = onCall(
     region: process.env.AUTH_BROKER_FUNCTIONS_REGION || 'us-central1',
   },
   async (request) => {
-    const config = getBrokerConfig();
-    const origin = getRequestOrigin(request);
+    let currentStage = 'init';
+    const correlationId = randomUUID();
+    try {
+      currentStage = 'origin_validation';
+      const config = getBrokerConfig();
+      const origin = getRequestOrigin(request);
 
-    if (!isAllowedBrokerOrigin(origin, config.centralOrigins)) {
-      deny('invalid-central-origin');
+      if (!isAllowedBrokerOrigin(origin, config.centralOrigins)) {
+        deny('invalid-central-origin');
+      }
+
+      currentStage = 'auth_validation';
+      const uid = request.auth?.uid;
+      if (!uid) deny('missing-auth');
+
+      currentStage = 'input_validation';
+      const returnTo = String(request.data?.returnTo || '').trim();
+      const requestedTenantId = String(request.data?.tenantId || '').trim().toLowerCase();
+      if (!returnTo) invalid('missing-return-to');
+
+      const validation = validateBrokerReturnTo({
+        returnTo,
+        expectedTenantId: requestedTenantId,
+        domainFamilies: config.domainFamilies,
+        callerOrigin: origin,
+        allowedTenantIds: requestedTenantId ? [requestedTenantId] : [],
+        production: config.production,
+      });
+      if (!validation.valid) invalid(validation.reason);
+
+      currentStage = 'tenant_lookup';
+      const tenant = await getTenantOrDeny(validation.tenantId);
+      const expectedOrigin = getTenantOriginFromTenant(tenant, validation.tenantId, validation.family);
+      if (expectedOrigin !== validation.allowedTenantOrigin) {
+        deny('tenant-origin-mismatch');
+      }
+
+      currentStage = 'membership_lookup';
+      const membership = await getActiveMembershipOrDeny(uid, validation.tenantId);
+
+      currentStage = 'ticket_creation';
+      const ticket = generateAuthTicket();
+      const ticketHash = hashAuthTicket(ticket);
+      const nowMs = Date.now();
+      const ticketDoc = buildAuthTicketDocument({
+        uid,
+        tenantId: validation.tenantId,
+        role: membership.role,
+        returnTo: validation.url,
+        returnToHost: validation.returnToHost,
+        centralOrigin: origin,
+        allowedTenantOrigin: validation.allowedTenantOrigin,
+        requestId: correlationId,
+        nowMs,
+      });
+
+      currentStage = 'ticket_storage';
+      const db = getDb();
+      await db.doc(`authTickets/${ticketHash}`).set({
+        ...ticketDoc,
+        createdAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(ticketDoc.expiresAtMs),
+      });
+
+      currentStage = 'response_build';
+      return {
+        redirectUrl: buildTenantTicketRedirectUrl(validation.url, ticket),
+        expiresAt: ticketDoc.expiresAtMs,
+      };
+    } catch (err) {
+      if (err instanceof HttpsError) {
+        throw err;
+      }
+      logger.error({
+        event: 'auth_broker_create_failed',
+        stage: currentStage,
+        reason: err?.message || 'unknown',
+        correlationId,
+      });
+      throw new HttpsError('internal', 'Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης.', {
+        reason: 'internal-create-failure',
+      });
     }
-
-    const uid = request.auth?.uid;
-    if (!uid) deny('missing-auth');
-
-    const returnTo = String(request.data?.returnTo || '').trim();
-    const requestedTenantId = String(request.data?.tenantId || '').trim().toLowerCase();
-    if (!returnTo) invalid('missing-return-to');
-
-    const validation = validateBrokerReturnTo({
-      returnTo,
-      expectedTenantId: requestedTenantId,
-      domainFamilies: config.domainFamilies,
-      callerOrigin: origin,
-      allowedTenantIds: requestedTenantId ? [requestedTenantId] : [],
-      production: config.production,
-    });
-    if (!validation.valid) invalid(validation.reason);
-
-    const tenant = await getTenantOrDeny(validation.tenantId);
-    const expectedOrigin = getTenantOriginFromTenant(tenant, validation.tenantId, validation.family);
-    if (expectedOrigin !== validation.allowedTenantOrigin) {
-      deny('tenant-origin-mismatch');
-    }
-
-    const membership = await getActiveMembershipOrDeny(uid, validation.tenantId);
-    const ticket = generateAuthTicket();
-    const ticketHash = hashAuthTicket(ticket);
-    const nowMs = Date.now();
-    const requestId = randomUUID();
-    const ticketDoc = buildAuthTicketDocument({
-      uid,
-      tenantId: validation.tenantId,
-      role: membership.role,
-      returnTo: validation.url,
-      returnToHost: validation.returnToHost,
-      centralOrigin: origin,
-      allowedTenantOrigin: validation.allowedTenantOrigin,
-      requestId,
-      nowMs,
-    });
-
-    const db = getDb();
-    await db.doc(`authTickets/${ticketHash}`).set({
-      ...ticketDoc,
-      createdAt: FieldValue.serverTimestamp(),
-      expiresAt: Timestamp.fromMillis(ticketDoc.expiresAtMs),
-    });
-
-    return {
-      redirectUrl: buildTenantTicketRedirectUrl(validation.url, ticket),
-      expiresAt: ticketDoc.expiresAtMs,
-    };
   },
 );
 

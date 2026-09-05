@@ -511,7 +511,7 @@ async function run() {
   await expectFunctionFailure('exchangeAuthTicket', {
     origin: 'https://eko-example.homelabshare.gr',
     data: { ticket: wrongOriginTicket.ticket },
-  }, 'invalid-tenant-origin');
+  }, 'ticket-origin-mismatch');
 
   await expectFunctionFailure('exchangeAuthTicket', {
     origin: TENANT_ORIGIN,

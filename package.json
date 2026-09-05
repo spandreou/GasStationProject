@@ -49,6 +49,7 @@
     "security:scan": "npm run security:hardening && npm run security:integrity && npm run security:audit && npm run security:cve",
     "qa:central-portal-isolation": "node scripts/validate-central-portal-isolation.mjs",
     "qa:auth-broker-negative": "node scripts/test-auth-broker-negative-matrix.mjs",
+    "qa:multi-tenant": "node scripts/test-generic-multi-tenant-discovery.mjs",
     "qa:product-terminology": "node scripts/validate-product-terminology.mjs",
     "qa:vercel-spa-routing": "node scripts/validate-vercel-spa-routing.mjs"
   },

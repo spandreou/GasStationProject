@@ -71,10 +71,11 @@ export default function SelectTenantPage() {
 
           setStatus('no-access');
           setMessage(result.message || TENANT_ACCESS_MESSAGES.noAccess);
-        } catch {
+        } catch (err) {
           if (!cancelled) {
             setStatus('error');
-            setMessage('Δεν ήταν δυνατή η φόρτωση των καταστημάτων. Δοκιμάστε ξανά αργότερα.');
+            const cat = err?.category ? ` [${err.category}]` : '';
+            setMessage(`Δεν ήταν δυνατή η φόρτωση των καταστημάτων. Δοκιμάστε ξανά αργότερα.${cat}`);
           }
         }
       },
@@ -184,9 +185,10 @@ export default function SelectTenantPage() {
                           tenantId: tenant.id,
                         });
                         window.location.assign(redirectUrl);
-                      } catch {
+                      } catch (err) {
                         setStatus('error');
-                        setMessage('Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης. Δοκιμάστε ξανά.');
+                        const cat = err?.category ? ` [${err.category}]` : '';
+                        setMessage(`Δεν ήταν δυνατή η ασφαλής μεταφορά σύνδεσης. Δοκιμάστε ξανά.${cat}`);
                       }
                     }}
                     className="rounded-xl bg-slate-950 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-slate-800 transition"

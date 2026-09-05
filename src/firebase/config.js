@@ -79,7 +79,7 @@ const firebaseConfig = isFirebaseConfigured
 const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 const auth = app ? getAuth(app) : null;
-const functions = app ? getFunctions(app) : null;
+const functions = app ? getFunctions(app, 'us-central1') : null;
 const storage = app ? getStorage(app, `gs://${firebaseEnv.storageBucket}`) : null;
 let analytics = null;
 

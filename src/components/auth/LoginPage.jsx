@@ -115,19 +115,28 @@ export default function LoginPage() {
     }
 
     setStatus('submitting');
+    let user;
     try {
-      const user = await authRepository.signInAdmin({
+      user = await authRepository.signInAdmin({
         email: normalizedEmail,
         password,
         rememberDevice,
       });
       setPassword('');
-      setStatus('redirecting');
-      setMessage('Η σύνδεση ολοκληρώθηκε. Μεταφορά...');
-      await routeAfterLogin(user);
     } catch {
       setStatus('error');
       setMessage(getSafeLoginError());
+      return;
+    }
+
+    setStatus('redirecting');
+    setMessage('Η σύνδεση ολοκληρώθηκε. Μεταφορά...');
+
+    try {
+      await routeAfterLogin(user);
+    } catch {
+      setStatus('error');
+      setMessage('Η σύνδεση ολοκληρώθηκε, αλλά δεν ήταν δυνατή η ολοκλήρωση της μεταφοράς. Παρακαλώ μεταβείτε στα καταστήματα ή δοκιμάστε ξανά.');
     }
   }
 
